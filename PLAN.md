@@ -1139,7 +1139,10 @@ bun run test:figma:report
 
 Based on our research, **Yoga** is the right choice now:
 
-- **CSS Grid support is landing** — 9-part PR series active (Feb 2026)
+- **CSS Grid support is landing** — [facebook/yoga#1893](https://github.com/facebook/yoga/pull/1893)–#1902 (9 PRs by @intergalacticspacehighway from Expo)
+  - PR 1/9 (style types & public API) under active review by NickGerleman (Meta), last activity Feb 28, 2026
+  - Supported: `grid-template-columns/rows`, `grid-column/row-start/end`, `grid-auto-columns/rows`, `minmax()`, `auto`, `%`, `px`, `fr`
+  - Not yet: `repeat()`, `auto-fill`/`auto-fit`, `grid-template-areas`, `grid-auto-flow`, subgrid
 - Battle-tested in React Native (billions of devices)
 - ~45KB WASM, well-maintained by Meta
 - Flexbox + Grid covers everything a design tool needs
