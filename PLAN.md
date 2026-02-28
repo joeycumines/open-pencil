@@ -1455,6 +1455,19 @@ packages/
 
 `core` is the key extraction: the engine without rendering, importable by CLI, MCP, tests, and the app. The app's `src/engine/` imports from `core` instead of owning the types.
 
+### Headless rendering
+
+CanvasKit WASM has a CPU software rasterizer (`CanvasKit.MakeSurface(w, h)`) — no GPU, no WebGL, no DOM. Our `Renderer` class accepts any CanvasKit `Surface`, so the same render path works headless:
+
+```ts
+const surface = ck.MakeSurface(width, height)
+const renderer = new Renderer(ck, surface)
+renderer.render(graph, viewport)
+const png = surface.makeImageSnapshot().encodeToBytes(ck.ImageFormat.PNG, 100)
+```
+
+This means export, screenshot, and visual diffing all work in CI without a display server.
+
 ### CLI commands (matching figma-use where applicable)
 
 | Command | Mode | Description |
@@ -1462,7 +1475,7 @@ packages/
 | `eval <code>` | attached | Run JS in editor context |
 | `find <query>` | both | Find nodes by name, type, XPath |
 | `lint` | both | Run design linter rules on .fig/.openpencil file |
-| `export <format>` | attached | Export selection/page as PNG/SVG/PDF |
+| `export <format>` | both | Export page/node as PNG/SVG/PDF (headless uses CPU rasterizer) |
 | `node get <id>` | both | Get node properties |
 | `node tree` | both | Print node tree |
 | `create <type>` | attached | Create a node |
@@ -1470,8 +1483,9 @@ packages/
 | `analyze colors` | both | Analyze color palette |
 | `analyze spacing` | both | Analyze spacing consistency |
 | `mcp` | both | Start MCP server |
-| `open <file>` | attached | Open .fig/.openpencil file |
-| `screenshot` | attached | Capture current viewport |
+| `open <file>` | both | Open .fig/.openpencil file |
+| `screenshot` | both | Render current page to PNG (headless uses CPU rasterizer) |
+| `diff <a> <b>` | headless | Visual diff two files/snapshots, output overlay PNG |
 
 ### Why not a Tauri CLI?
 
