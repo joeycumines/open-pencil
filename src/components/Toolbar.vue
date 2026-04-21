@@ -227,7 +227,7 @@ const slideVariants = {
             <Tip :label="`${toolLabels[tool.key]} (${tool.shortcut})`">
               <button
                 :data-test-id="`toolbar-tool-${tool.key.toLowerCase()}`"
-                class="flex size-8 cursor-pointer items-center justify-center rounded-lg border-none transition-colors"
+                class="group flex size-8 cursor-pointer items-center justify-center rounded-lg border-none transition-colors"
                 :class="
                   active
                     ? 'bg-accent text-white'
@@ -235,7 +235,15 @@ const slideVariants = {
                 "
                 @click="selectTool"
               >
-                <component :is="toolIcons[tool.key]" class="size-4" />
+                <template v-if="tool.key === 'HAND'">
+                  <component :is="toolIcons[tool.key]" class="size-4 group-hover:hidden" />
+                  <span
+                    class="hidden size-4 items-center justify-center text-[14px] leading-none group-hover:flex"
+                  >
+                    🖕
+                  </span>
+                </template>
+                <component v-else :is="toolIcons[tool.key]" class="size-4" />
               </button>
             </Tip>
           </ToolbarItem>
