@@ -6,8 +6,8 @@ import { createNanoEvents } from 'nanoevents'
 import * as HitTest from './hit-test'
 import * as Instances from './instances'
 import { CONTAINER_TYPES, createDefaultNode } from './node-defaults'
-import { normalizeVectorNetwork } from './vector-network'
 import * as Variables from './variables'
+import { normalizeVectorNetwork } from './vector-network'
 
 export type { GUID, Color } from '#core/types'
 export * from './types'
@@ -15,7 +15,6 @@ export * from './types'
 import { getAbsolutePosition } from '#core/canvas/coordinate'
 
 import type { Color, Rect, Vector } from '#core/types'
-import type { Emitter } from 'nanoevents'
 import type {
   DocumentColorSpace,
   NodeType,
@@ -27,8 +26,10 @@ import type {
   VariableType,
   VariableValue
 } from './types'
+import type { Emitter } from 'nanoevents'
 
 export { cloneVectorNetwork, normalizeVectorNetwork, validateVectorNetwork } from './vector-network'
+
 let nextLocalID = 1
 
 export function generateId(): string {
@@ -90,6 +91,33 @@ export class SceneGraph {
     return () => {
       for (const unbind of unbinds) unbind()
     }
+  }
+
+  /**
+   * Count all descendants of a node (children, grandchildren, etc.).
+   * Used for per-page node counts in the renderer to determine if a page
+   * is "large" without counting nodes on other pages.
+   */
+  countDescendants(nodeId: string): number {
+    const node = this.nodes.get(nodeId)
+    if (!node) return 0
+    let count = 0
+    const stack = [...node.childIds]
+    while (stack.length > 0) {
+      const id = stack.pop()
+      if (id === undefined) break
+      count++
+      const child = this.nodes.get(id)
+      if (child) {
+        // Use a for-of loop instead of spread: stack.push(...ids) places every
+        // element on the call stack as function arguments and crashes V8/JSC
+        // with RangeError on nodes with >~125k direct children.
+        for (const childId of child.childIds) {
+          stack.push(childId)
+        }
+      }
+    }
+    return count
   }
 
   // --- Variables ---
@@ -235,6 +263,58 @@ export class SceneGraph {
     return node
   }
 
+  /**
+   * Properties that affect absolute position computation (getNodeLocalMatrix).
+   * Changing any of these on a node invalidates the absPosCache for that node
+   * and all its descendants. Other changes (fills, strokes, effects, plugin data)
+   * do NOT affect absolute position and can skip the expensive cache clear.
+   *
+   * These names MUST match the actual SceneNode field names (not Figma API proxy names).
+   */
+  static LAYOUT_AFFECTING_KEYS: ReadonlySet<string> = new Set([
+    // Direct transform properties (used by getNodeLocalMatrix)
+    'x',
+    'y',
+    'width',
+    'height',
+    'rotation',
+    'flipX',
+    'flipY',
+    // Auto-layout properties (affect children's absolute positions)
+    'layoutMode',
+    'layoutDirection',
+    'itemSpacing',
+    'counterAxisSpacing',
+    'paddingLeft',
+    'paddingRight',
+    'paddingTop',
+    'paddingBottom',
+    'primaryAxisAlign',
+    'counterAxisAlign',
+    'counterAxisAlignContent',
+    'layoutWrap',
+    'primaryAxisSizing',
+    'counterAxisSizing',
+    'layoutPositioning',
+    'layoutGrow',
+    'layoutAlignSelf',
+    'strokesIncludedInLayout',
+    // Constraints
+    'horizontalConstraint',
+    'verticalConstraint',
+    // Grid layout
+    'gridTemplateColumns',
+    'gridTemplateRows',
+    'gridColumnGap',
+    'gridRowGap',
+    'gridPosition',
+    // Sizing constraints
+    'minWidth',
+    'maxWidth',
+    'minHeight',
+    'maxHeight'
+  ])
+
   static TEXT_PICTURE_KEYS: ReadonlySet<string> = new Set([
     'text',
     'fontSize',
@@ -257,7 +337,11 @@ export class SceneGraph {
   updateNode(id: string, changes: Partial<SceneNode>): void {
     const node = this.nodes.get(id)
     if (!node) return
-    this.absPosCache.clear()
+
+    // Only clear absPosCache when layout-affecting properties change.
+    // Fills, strokes, effects, plugin data changes do NOT affect absolute position.
+    const affectsLayout = Object.keys(changes).some((k) => SceneGraph.LAYOUT_AFFECTING_KEYS.has(k))
+    if (affectsLayout) this.absPosCache.clear()
     if (
       node.type === 'INSTANCE' &&
       'componentId' in changes &&

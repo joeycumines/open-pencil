@@ -104,14 +104,7 @@ function renderChildren(
     node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE'
   if (isClippableContainer && node.clipsContent && node.childIds.length > 0) {
     canvas.save()
-    const hasRadius =
-      node.cornerRadius > 0 ||
-      (node.independentCorners &&
-        (node.topLeftRadius > 0 ||
-          node.topRightRadius > 0 ||
-          node.bottomRightRadius > 0 ||
-          node.bottomLeftRadius > 0))
-    if (hasRadius) {
+    if (nodeHasRadius(node)) {
       canvas.clipRRect(r.makeRRect(node), r.ck.ClipOp.Intersect, true)
     } else {
       canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, true)
@@ -164,6 +157,11 @@ export function renderNode(
     (e) => e.visible && (e.type === 'LAYER_BLUR' || e.type === 'FOREGROUND_BLUR')
   )
   if (layerBlur) {
+    // Entry guard: reset shared paint to known state
+    r.effectLayerPaint.setImageFilter(null)
+    r.effectLayerPaint.setColorFilter(null)
+    r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+
     r.effectLayerPaint.setImageFilter(r.getCachedBlur(layerBlur.radius / 2))
     canvas.saveLayer(r.effectLayerPaint)
   }
@@ -174,6 +172,10 @@ export function renderNode(
 
   if (layerBlur) {
     canvas.restore()
+    // Exit guard: ensure shared paint is in clean state
+    r.effectLayerPaint.setImageFilter(null)
+    r.effectLayerPaint.setColorFilter(null)
+    r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
   }
   if (node.opacity < 1) {
     canvas.restore()
@@ -190,10 +192,7 @@ function forVisibleStrokes(
   r: SkiaRenderer,
   node: SceneNode,
   graph: SceneGraph,
-  draw: (
-    stroke: SceneNode['strokes'][number],
-    color: Color
-  ) => void
+  draw: (stroke: SceneNode['strokes'][number], color: Color) => void
 ): void {
   for (let index = 0; index < node.strokes.length; index++) {
     const stroke = node.strokes[index]
@@ -474,7 +473,7 @@ export function renderShapeUncached(
     for (const path of vectorStroke) path.delete()
   }
 
-  r.renderEffects(canvas, node, rect, hasRadius, 'front')
+  r.renderEffects(canvas, node, rect, hasRadius, 'front', shadowChild)
 }
 
 export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): void {

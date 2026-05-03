@@ -55,11 +55,20 @@ export function applyClippedBlur(
   hasRadius: boolean,
   sigma: number
 ): void {
+  // Entry guard: reset shared paint to known state
+  r.effectLayerPaint.setImageFilter(null)
+  r.effectLayerPaint.setColorFilter(null)
+  r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+
   canvas.save()
   r.clipNodeShape(canvas, node, rect, hasRadius)
   r.effectLayerPaint.setImageFilter(r.getCachedBlur(sigma))
   canvas.saveLayer(r.effectLayerPaint)
   canvas.restore()
+  // Exit guard: ensure shared paint is in clean state
+  r.effectLayerPaint.setImageFilter(null)
+  r.effectLayerPaint.setColorFilter(null)
+  r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
   canvas.restore()
 }
 

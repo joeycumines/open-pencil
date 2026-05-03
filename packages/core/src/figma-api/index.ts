@@ -1,6 +1,7 @@
 import { IS_BROWSER } from '#core/constants'
 import { computeBounds } from '#core/geometry'
 import { copyFills, copyStrokes, copyEffects } from '#core/scene-graph/copy'
+
 import {
   FigmaNodeProxy,
   INTERNAL_ID,
@@ -222,7 +223,6 @@ export class FigmaAPI implements NodeProxyHost {
       paddingBottom: raw.paddingBottom,
       paddingLeft: raw.paddingLeft,
       pluginData: structuredClone(raw.pluginData),
-      sharedPluginData: structuredClone(raw.sharedPluginData),
       pluginRelaunchData: structuredClone(raw.pluginRelaunchData)
     })
     for (const childId of raw.childIds) {

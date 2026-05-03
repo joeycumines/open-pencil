@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- kiwi↔scene conversion helpers are tightly coupled */
 import { DEFAULT_FONT_FAMILY, DEFAULT_STROKE_MITER_LIMIT } from '#core/constants'
 import { styleToWeight } from '#core/text/fonts'
+
 import { guidToString } from './guid'
 import { convertEffects, convertFills, convertStrokes } from './paint'
 import { importStyleRuns } from './style-runs'
@@ -12,7 +13,6 @@ import {
   extractBoundVariables,
   extractPluginData,
   extractPluginRelaunchData,
-  extractSharedPluginData,
   getOpenPencilPluginValue,
   LAYOUT_DIRECTION_PLUGIN_KEY,
   TEXT_DIRECTION_PLUGIN_KEY
@@ -430,7 +430,6 @@ export function nodeChangeToProps(
     autoRename: (nc.autoRename ?? true) as boolean,
     boundVariables: extractBoundVariables(nc),
     pluginData: extractPluginData(nc),
-    sharedPluginData: extractSharedPluginData(nc),
     pluginRelaunchData: extractPluginRelaunchData(nc),
     clipsContent: nc.frameMaskDisabled === false && nc.resizeToFit !== true,
     componentId: extractSymbolId(nc)

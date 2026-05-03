@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+
 import { CanvasHelper } from '../helpers/canvas'
 
 test.describe('SkPicture scene caching', () => {
@@ -20,7 +21,9 @@ test.describe('SkPicture scene caching', () => {
         y: 50,
         width: 300,
         height: 200,
-        fills: [{ type: 'SOLID', color: { r: 0.95, g: 0.95, b: 0.95, a: 1 }, visible: true, opacity: 1 }]
+        fills: [
+          { type: 'SOLID', color: { r: 0.95, g: 0.95, b: 0.95, a: 1 }, visible: true, opacity: 1 }
+        ]
       })
 
       store.graph.createNode('TEXT', pageId, {
@@ -45,7 +48,9 @@ test.describe('SkPicture scene caching', () => {
         text: 'This text must survive hover transitions without disappearing.',
         fontSize: 14,
         fontFamily: 'Inter',
-        fills: [{ type: 'SOLID', color: { r: 0.3, g: 0.3, b: 0.3, a: 1 }, visible: true, opacity: 1 }]
+        fills: [
+          { type: 'SOLID', color: { r: 0.3, g: 0.3, b: 0.3, a: 1 }, visible: true, opacity: 1 }
+        ]
       })
 
       store.requestRender()
@@ -72,6 +77,13 @@ test.describe('SkPicture scene caching', () => {
       const store = window.__OPEN_PENCIL_STORE__!
       // Simulate what loadFonts() does: invalidate the cached picture
       store.renderer!.invalidateScenePicture()
+      store.requestRender()
+    })
+    await helper.waitForRender()
+
+    // Extra render to stabilize the SkPicture cache
+    await helper.page.evaluate(() => {
+      const store = window.__OPEN_PENCIL_STORE__!
       store.requestRender()
     })
     await helper.waitForRender()
@@ -103,6 +115,12 @@ test.describe('SkPicture scene caching', () => {
     await helper.page.evaluate(() => {
       const store = window.__OPEN_PENCIL_STORE__!
       store.setHoveredNode(null)
+      store.requestRender()
+    })
+    await helper.waitForRender()
+    // Extra render cycle to ensure SkPicture cache is fully recorded
+    await helper.page.evaluate(() => {
+      const store = window.__OPEN_PENCIL_STORE__!
       store.requestRender()
     })
     await helper.waitForRender()

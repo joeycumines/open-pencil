@@ -1,21 +1,17 @@
 import { guidToString } from './guid'
 
-import type {
-  NodeChange,
-  PluginData,
-  PluginRelaunchData
-} from '#core/kiwi/binary/codec'
-import type {
-  PluginDataEntry,
-  PluginRelaunchDataEntry,
-  SharedPluginDataEntry
-} from '#core/scene-graph'
+import type { NodeChange, PluginData, PluginRelaunchData } from '#core/kiwi/binary/codec'
+import type { PluginDataEntry, PluginRelaunchDataEntry } from '#core/scene-graph'
 
 export const OPEN_PENCIL_PLUGIN_ID = 'open-pencil'
 export const TEXT_DIRECTION_PLUGIN_KEY = 'textDirection'
 export const LAYOUT_DIRECTION_PLUGIN_KEY = 'layoutDirection'
 
-export function upsertPluginData(node: { pluginData: PluginDataEntry[] }, key: string, value: string): void {
+export function upsertPluginData(
+  node: { pluginData: PluginDataEntry[] },
+  key: string,
+  value: string
+): void {
   const pluginData = node.pluginData.filter(
     (entry) => !(entry.pluginId === OPEN_PENCIL_PLUGIN_ID && entry.key === key)
   )
@@ -53,24 +49,6 @@ export function getOpenPencilPluginValue(nc: NodeChange, key: string): string | 
   )
 }
 
-export function extractSharedPluginData(nc: NodeChange): SharedPluginDataEntry[] {
-  return extractPluginData(nc).map((entry) => {
-    const slashIndex = entry.key.indexOf('/')
-    if (slashIndex === -1) {
-      return {
-        namespace: entry.pluginId,
-        key: entry.key,
-        value: entry.value
-      }
-    }
-    return {
-      namespace: entry.key.slice(0, slashIndex),
-      key: entry.key.slice(slashIndex + 1),
-      value: entry.value
-    }
-  })
-}
-
 export function extractPluginRelaunchData(nc: NodeChange): PluginRelaunchDataEntry[] {
   return (nc.pluginRelaunchData ?? []).map((entry) => ({
     pluginId: entry.pluginID,
@@ -80,22 +58,12 @@ export function extractPluginRelaunchData(nc: NodeChange): PluginRelaunchDataEnt
   }))
 }
 
-export function mergePluginData(
-  pluginData: PluginDataEntry[],
-  sharedPluginData: SharedPluginDataEntry[]
-): PluginData[] {
-  return [
-    ...pluginData.map((entry) => ({
-      pluginID: entry.pluginId,
-      key: entry.key,
-      value: entry.value
-    })),
-    ...sharedPluginData.map((entry) => ({
-      pluginID: entry.namespace,
-      key: `${entry.namespace}/${entry.key}`,
-      value: entry.value
-    }))
-  ]
+export function mergePluginData(pluginData: PluginDataEntry[]): PluginData[] {
+  return pluginData.map((entry) => ({
+    pluginID: entry.pluginId,
+    key: entry.key,
+    value: entry.value
+  }))
 }
 
 export function serializePluginRelaunchData(
