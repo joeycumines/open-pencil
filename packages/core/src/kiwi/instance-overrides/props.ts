@@ -1,4 +1,5 @@
-import { guidToString } from '../convert'
+import { guidToString } from '#core/kiwi/node-change/convert'
+
 import { resolveOverrideTarget, repopulateInstance } from './resolve'
 
 import type {
@@ -7,6 +8,10 @@ import type {
   ComponentPropRef,
   ComponentPropValue
 } from './types'
+
+function normalizePropName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
 
 function isEmptyPropValue(v: ComponentPropValue): boolean {
   return v.boolValue === undefined && v.textValue === undefined && v.guidValue === undefined
@@ -44,23 +49,32 @@ function findPropRefs(
  * means "reset to the component's initialValue default". This is distinct
  * from `{boolValue: false}` which is an explicit false.
  */
+function resolveAssignmentValue(
+  ctx: OverrideContext,
+  assignment: ComponentPropAssignment,
+  key: string,
+  resolveDefaults: boolean
+): ComponentPropValue {
+  if (!isEmptyPropValue(assignment.value)) return assignment.value
+
+  const variableValue = assignment.varValue?.value
+  if (variableValue?.symbolIdValue?.guid) return { guidValue: variableValue.symbolIdValue.guid }
+  if (variableValue?.boolValue !== undefined) return { boolValue: variableValue.boolValue }
+  if (variableValue?.textValue !== undefined) return { textValue: variableValue.textValue }
+
+  return resolveDefaults ? (ctx.propDefaults.get(key) ?? assignment.value) : assignment.value
+}
+
 function assignmentsToValueMap(
   ctx: OverrideContext,
   assignments: ComponentPropAssignment[],
   resolveDefaults = false
 ): Map<string, ComponentPropValue> {
   const valueByDef = new Map<string, ComponentPropValue>()
-  for (const a of assignments) {
-    if (!a.defID) continue
-    const key = guidToString(a.defID)
-    if (resolveDefaults && isEmptyPropValue(a.value)) {
-      const def = ctx.propDefaults.get(key)
-      if (def) {
-        valueByDef.set(key, def)
-        continue
-      }
-    }
-    valueByDef.set(key, a.value)
+  for (const assignment of assignments) {
+    if (!assignment.defID) continue
+    const key = guidToString(assignment.defID)
+    valueByDef.set(key, resolveAssignmentValue(ctx, assignment, key, resolveDefaults))
   }
   return valueByDef
 }
@@ -69,6 +83,25 @@ function assignmentsToValueMap(
  * Recursively apply prop assignments to children of a parent node.
  * Handles VISIBLE toggles and OVERRIDDEN_SYMBOL_ID (instance swap).
  */
+function fallbackRefsForChild(
+  ctx: OverrideContext,
+  childName: string,
+  valueByDef: Map<string, ComponentPropValue>
+): ComponentPropRef[] | undefined {
+  const normalizedChildName = normalizePropName(childName)
+  const refs: ComponentPropRef[] = []
+  for (const defId of valueByDef.keys()) {
+    const propName = ctx.propNames.get(defId)
+    if (propName && normalizePropName(propName) === normalizedChildName) {
+      refs.push({
+        defID: { sessionID: Number(defId.split(':')[0]), localID: Number(defId.split(':')[1]) },
+        componentPropNodeField: 'VISIBLE'
+      })
+    }
+  }
+  return refs.length > 0 ? refs : undefined
+}
+
 function applyPropAssignments(
   ctx: OverrideContext,
   parentId: string,
@@ -86,7 +119,9 @@ function applyPropAssignments(
       continue
     }
 
-    const refs = findPropRefs(ctx, child.componentId, propRefsMap)
+    const refs =
+      findPropRefs(ctx, child.componentId, propRefsMap) ??
+      fallbackRefsForChild(ctx, child.name, valueByDef)
     if (refs) {
       for (const ref of refs) {
         if (!ref.defID) continue
@@ -125,6 +160,7 @@ function applyInstanceDirectAssignments(
   modified: Set<string>
 ): void {
   for (const node of ctx.graph.getAllNodes()) {
+    if (ctx.activeNodeIds && !ctx.activeNodeIds.has(node.id)) continue
     if (node.type !== 'INSTANCE') continue
     const ownFigmaId = ctx.nodeIdToGuid.get(node.id)
     if (!ownFigmaId) continue
@@ -154,7 +190,7 @@ function applyOverrideAssignments(
 ): void {
   for (const [figmaId, nc] of ctx.changeMap) {
     const instanceNodeId = ctx.guidToNodeId.get(figmaId)
-    if (!instanceNodeId) continue
+    if (!instanceNodeId || (ctx.activeNodeIds && !ctx.activeNodeIds.has(instanceNodeId))) continue
     if (ctx.graph.getNode(instanceNodeId)?.type !== 'INSTANCE') continue
 
     const overrides = nc.symbolData?.symbolOverrides

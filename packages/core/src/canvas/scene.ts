@@ -1,9 +1,27 @@
-import { DROP_HIGHLIGHT_ALPHA, DROP_HIGHLIGHT_STROKE, SECTION_CORNER_RADIUS } from '../constants'
+import { DROP_HIGHLIGHT_ALPHA, DROP_HIGHLIGHT_STROKE, SECTION_CORNER_RADIUS } from '#core/constants'
 
-import type { SceneNode, SceneGraph } from '../scene-graph'
-import type { Color } from '../types'
+import { nodeHasRadius } from './effects'
+
+import type { SceneNode, SceneGraph } from '#core/scene-graph'
+import type { Color } from '#core/types'
 import type { SkiaRenderer, RenderOverlays } from './renderer'
 import type { Canvas, EmbindEnumEntity, Path } from 'canvaskit-wasm'
+
+function drawVisibleFills(
+  r: SkiaRenderer,
+  node: SceneNode,
+  graph: SceneGraph,
+  draw: () => void
+): void {
+  for (let fi = 0; fi < node.fills.length; fi++) {
+    const fill = node.fills[fi]
+    if (!fill.visible) continue
+    if (!r.applyFill(fill, node, graph, fi)) continue
+    r.fillPaint.setAlphaf(fill.opacity)
+    draw()
+    r.fillPaint.setShader(null)
+  }
+}
 
 function isCulled(r: SkiaRenderer, node: SceneNode, absX: number, absY: number): boolean {
   const canCull =
@@ -163,38 +181,45 @@ export function renderNode(
   canvas.restore()
 }
 
+function makeNodeRRect(r: SkiaRenderer, node: SceneNode, radius: number): Float32Array {
+  const rect = r.ck.LTRBRect(0, 0, node.width, node.height)
+  return r.ck.RRectXY(rect, radius, radius)
+}
+
+function forVisibleStrokes(
+  r: SkiaRenderer,
+  node: SceneNode,
+  graph: SceneGraph,
+  draw: (
+    stroke: SceneNode['strokes'][number],
+    color: Color
+  ) => void
+): void {
+  for (let index = 0; index < node.strokes.length; index++) {
+    const stroke = node.strokes[index]
+    if (!stroke.visible) continue
+    draw(stroke, r.resolveStrokeColor(stroke, index, node, graph))
+  }
+}
+
 export function renderSection(
   r: SkiaRenderer,
   canvas: Canvas,
   node: SceneNode,
   graph: SceneGraph
 ): void {
-  const rect = r.ck.LTRBRect(0, 0, node.width, node.height)
-  const rrect = r.ck.RRectXY(rect, SECTION_CORNER_RADIUS, SECTION_CORNER_RADIUS)
+  const rrect = makeNodeRRect(r, node, SECTION_CORNER_RADIUS)
 
-  for (let fi = 0; fi < node.fills.length; fi++) {
-    const fill = node.fills[fi]
-    if (!fill.visible) continue
-    if (!r.applyFill(fill, node, graph, fi)) continue
-    r.fillPaint.setAlphaf(fill.opacity)
-    canvas.drawRRect(rrect, r.fillPaint)
-    r.fillPaint.setShader(null)
-  }
+  drawVisibleFills(r, node, graph, () => canvas.drawRRect(rrect, r.fillPaint))
 
-  for (let si = 0; si < node.strokes.length; si++) {
-    const stroke = node.strokes[si]
-    if (!stroke.visible) continue
-    const sc = r.resolveStrokeColor(stroke, si, node, graph)
-    r.strokePaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
+  forVisibleStrokes(r, node, graph, (stroke, color) => {
+    r.strokePaint.setColor(r.ck.Color4f(color.r, color.g, color.b, color.a))
     r.strokePaint.setStrokeWidth(stroke.weight)
     r.strokePaint.setAlphaf(stroke.opacity)
 
-    if (node.independentStrokeWeights) {
-      r.drawIndividualSideStrokes(canvas, node, stroke.align)
-    } else {
-      r.drawRRectStrokeWithAlign(canvas, rrect, node, stroke)
-    }
-  }
+    if (node.independentStrokeWeights) r.drawIndividualSideStrokes(canvas, node, stroke.align)
+    else r.drawRRectStrokeWithAlign(canvas, rrect, node, stroke)
+  })
 }
 
 export function renderComponentSet(
@@ -203,17 +228,9 @@ export function renderComponentSet(
   node: SceneNode,
   graph: SceneGraph
 ): void {
-  const rect = r.ck.LTRBRect(0, 0, node.width, node.height)
-  const rrect = r.ck.RRectXY(rect, 5, 5)
+  const rrect = makeNodeRRect(r, node, 5)
 
-  for (let fi = 0; fi < node.fills.length; fi++) {
-    const fill = node.fills[fi]
-    if (!fill.visible) continue
-    if (!r.applyFill(fill, node, graph, fi)) continue
-    r.fillPaint.setAlphaf(fill.opacity)
-    canvas.drawRRect(rrect, r.fillPaint)
-    r.fillPaint.setShader(null)
-  }
+  drawVisibleFills(r, node, graph, () => canvas.drawRRect(rrect, r.fillPaint))
 
   r.auxStroke.setStrokeWidth(r.COMPONENT_SET_BORDER_WIDTH / r.zoom)
   r.auxStroke.setColor(r.compColor())
@@ -251,17 +268,6 @@ export function renderShape(
   } else {
     r.renderShapeUncached(canvas, node, graph)
   }
-}
-
-function nodeHasRadius(node: SceneNode): boolean {
-  return (
-    node.cornerRadius > 0 ||
-    (node.independentCorners &&
-      (node.topLeftRadius > 0 ||
-        node.topRightRadius > 0 ||
-        node.bottomRightRadius > 0 ||
-        node.bottomLeftRadius > 0))
-  )
 }
 
 /**
@@ -310,6 +316,39 @@ function drawVectorStrokeGeometry(
   r.fillPaint.setAlphaf(opacity)
   r.fillPaint.setShader(null)
   for (const p of sg) canvas.drawPath(p, r.fillPaint)
+}
+
+function vectorStrokePaths(r: SkiaRenderer, node: SceneNode): Path[] | null {
+  if (!node.vectorNetwork) return null
+
+  const paths: Path[] = []
+  for (const segment of node.vectorNetwork.segments) {
+    const start = node.vectorNetwork.vertices[segment.start]
+    const end = node.vectorNetwork.vertices[segment.end]
+
+    const path = new r.ck.Path()
+    path.moveTo(start.x, start.y)
+    const isStraight =
+      Math.abs(segment.tangentStart.x) < 0.001 &&
+      Math.abs(segment.tangentStart.y) < 0.001 &&
+      Math.abs(segment.tangentEnd.x) < 0.001 &&
+      Math.abs(segment.tangentEnd.y) < 0.001
+    if (isStraight) {
+      path.lineTo(end.x, end.y)
+    } else {
+      path.cubicTo(
+        start.x + segment.tangentStart.x,
+        start.y + segment.tangentStart.y,
+        end.x + segment.tangentEnd.x,
+        end.y + segment.tangentEnd.y,
+        end.x,
+        end.y
+      )
+    }
+    paths.push(path)
+  }
+
+  return paths.length > 0 ? paths : null
 }
 
 function drawVectorPathStrokes(
@@ -369,6 +408,48 @@ function drawRegularStroke(
   }
 }
 
+function drawNodeStroke(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  node: SceneNode,
+  rect: Float32Array,
+  hasRadius: boolean,
+  stroke: SceneNode['strokes'][0],
+  sc: Color,
+  sg: Path[] | null,
+  vectorPaths: Path[] | null,
+  vectorStroke: Path[] | null
+): void {
+  if (vectorStroke && stroke.align === 'CENTER' && node.cornerRadius === 0) {
+    drawVectorPathStrokes(r, canvas, vectorStroke, stroke, sc)
+    return
+  }
+  if (!sg) {
+    if (vectorPaths) drawVectorPathStrokes(r, canvas, vectorPaths, stroke, sc)
+    else drawRegularStroke(r, canvas, node, rect, hasRadius, stroke, sc)
+    return
+  }
+  if (stroke.align !== 'INSIDE') {
+    drawVectorStrokeGeometry(r, canvas, sg, sc, stroke.opacity)
+    return
+  }
+
+  const clipPaths = node.type === 'VECTOR' ? r.getFillGeometry(node) : null
+  if (node.type === 'VECTOR' && !clipPaths) {
+    drawVectorStrokeGeometry(r, canvas, sg, sc, stroke.opacity)
+    return
+  }
+
+  canvas.save()
+  if (clipPaths) {
+    for (const path of clipPaths) canvas.clipPath(path, r.ck.ClipOp.Intersect, true)
+  } else {
+    r.clipNodeShape(canvas, node, rect, hasRadius)
+  }
+  drawVectorStrokeGeometry(r, canvas, sg, sc, stroke.opacity)
+  canvas.restore()
+}
+
 export function renderShapeUncached(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -381,181 +462,19 @@ export function renderShapeUncached(
   const shadowChild = getShadowShapeChild(node, graph)
   r.renderEffects(canvas, node, rect, hasRadius, 'behind', shadowChild)
 
-  for (let fi = 0; fi < node.fills.length; fi++) {
-    const fill = node.fills[fi]
-    if (!fill.visible) continue
-    if (!r.applyFill(fill, node, graph, fi)) continue
-    r.fillPaint.setAlphaf(fill.opacity)
-    r.drawNodeFill(canvas, node, rect, hasRadius)
-    r.fillPaint.setShader(null)
-  }
+  drawVisibleFills(r, node, graph, () => r.drawNodeFill(canvas, node, rect, hasRadius))
 
-  const sg = node.type === 'VECTOR' ? r.getStrokeGeometry(node) : null
-  const vectorPaths = !sg && node.type === 'VECTOR' ? r.getVectorPaths(node) : null
-  for (let si = 0; si < node.strokes.length; si++) {
-    const stroke = node.strokes[si]
-    if (!stroke.visible) continue
-    const sc = r.resolveStrokeColor(stroke, si, node, graph)
-
-    if (sg) {
-      drawVectorStrokeGeometry(r, canvas, sg, sc, stroke.opacity)
-      continue
-    }
-    if (vectorPaths) {
-      drawVectorPathStrokes(r, canvas, vectorPaths, stroke, sc)
-      continue
-    }
-    drawRegularStroke(r, canvas, node, rect, hasRadius, stroke, sc)
+  const sg = node.strokeGeometry.length > 0 ? r.getStrokeGeometry(node) : null
+  const vectorPaths = node.type === 'VECTOR' ? r.getVectorPaths(node) : null
+  const vectorStroke = node.type === 'VECTOR' ? vectorStrokePaths(r, node) : null
+  forVisibleStrokes(r, node, graph, (stroke, color) => {
+    drawNodeStroke(r, canvas, node, rect, hasRadius, stroke, color, sg, vectorPaths, vectorStroke)
+  })
+  if (vectorStroke) {
+    for (const path of vectorStroke) path.delete()
   }
 
   r.renderEffects(canvas, node, rect, hasRadius, 'front')
-}
-
-export function renderEffects(
-  r: SkiaRenderer,
-  canvas: Canvas,
-  node: SceneNode,
-  rect: Float32Array,
-  hasRadius: boolean,
-  pass: 'behind' | 'front',
-  shadowShapeChild?: SceneNode | null
-): void {
-  for (const effect of node.effects) {
-    if (!effect.visible) continue
-
-    if (pass === 'behind' && effect.type === 'DROP_SHADOW') {
-      const sp = effect.spread
-      const sigma = effect.radius / 2
-
-      if (node.type === 'TEXT') {
-        const shadowColor = r.ck.Color4f(
-          effect.color.r,
-          effect.color.g,
-          effect.color.b,
-          effect.color.a
-        )
-        const dropFilter = r.getCachedDropShadow(
-          effect.offset.x,
-          effect.offset.y,
-          sigma,
-          shadowColor
-        )
-        r.effectLayerPaint.setImageFilter(dropFilter)
-        canvas.saveLayer(r.effectLayerPaint)
-        r.renderText(canvas, node)
-        canvas.restore()
-      } else {
-        // When a container has no visible fills, Figma renders the drop
-        // shadow using the first child's shape (e.g. a rounded child
-        // inside a rectangular wrapper).
-        const shapeNode = shadowShapeChild ?? node
-        const shapeHasRadius = shadowShapeChild ? nodeHasRadius(shadowShapeChild) : hasRadius
-
-        r.auxFill.setColor(
-          r.color4f(effect.color.r, effect.color.g, effect.color.b, effect.color.a)
-        )
-        r.auxFill.setMaskFilter(r.getCachedMaskBlur(sigma))
-        r.auxFill.setImageFilter(null)
-        canvas.save()
-        canvas.translate(effect.offset.x, effect.offset.y)
-        if (shapeNode.type === 'ELLIPSE') {
-          canvas.drawOval(r.ltrb(-sp, -sp, shapeNode.width + sp, shapeNode.height + sp), r.auxFill)
-        } else if (shapeHasRadius) {
-          canvas.drawRRect(r.makeRRectWithSpread(shapeNode, sp), r.auxFill)
-        } else {
-          canvas.drawRect(r.ltrb(-sp, -sp, shapeNode.width + sp, shapeNode.height + sp), r.auxFill)
-        }
-        canvas.restore()
-        r.auxFill.setMaskFilter(null)
-      }
-    }
-
-    if (pass === 'behind' && effect.type === 'BACKGROUND_BLUR') {
-      r.applyClippedBlur(canvas, node, rect, hasRadius, effect.radius / 2)
-    }
-
-    if (pass === 'front' && effect.type === 'INNER_SHADOW') {
-      if (node.type === 'TEXT') {
-        r.effectLayerPaint.setImageFilter(r.getCachedDecalBlur(effect.radius))
-        r.effectLayerPaint.setColorFilter(
-          r.ck.ColorFilter.MakeBlend(
-            r.ck.Color4f(effect.color.r, effect.color.g, effect.color.b, effect.color.a),
-            r.ck.BlendMode.SrcIn
-          )
-        )
-        canvas.saveLayer(r.effectLayerPaint)
-        canvas.save()
-        canvas.translate(effect.offset.x, effect.offset.y)
-        r.renderText(canvas, node)
-        canvas.restore()
-        canvas.restore()
-        r.effectLayerPaint.setColorFilter(null)
-        continue
-      }
-      const sp = effect.spread
-      r.auxFill.setColor(
-        r.ck.Color4f(effect.color.r, effect.color.g, effect.color.b, effect.color.a)
-      )
-      r.auxFill.setImageFilter(r.getCachedDecalBlur(effect.radius))
-
-      canvas.save()
-      if (node.type === 'ELLIPSE') {
-        const path = new r.ck.Path()
-        path.addOval(rect)
-        canvas.clipPath(path, r.ck.ClipOp.Intersect, true)
-        path.delete()
-      } else if (hasRadius) {
-        canvas.clipRRect(r.makeRRect(node), r.ck.ClipOp.Intersect, true)
-      } else {
-        canvas.clipRect(rect, r.ck.ClipOp.Intersect, true)
-      }
-
-      const expand = effect.radius * 2
-      const big = r.ck.LTRBRect(
-        -expand + effect.offset.x,
-        -expand + effect.offset.y,
-        node.width + expand + effect.offset.x,
-        node.height + expand + effect.offset.y
-      )
-      const bigPath = new r.ck.Path()
-      bigPath.addRect(big)
-      if (node.type === 'ELLIPSE') {
-        const innerPath = new r.ck.Path()
-        const offsetRect = r.ck.LTRBRect(
-          effect.offset.x + sp,
-          effect.offset.y + sp,
-          node.width + effect.offset.x - sp,
-          node.height + effect.offset.y - sp
-        )
-        innerPath.addOval(offsetRect)
-        bigPath.op(innerPath, r.ck.PathOp.Difference)
-        innerPath.delete()
-      } else if (hasRadius) {
-        const innerPath = new r.ck.Path()
-        innerPath.addRRect(
-          r.makeRRectWithOffset(node, effect.offset.x + sp, effect.offset.y + sp, -sp)
-        )
-        bigPath.op(innerPath, r.ck.PathOp.Difference)
-        innerPath.delete()
-      } else {
-        const innerPath = new r.ck.Path()
-        innerPath.addRect(
-          r.ck.LTRBRect(
-            effect.offset.x + sp,
-            effect.offset.y + sp,
-            node.width + effect.offset.x - sp,
-            node.height + effect.offset.y - sp
-          )
-        )
-        bigPath.op(innerPath, r.ck.PathOp.Difference)
-        innerPath.delete()
-      }
-      canvas.drawPath(bigPath, r.auxFill)
-      bigPath.delete()
-      canvas.restore()
-      r.auxFill.setImageFilter(null)
-    }
-  }
 }
 
 export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): void {
@@ -563,7 +482,10 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): vo
   if (!text) return
 
   canvas.save()
-  canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, false)
+  const shouldClipText = node.textAutoResize === 'NONE' || node.textAutoResize === 'TRUNCATE'
+  if (shouldClipText) {
+    canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, false)
+  }
 
   if (node.textPicture) {
     const pic = r.ck.MakePicture(node.textPicture)
@@ -576,7 +498,8 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): vo
   }
   if (r.fontsLoaded && r.fontProvider) {
     const paragraph = r.buildParagraph(node, r.fillPaint.getColor())
-    canvas.drawParagraph(paragraph, 0, 0)
+    const paragraphY = -1
+    canvas.drawParagraph(paragraph, 0, paragraphY)
     paragraph.delete()
   } else if (r.textFont) {
     canvas.drawText(text, 0, node.fontSize || r.DEFAULT_FONT_SIZE, r.fillPaint, r.textFont)

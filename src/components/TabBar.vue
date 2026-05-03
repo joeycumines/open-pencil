@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 
 import Tip from '@/components/ui/Tip.vue'
-import { useTabsStore, createTab } from '@/stores/tabs'
+import { useTabsStore, createTab } from '@/app/tabs'
 
 const { tabs, activeTabId, switchTab, closeTab } = useTabsStore()
 
@@ -30,7 +30,7 @@ function onClose(e: MouseEvent, tabId: string) {
     v-if="tabs.length > 1"
     v-model="modelValue"
     activation-mode="automatic"
-    class="scrollbar-none flex h-9 shrink-0 items-end overflow-x-auto border-b border-border bg-[#1e1e1e]"
+    class="scrollbar-none flex h-9 shrink-0 items-end overflow-x-auto border-b border-border bg-canvas"
   >
     <TabsList class="flex h-full items-end">
       <TabsTrigger

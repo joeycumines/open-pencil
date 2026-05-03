@@ -23,7 +23,11 @@ interface OutlineGlyph {
 
 interface OutlineFont {
   unitsPerEm: number
+  ascender: number
+  descender: number
+  tables: { os2?: { sTypoLineGap?: number } }
   stringToGlyphs(text: string): OutlineGlyph[]
+  getAdvanceWidth(text: string, fontSize: number): number
 }
 
 export interface GlyphOutlineProbe {
@@ -38,11 +42,41 @@ interface OpenTypeModule {
   parse(buffer: ArrayBuffer): OutlineFont
 }
 
-let openTypeModulePromise: Promise<OpenTypeModule> | null = null
+const parsedFontCache = new Map<string, OutlineFont>()
 
-async function loadOpenTypeModule() {
-  openTypeModulePromise ??= import('opentype.js') as Promise<typeof OpenTypeSync & OpenTypeModule>
-  return openTypeModulePromise
+function getParsedFont(family: string, style: string): OutlineFont | null {
+  const key = `${family}|${style}`
+  const cached = parsedFontCache.get(key)
+  if (cached) return cached
+  const bytes = getLoadedFontData(family, style)
+  if (!bytes) return null
+  const font = (OpenTypeSync as OpenTypeModule).parse(bytes.slice(0))
+  parsedFontCache.set(key, font)
+  return font
+}
+
+export function measureTextWithOpenType(
+  text: string,
+  fontSize: number,
+  family: string,
+  style: string,
+  maxWidth?: number,
+  lineHeight?: number
+): { width: number; height: number } | null {
+  const font = getParsedFont(family, style)
+  if (!font) return null
+
+  const scale = fontSize / font.unitsPerEm
+  const lineGap = font.tables.os2?.sTypoLineGap ?? 0
+  const lineH = lineHeight ?? Math.ceil((font.ascender - font.descender + lineGap) * scale)
+
+  const singleLineWidth = font.getAdvanceWidth(text, fontSize)
+
+  if (maxWidth && maxWidth > 0 && singleLineWidth > maxWidth) {
+    const lines = Math.ceil(singleLineWidth / maxWidth)
+    return { width: maxWidth, height: Math.ceil(lines * lineH) }
+  }
+  return { width: Math.ceil(singleLineWidth), height: lineH }
 }
 
 function commandsToFigmaNumbers(commands: OutlineCommand[]): Array<string | number> {
@@ -65,10 +99,9 @@ export function getGlyphOutlineCommandsSync(
   text: string,
   fontSize: number
 ): Array<Array<string | number>> | null {
-  const bytes = getLoadedFontData(family, style)
-  if (!bytes) return null
+  const font = getParsedFont(family, style)
+  if (!font) return null
 
-  const font = (OpenTypeSync as OpenTypeModule).parse(bytes.slice(0))
   const glyphs = font.stringToGlyphs(text)
   return glyphs.map((glyph) => commandsToFigmaNumbers(glyph.getPath(0, 0, fontSize).commands))
 }
@@ -82,8 +115,7 @@ export async function probeGlyphOutlineCommands(
   const bytes = getLoadedFontData(family, style)
   if (!bytes) return null
 
-  const openType = await loadOpenTypeModule()
-  const font = openType.parse(bytes.slice(0))
+  const font = (OpenTypeSync as OpenTypeModule).parse(bytes.slice(0))
   const glyphs = font.stringToGlyphs(text)
   const firstGlyph = glyphs.find((glyph: OutlineGlyph) => glyph.path.commands.length > 0)
   const firstGlyphCommandSample = (firstGlyph?.getPath(0, 0, fontSize).commands ?? []).slice(0, 12)

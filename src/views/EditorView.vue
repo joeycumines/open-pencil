@@ -6,35 +6,37 @@ import { useHead } from '@unhead/vue'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 import { useViewportKind } from '@open-pencil/vue'
-import { useKeyboard } from '@/composables/use-keyboard'
-import { useMenu } from '@/composables/use-menu'
-import { useCollab, COLLAB_KEY } from '@/composables/use-collab'
-import { connectAutomation } from '@/automation/server'
-import { spawnMCPIfNeeded } from '@/automation/spawn-mcp'
-import { IS_TAURI } from '@/constants'
-import { createDemoShapes } from '@/demo'
-import { useEditorStore } from '@/stores/editor'
-import { createTab, activeTab, getActiveStore } from '@/stores/tabs'
+import { useKeyboard } from '@/app/shell/keyboard/use'
+import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
+import { useMenu } from '@/app/shell/menu/use'
+import { useCollab, COLLAB_KEY } from '@/app/collab/use'
+import { connectAutomation } from '@/app/automation/bridge/server'
+import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
+import { IS_BROWSER } from '@open-pencil/core/constants'
+import { createDemoShapes } from '@/app/demo/document'
+import { useEditorStore } from '@/app/editor/active-store'
+import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
 
-import CollabPanel from '@/components/CollabPanel.vue'
+import CollabPanel from '@/components/CollabPanel/CollabPanel.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
-import MobileHud from '@/components/MobileHud.vue'
+import MobileHud from '@/components/MobileHud/MobileHud.vue'
 import PropertiesPanel from '@/components/PropertiesPanel.vue'
 import SafariBanner from '@/components/SafariBanner.vue'
 import TabBar from '@/components/TabBar.vue'
-import Toolbar from '@/components/Toolbar.vue'
+import Toolbar from '@/components/Toolbar/Toolbar.vue'
 
 const route = useRoute()
 const params = useUrlSearchParams('history')
 const showChrome = !('no-chrome' in params)
 
-const firstTab = createTab()
+const createdInitialTab = tabCount() === 0
+const firstTab = createdInitialTab ? createTab() : (activeTab.value ?? createTab())
 const store = useEditorStore()
 const { isMobile } = useViewportKind()
 
-if (route.meta.demo && !('test' in params)) {
+if (createdInitialTab && route.meta.demo && !('test' in params)) {
   createDemoShapes(firstTab.store)
 }
 
@@ -56,16 +58,22 @@ useEventListener(
 
 const automationCleanup = ref<(() => void) | null>(null)
 const mcpCleanup = ref<(() => void) | null>(null)
+const initialEditorLayout = loadEditorLayout()
 
 onMounted(async () => {
   try {
     const mcp = await spawnMCPIfNeeded()
     mcpCleanup.value = mcp?.disconnect ?? null
-    if (import.meta.env.DEV || IS_TAURI) {
+    const isTauri = IS_BROWSER && '__TAURI_INTERNALS__' in window
+    if (import.meta.env.DEV || isTauri) {
       automationCleanup.value = connectAutomation(getActiveStore, mcp?.authToken ?? null).disconnect
     }
   } catch (e) {
-    console.error(e)
+    console.warn('[MCP]', e)
+    if (IS_BROWSER && '__TAURI_INTERNALS__' in window) {
+      const { toast } = await import('@/app/shell/ui')
+      toast.warning('MCP server failed to start. Install with: npm i -g @open-pencil/mcp')
+    }
   }
 })
 
@@ -86,9 +94,15 @@ onUnmounted(() => {
       :key="activeTab?.id"
       direction="horizontal"
       class="flex-1 overflow-hidden"
-      auto-save-id="editor-layout"
+      @layout="saveEditorLayout"
     >
-      <SplitterPanel :default-size="18" :min-size="10" :max-size="30" class="flex">
+      <SplitterPanel
+        id="layers"
+        :default-size="initialEditorLayout[0]"
+        :min-size="10"
+        :max-size="30"
+        class="flex"
+      >
         <LayersPanel />
       </SplitterPanel>
       <SplitterResizeHandle
@@ -97,7 +111,7 @@ onUnmounted(() => {
       >
         <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
       </SplitterResizeHandle>
-      <SplitterPanel :default-size="64" :min-size="30" class="flex">
+      <SplitterPanel id="canvas" :default-size="initialEditorLayout[1]" :min-size="30" class="flex">
         <div class="relative flex min-w-0 flex-1">
           <EditorCanvas />
           <Toolbar />
@@ -106,7 +120,13 @@ onUnmounted(() => {
       <SplitterResizeHandle class="group relative z-10 -mx-1 w-2 cursor-col-resize">
         <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
       </SplitterResizeHandle>
-      <SplitterPanel :default-size="18" :min-size="10" :max-size="30" class="flex flex-col">
+      <SplitterPanel
+        id="properties"
+        :default-size="initialEditorLayout[2]"
+        :min-size="10"
+        :max-size="30"
+        class="flex flex-col"
+      >
         <div
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >

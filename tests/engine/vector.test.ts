@@ -1,9 +1,19 @@
 import { describe, test, expect } from 'bun:test'
 
 import {
+  lineNetwork,
+  triangleNetwork,
+  vectorNetwork,
+  vectorSegment,
+  vectorVertex
+} from '../helpers/vector-network'
+
+import {
   encodeVectorNetworkBlob,
   decodeVectorNetworkBlob,
   computeVectorBounds,
+  normalizeVectorNetwork,
+  validateVectorNetwork,
   type VectorNetwork,
 } from '@open-pencil/core'
 
@@ -18,16 +28,7 @@ describe('vectorNetworkBlob round-trip', () => {
   })
 
   test('single line segment', () => {
-    const network: VectorNetwork = {
-      vertices: [
-        { x: 0, y: 0, handleMirroring: 'NONE' },
-        { x: 100, y: 50, handleMirroring: 'NONE' }
-      ],
-      segments: [
-        { start: 0, end: 1, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } }
-      ],
-      regions: []
-    }
+    const network = lineNetwork()
     const blob = encodeVectorNetworkBlob(network)
     const decoded = decodeVectorNetworkBlob(blob)
     expect(decoded.vertices).toHaveLength(2)
@@ -40,16 +41,13 @@ describe('vectorNetworkBlob round-trip', () => {
   })
 
   test('cubic bezier segment', () => {
-    const network: VectorNetwork = {
-      vertices: [
-        { x: 0, y: 0, handleMirroring: 'ANGLE' },
-        { x: 100, y: 100, handleMirroring: 'ANGLE' }
+    const network = vectorNetwork(
+      [
+        { ...vectorVertex(0, 0), handleMirroring: 'ANGLE' },
+        { ...vectorVertex(100, 100), handleMirroring: 'ANGLE' }
       ],
-      segments: [
-        { start: 0, end: 1, tangentStart: { x: 30, y: 0 }, tangentEnd: { x: -30, y: 0 } }
-      ],
-      regions: []
-    }
+      [vectorSegment(0, 1, { x: 30, y: 0 }, { x: -30, y: 0 })]
+    )
     const blob = encodeVectorNetworkBlob(network)
     const decoded = decodeVectorNetworkBlob(blob)
     expect(decoded.segments[0].tangentStart.x).toBeCloseTo(30)
@@ -57,21 +55,7 @@ describe('vectorNetworkBlob round-trip', () => {
   })
 
   test('network with region', () => {
-    const network: VectorNetwork = {
-      vertices: [
-        { x: 0, y: 0, handleMirroring: 'NONE' },
-        { x: 100, y: 0, handleMirroring: 'NONE' },
-        { x: 50, y: 100, handleMirroring: 'NONE' }
-      ],
-      segments: [
-        { start: 0, end: 1, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } },
-        { start: 1, end: 2, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } },
-        { start: 2, end: 0, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } }
-      ],
-      regions: [
-        { windingRule: 'NONZERO', loops: [[0, 1, 2]] }
-      ]
-    }
+    const network = triangleNetwork()
     const blob = encodeVectorNetworkBlob(network)
     const decoded = decodeVectorNetworkBlob(blob)
     expect(decoded.regions).toHaveLength(1)
@@ -124,6 +108,116 @@ describe('vectorNetworkBlob round-trip', () => {
     expect(decoded.regions).toHaveLength(2)
     expect(decoded.regions[0].loops).toEqual([[0, 1], [2]])
     expect(decoded.regions[1].loops).toEqual([[0, 2]])
+  })
+})
+
+describe('normalizeVectorNetwork', () => {
+  test('passes through segments that already have tangents', () => {
+    const network: VectorNetwork = {
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+      segments: [{ start: 0, end: 1, tangentStart: { x: 5, y: 0 }, tangentEnd: { x: -5, y: 0 } }],
+      regions: []
+    }
+    const result = normalizeVectorNetwork(network)
+    expect(result.segments[0].tangentStart).toEqual({ x: 5, y: 0 })
+    expect(result.segments[0].tangentEnd).toEqual({ x: -5, y: 0 })
+  })
+
+  test('defaults missing tangentStart and tangentEnd to zero', () => {
+    const network = {
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+      segments: [{ start: 0, end: 1 }],
+      regions: []
+    } as unknown as VectorNetwork
+    const result = normalizeVectorNetwork(network)
+    expect(result.segments[0].tangentStart).toEqual({ x: 0, y: 0 })
+    expect(result.segments[0].tangentEnd).toEqual({ x: 0, y: 0 })
+  })
+
+  test('defaults only the missing tangent', () => {
+    const network = {
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+      segments: [{ start: 0, end: 1, tangentStart: { x: 3, y: 4 } }],
+      regions: []
+    } as unknown as VectorNetwork
+    const result = normalizeVectorNetwork(network)
+    expect(result.segments[0].tangentStart).toEqual({ x: 3, y: 4 })
+    expect(result.segments[0].tangentEnd).toEqual({ x: 0, y: 0 })
+  })
+
+  test('normalized network survives encode/decode round-trip', () => {
+    const raw = {
+      vertices: [
+        { x: 0, y: 0, handleMirroring: 'NONE' },
+        { x: 80, y: 0, handleMirroring: 'NONE' },
+        { x: 40, y: 80, handleMirroring: 'NONE' }
+      ],
+      segments: [
+        { start: 0, end: 1 },
+        { start: 1, end: 2 },
+        { start: 2, end: 0 }
+      ],
+      regions: [{ windingRule: 'NONZERO', loops: [[0, 1, 2]] }]
+    } as unknown as VectorNetwork
+
+    const normalized = normalizeVectorNetwork(raw)
+    const blob = encodeVectorNetworkBlob(normalized)
+    const decoded = decodeVectorNetworkBlob(blob)
+
+    expect(decoded.vertices).toHaveLength(3)
+    expect(decoded.segments).toHaveLength(3)
+    for (const seg of decoded.segments) {
+      expect(seg.tangentStart).toEqual({ x: 0, y: 0 })
+      expect(seg.tangentEnd).toEqual({ x: 0, y: 0 })
+    }
+    expect(decoded.regions[0].loops).toEqual([[0, 1, 2]])
+  })
+})
+
+describe('validateVectorNetwork', () => {
+  test('valid network returns no errors', () => {
+    const network: VectorNetwork = {
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+      segments: [{ start: 0, end: 1, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } }],
+      regions: []
+    }
+    expect(validateVectorNetwork(network)).toEqual([])
+  })
+
+  test('segments without tangents are valid (normalize handles them)', () => {
+    const network = {
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+      segments: [{ start: 0, end: 1 }],
+      regions: []
+    } as unknown as VectorNetwork
+    expect(validateVectorNetwork(network)).toEqual([])
+  })
+
+  test('rejects segment with out-of-range start index', () => {
+    const network = {
+      vertices: [{ x: 0, y: 0 }],
+      segments: [{ start: 0, end: 5 }],
+      regions: []
+    } as unknown as VectorNetwork
+    const errors = validateVectorNetwork(network)
+    expect(errors.length).toBe(1)
+    expect(errors[0]).toContain('end index 5 out of range')
+  })
+
+  test('rejects missing vertices array', () => {
+    const network = { segments: [], regions: [] } as unknown as VectorNetwork
+    const errors = validateVectorNetwork(network)
+    expect(errors[0]).toContain('vertices must be an array')
+  })
+
+  test('rejects vertex with non-number coordinates', () => {
+    const network = {
+      vertices: [{ x: 'a', y: 0 }],
+      segments: [],
+      regions: []
+    } as unknown as VectorNetwork
+    const errors = validateVectorNetwork(network)
+    expect(errors[0]).toContain('x and y must be numbers')
   })
 })
 

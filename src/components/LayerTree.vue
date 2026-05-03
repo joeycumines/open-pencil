@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAttrs } from 'vue'
 import { TreeRoot, TreeItem, ContextMenuRoot, ContextMenuTrigger, ContextMenuPortal } from 'reka-ui'
 
 import {
@@ -8,12 +9,15 @@ import {
   useInlineRename,
   useLayerDrag
 } from '@open-pencil/vue'
-import { useEditorStore } from '@/stores/editor'
-import { nodeIcon, COMPONENT_TYPES } from '@/utils/layer-icons'
+import { useEditorStore } from '@/app/editor/active-store'
+import { nodeIcon, COMPONENT_TYPES } from '@/app/editor/icons'
 import CanvasMenu from './CanvasMenu.vue'
 import Tip from './ui/Tip.vue'
 
+defineOptions({ inheritAttrs: false })
+
 const INDENT = 16
+const attrs = useAttrs()
 const store = useEditorStore()
 const rename = useInlineRename((id, name) => store.renameNode(id, name))
 const { menu: t } = useI18n()
@@ -24,6 +28,16 @@ function onLayerRightClick(e: MouseEvent) {
   if (!row?.dataset.nodeId) return
   if (!store.state.selectedIds.has(row.dataset.nodeId)) store.select([row.dataset.nodeId])
 }
+
+function isAdditiveSelect(e: CustomEvent): boolean {
+  const mouseEvent = e.detail?.originalEvent as MouseEvent | undefined
+  return !!(mouseEvent?.shiftKey || mouseEvent?.metaKey || mouseEvent?.ctrlKey)
+}
+
+function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
+  e.preventDefault()
+  select(isAdditiveSelect(e))
+}
 </script>
 
 <template>
@@ -33,7 +47,7 @@ function onLayerRightClick(e: MouseEvent) {
   >
     <ContextMenuRoot :modal="false">
       <ContextMenuTrigger as-child @contextmenu="onLayerRightClick">
-        <div class="relative scrollbar-thin flex-1 overflow-y-auto px-1">
+        <div v-bind="attrs" class="relative scrollbar-thin flex-1 overflow-y-auto px-1">
           <TreeRoot
             :key="treeKey"
             v-slot="{ flattenItems }"
@@ -63,12 +77,7 @@ function onLayerRightClick(e: MouseEvent) {
                 :value="item.value"
                 :level="item.level"
                 as-child
-                @select="
-                  (e: CustomEvent) => {
-                    e.preventDefault()
-                    selectNode(!!e.detail.originalEvent?.shiftKey)
-                  }
-                "
+                @select="(e: CustomEvent) => onTreeSelect(e, selectNode)"
                 @toggle="
                   (e: CustomEvent) => {
                     if (e.detail.originalEvent?.type === 'click') e.preventDefault()

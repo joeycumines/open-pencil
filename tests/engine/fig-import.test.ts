@@ -74,6 +74,24 @@ describe('fig-import: node types', () => {
   })
 })
 
+describe('fig-import: transforms', () => {
+  test('flipped transforms use their visual bounds', () => {
+    const graph = importNodeChanges([
+      doc(),
+      canvas(),
+      node('VECTOR', 10, 1, {
+        size: { x: 17, y: 36 },
+        transform: { m00: -1, m01: 0, m02: 70, m10: 0, m11: 1, m12: 7 }
+      })
+    ])
+    const imported = graph.getChildren(graph.getPages()[0].id)[0]
+
+    expect(imported.x).toBe(53)
+    expect(imported.y).toBe(7)
+    expect(imported.flipX).toBe(true)
+  })
+})
+
 describe('fig-import: gradient fills', () => {
   test('linear gradient', () => {
     const graph = importNodeChanges([doc(), canvas(), node('RECTANGLE', 10, 1, {
@@ -350,6 +368,102 @@ describe('fig-import: multiple fills', () => {
     expect(n.fills[0].type).toBe('SOLID')
     expect(n.fills[1].type).toBe('GRADIENT_LINEAR')
     expect(n.fills[1].opacity).toBe(0.5)
+  })
+})
+
+describe('fig-import: auto-layout alignment', () => {
+  test('maps SPACE_EVENLY kiwi primary alignment to Figma space-between', () => {
+    const graph = importNodeChanges([
+      doc(),
+      canvas(),
+      node('FRAME', 10, 1, {
+        stackMode: 'HORIZONTAL',
+        stackPrimaryAlignItems: 'SPACE_EVENLY',
+      } as Partial<NodeChange>),
+    ])
+    const n = graph.getChildren(graph.getPages()[0].id)[0]
+    expect(n.primaryAxisAlign).toBe('SPACE_BETWEEN')
+  })
+})
+
+describe('fig-import: variable asset refs', () => {
+  test('resolves color variables and aliases by assetRef', () => {
+    const graph = importNodeChanges([
+      doc(),
+      canvas(),
+      {
+        ...node('VARIABLE_SET', 20, 1),
+        name: 'Tokens',
+        key: 'collection-key',
+        version: '1:1',
+        variableSetModes: [{ id: { sessionID: 10, localID: 1 }, name: 'Default' }],
+      } as NodeChange,
+      {
+        ...node('VARIABLE', 21, 1),
+        name: 'Blue',
+        key: 'blue-key',
+        version: '1:2',
+        variableSetID: { assetRef: { key: 'collection-key', version: '1:1' } },
+        variableResolvedType: 'COLOR',
+        variableDataValues: {
+          entries: [
+            {
+              modeID: { sessionID: 10, localID: 1 },
+              variableData: {
+                dataType: 'COLOR',
+                resolvedDataType: 'COLOR',
+                value: { colorValue: { r: 0.14, g: 0.39, b: 0.92, a: 1 } },
+              },
+            },
+          ],
+        },
+      } as NodeChange,
+      {
+        ...node('VARIABLE', 22, 1),
+        name: 'Primary',
+        key: 'primary-key',
+        version: '1:3',
+        variableSetID: { assetRef: { key: 'collection-key', version: '1:1' } },
+        variableResolvedType: 'COLOR',
+        variableDataValues: {
+          entries: [
+            {
+              modeID: { sessionID: 10, localID: 1 },
+              variableData: {
+                dataType: 'ALIAS',
+                resolvedDataType: 'COLOR',
+                value: { alias: { assetRef: { key: 'blue-key', version: '1:2' } } },
+              },
+            },
+          ],
+        },
+      } as NodeChange,
+      node('TEXT', 30, 1, {
+        textData: { characters: 'browse' },
+        fillPaints: [
+          {
+            type: 'SOLID',
+            color: { r: 0, g: 0, b: 0, a: 1 },
+            colorVar: {
+              value: { alias: { assetRef: { key: 'primary-key', version: '1:3' } } },
+              dataType: 'ALIAS',
+              resolvedDataType: 'COLOR',
+            },
+          },
+        ] as unknown as NodeChange['fillPaints'],
+      }),
+    ])
+
+    const primary = [...graph.variables.values()].find((v) => v.name === 'Primary')!
+    const resolved = graph.resolveColorVariable(primary.id)!
+    expect(resolved.r).toBeCloseTo(0.14)
+    expect(resolved.g).toBeCloseTo(0.39)
+    expect(resolved.b).toBeCloseTo(0.92)
+
+    const text = [...graph.getAllNodes()].find((n) => n.type === 'TEXT' && n.text === 'browse')!
+    expect(text.fills[0].color.r).toBeCloseTo(0.14)
+    expect(text.fills[0].color.g).toBeCloseTo(0.39)
+    expect(text.fills[0].color.b).toBeCloseTo(0.92)
   })
 })
 

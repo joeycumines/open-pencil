@@ -2,14 +2,90 @@
 
 ## Unreleased
 
-### Features
+### Changed
 
-- Add stdio transport for MCP server — `openpencil-mcp` now works as a proper stdio MCP server for Claude Code, Cursor, etc. HTTP server available as `openpencil-mcp-http`.
+- Refactor the editor architecture across core, app, Vue SDK, CLI, MCP, docs, and desktop into smaller domain modules with structural lint rules to keep package boundaries explicit.
+- Add targeted core subpath exports and package-local import aliases for cleaner app, Vue SDK, CLI, and MCP imports.
+- Split the canvas into separate scene and overlay render layers so rulers, labels, selections, and input overlays are isolated from scene rendering.
+- Use `@use-gesture/vanilla` for wheel gesture lifecycle handling and faster trackpad zoom behavior.
+- Add auto-layout inspector controls for min/max dimensions, Auto gap distribution, wrap cross-axis gap, and two-axis padding controls.
+- Add signed Tauri updater configuration, release artifacts, startup update checks, and a native Check for Updates menu item.
 
 ### Fixes
 
+- Fix `@open-pencil/vue` failing to import from npm — `getAbsolutePositionFull` was imported from `@open-pencil/core/canvas/coordinate`, an unexported subpath. Re-exported the function from `@open-pencil/core/canvas` and updated the vue import.
+- Fix large `.fig` files freezing during open — parsing and scene graph import now run in the worker, and opened files fit to the canvas viewport after loading.
+- Improve Figma import fidelity for Preline UI files — preserve variable aliases, derived instance layout, nested instance scaling, avatar swaps, badge internals, and input text alignment.
+- Improve Figma render fidelity for exports — preserve flipped vector bounds, render Figma stroke geometry for shapes/vectors, fix clipped visual overflow, and render drop shadows for stroked shapes from the stroke outline.
+- Fix text editing inside selected components and instances on double-click.
+- Prevent browser/Safari from intercepting app-level Cmd/Ctrl shortcuts such as undo/redo.
+- Fix undo/redo shortcuts firing twice during modifier-key release by handling command shortcuts with event-based dispatch.
+- Fix option-drag duplicate undo/redo so undo removes duplicated subtrees and redo restores them instead of moving the copy back.
+- Fix section drawing errors and color input attribute forwarding in the property panel.
+- Fix demo component instances by laying out source components before creating instances, and restore explicit badge dot/text spacing.
+- Keep the global startup loader visible until CanvasKit fonts load and the first font-backed render completes, avoiding a flash of missing text in opened files and the demo.
+- Fix hot reload creating duplicate editor tabs during development.
+- Improve layout inspector dropdown anchoring and icon clarity for spacing and padding controls.
+
+### Performance
+
+- Cache instance override resolution and lazily populate opened `.fig` pages to reduce load time for large community files.
+- Reduce zoom and overlay rendering work by separating scene rendering from rulers, selection, labels, and input overlays.
+
+## 0.11.8 — 2026-04-23
+
+### Fixes
+
+- Fix MCP server not spawning on Windows — use `cmd /c` to resolve `.cmd` wrappers from npm global installs
+- Fix MCP server and automation WebSocket not connecting on Windows/Linux — inline `__TAURI_INTERNALS__` check at call time instead of using stale module-level `IS_TAURI` constant
+- Fix shell PATH not inherited by GUI app on macOS/Linux — add `fix-path-env-rs` to read shell config
+
+## 0.11.7 — 2026-04-22
+
+### Features
+
+- Add stdio transport for MCP server — `openpencil-mcp` now works as a proper stdio MCP server for Claude Code, Cursor, etc. HTTP server available as `openpencil-mcp-http`.
+- Default canvas background to dark when system prefers dark color scheme
+- Add `list_available_fonts` MCP tool for font discovery
+- Copy node ID / XPath from context menu; CLI selection command
+- Arrow key nudge for selected nodes (1px, Shift+arrow for 10px)
+- JSX renderer: `position="absolute"`, `top`, `left` props for absolute children inside auto-layout containers
+- MCP server sends `notifications/tools/list_changed` when the desktop app connects or disconnects
+- Headless text measurement via opentype.js per-glyph advance widths — no CanvasKit needed
+- Add `open_file` and `new_document` MCP tools with `OPENPENCIL_MCP_ROOT` path scoping
+- Optional `path` param on `export_image`, `export_svg`, `get_jsx` — write output to disk instead of returning base64/string
+- Multi-root JSX support — multiple top-level elements auto-wrapped in a fragment
+- `Component` and `Instance` tag aliases in JSX renderer
+- JSX prop reference doc — copy to clipboard via book icon in Code panel
+- Prompts (`CODEGEN_PROMPT`, `JSX_REFERENCE`) moved from embedded strings to markdown files
+
+### Fixes
+
+- Fix Backspace not deleting selected nodes after clicking on canvas — canvas now receives focus on click so keyboard shortcuts aren't blocked by stale input focus
+- Support Cmd/Ctrl+click for additive multi-select in layers panel (previously only Shift+click worked)
+- Fix macOS Tauri build — move `NSAllowsLocalNetworking` ATS config from invalid `tauri.conf.json` property to a proper `Info.plist` file
+- Fix tab order and keyboard handling in inspector panel
+- Fix design token variables not resolved before passing to yoga-layout
+- Suppress keyboard shortcuts while editing property panel inputs
+- Fix tooltip competing with popover trigger on Windows
+- Fix hit area for nodes with rotated parents
+- Error toasts auto-dismiss, deduplicate, and cap stack at 5
+- Bump yoga-layout to 3.3.0-grid.3 with `Node.free()` support
+- Bump PWA precache limit for canvaskit-webgpu
 - Fix color picker dragging flooding the undo stack — fill/stroke/effect color and opacity drags now collapse into a single undo entry per interaction via debounced batching in `PropertyListRoot`
 - Fix .fig import crash on alias variables without a GUID
+- Fix `save_file` crash on vectors with missing tangent control points — default to straight segments
+- Validate `create_vector` path JSON upfront with clear error messages for malformed input
+- Fix MCP/AI tools rejecting string-encoded numeric arguments from MCP clients (`"42"` → `42`)
+- Fix "Create Instance" context menu item always grayed out — inverted disabled flag
+- Show "Create Instance" instead of "Create Component" in context menu when a component is selected
+- Fix headless layout: use stored .fig dimensions instead of rough text size estimates (26K → 11K mismatches on material3.fig)
+- Fix `--help` output with huge vertical gaps between commands — remove inline examples from query description
+- Fix `openpencil-mcp` npm package missing `dist/stdio.js` — explicitly list entry points in tsconfig
+- Show toast when MCP server fails to start instead of silently swallowing the error
+- Fix provider settings popover not appearing — tooltip wrapper broke floating-ui positioning
+- Fix `set_font_range` producing invalid style runs that crash `.fig` export — use `applyStyleToRange`, apply color and fontWeight from style name
+- Fix MCP "app not connected" error — message now instructs the agent to stop and inform the user
 - Fix external links in AI panel blocked by Tauri ACL — use opener plugin instead of shell
 
 ## 0.11.6 — 2026-04-08

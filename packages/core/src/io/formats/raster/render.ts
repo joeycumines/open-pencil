@@ -1,9 +1,9 @@
-import { computeVisualBounds } from '../../../geometry'
-import { extractExportGraph } from '../../subgraph'
+import { computeDescendantVisualBounds } from '#core/geometry'
+import { extractExportGraph, findPageId } from '#core/io/subgraph'
 
-import type { SkiaRenderer } from '../../../canvas'
-import type { RenderColorSpace } from '../../../color/management'
-import type { SceneGraph } from '../../../scene-graph'
+import type { SkiaRenderer } from '#core/canvas'
+import type { RenderColorSpace } from '#core/color/management'
+import type { SceneGraph } from '#core/scene-graph'
 import type { CanvasKit, Canvas } from 'canvaskit-wasm'
 
 export type RasterExportFormat = 'PNG' | 'JPG' | 'WEBP'
@@ -14,17 +14,6 @@ interface RenderOptions {
   format: ExportFormat
   quality?: number
   colorSpace?: RenderColorSpace
-}
-
-function findPageId(graph: SceneGraph, nodeId: string): string | null {
-  let current = graph.getNode(nodeId)
-  while (current?.parentId) {
-    const parent = graph.getNode(current.parentId)
-    if (!parent) return null
-    if (parent.type === 'CANVAS') return parent.id
-    current = parent
-  }
-  return current?.type === 'CANVAS' ? current.id : null
 }
 
 function ensureSinglePageSelection(graph: SceneGraph, pageId: string, nodeIds: string[]): boolean {
@@ -41,25 +30,12 @@ function nodeNeedsSceneBackdrop(graph: SceneGraph, nodeId: string): boolean {
   return node.childIds.some((childId) => nodeNeedsSceneBackdrop(graph, childId))
 }
 
-export function computeContentBounds(
-  graph: SceneGraph,
-  nodeIds: string[]
-): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  const nodes = nodeIds
-    .map((id) => graph.getNode(id))
-    .filter(
-      (node): node is NonNullable<ReturnType<SceneGraph['getNode']>> => !!node && node.visible
-    )
-
-  if (nodes.length === 0) return null
-
-  const bounds = computeVisualBounds(nodes, (id) => graph.getAbsolutePosition(id))
-  return {
-    minX: bounds.x,
-    minY: bounds.y,
-    maxX: bounds.x + bounds.width,
-    maxY: bounds.y + bounds.height
-  }
+export function computeContentBounds(graph: SceneGraph, nodeIds: string[]) {
+  return computeDescendantVisualBounds(
+    nodeIds,
+    (id) => graph.getNode(id),
+    (id) => graph.getAbsolutePosition(id)
+  )
 }
 
 function ckImageFormat(ck: CanvasKit, format: ExportFormat) {

@@ -1,6 +1,6 @@
-import type { SceneGraph } from '../../scene-graph'
-import type { Matrix, Vector } from '../../types'
-import type { GUID } from '../codec'
+import type { GUID, NodeChange } from '#core/kiwi/binary/codec'
+import type { SceneGraph } from '#core/scene-graph'
+import type { Matrix, Vector } from '#core/types'
 
 export interface SymbolOverride {
   guidPath?: { guids?: GUID[] }
@@ -28,12 +28,22 @@ export type ComponentPropValue = {
 export interface ComponentPropAssignment {
   defID?: GUID
   value: ComponentPropValue
+  varValue?: {
+    value?: {
+      boolValue?: boolean
+      textValue?: string
+      symbolIdValue?: { guid?: GUID }
+    }
+  }
 }
 
 export interface DerivedSymbolOverride {
   guidPath?: { guids?: GUID[] }
   size?: Vector
   transform?: Matrix
+  fontSize?: number
+  lineHeight?: NodeChange['lineHeight']
+  letterSpacing?: NodeChange['letterSpacing']
   fillGeometry?: Array<{ windingRule?: string; commandsBlob?: number }>
   strokeGeometry?: Array<{ windingRule?: string; commandsBlob?: number }>
 }
@@ -47,12 +57,17 @@ export interface ComponentPropDef {
 
 export interface InstanceNodeChange {
   type?: string
+  name?: string
   guid?: GUID
+  parentIndex?: { guid?: GUID }
+  transform?: Matrix
   overrideKey?: GUID
   symbolData?: SymbolData
   componentPropRefs?: ComponentPropRef[]
   componentPropAssignments?: ComponentPropAssignment[]
   componentPropDefs?: ComponentPropDef[]
+  fillGeometry?: Array<{ windingRule?: string; commandsBlob?: number }>
+  strokeGeometry?: Array<{ windingRule?: string; commandsBlob?: number }>
   derivedSymbolData?: DerivedSymbolOverride[]
 }
 
@@ -72,9 +87,14 @@ export interface OverrideContext {
   overrideKeyToGuid: Map<string, string>
   nodeIdToGuid: Map<string, string>
   propDefaults: Map<string, ComponentPropValue>
+  propNames: Map<string, string>
   preComputedRoot: Map<string, string>
   componentIdRoot: Map<string, string>
   swappedInstances: Set<string>
-  /** Nodes whose kiwi NC has explicit property values (fills, cornerRadius, etc.) */
+  /** Nodes whose kiwi NC has explicit property values (cornerRadius, visibility, etc.) */
   kiwiPropertyNodes: Set<string>
+  /** Nodes whose Figma-derived geometry should not be overwritten by clone propagation. */
+  geometryOverrideNodes: Set<string>
+  /** When set, apply/populate expensive instance work only inside these already-imported nodes. */
+  activeNodeIds?: Set<string>
 }

@@ -9,6 +9,8 @@
     "dialog:default",
     "dialog:allow-save",
     "dialog:allow-open",
+    "updater:default",
+    "process:default",
     {
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**" }]
@@ -17,7 +19,14 @@
       "identifier": "fs:allow-write-file",
       "allow": [{ "path": "**" }]
     },
-    "fs:allow-watch",
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-watch",
+      "allow": [{ "path": "**" }]
+    },
     "fs:allow-unwatch",
     {
       "identifier": "shell:allow-spawn",
@@ -25,7 +34,8 @@
         { "name": "claude-agent-acp", "cmd": "claude-agent-acp", "args": true },
         { "name": "codex-acp", "cmd": "codex-acp", "args": true },
         { "name": "gemini", "cmd": "gemini", "args": true },
-        { "name": "openpencil-mcp-http", "cmd": "openpencil-mcp-http", "args": true }
+        { "name": "openpencil-mcp-http", "cmd": "openpencil-mcp-http", "args": true },
+        { "name": "cmd", "cmd": "cmd", "args": true }
       ]
     },
     "shell:allow-stdin-write",

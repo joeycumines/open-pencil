@@ -1,4 +1,4 @@
-import type { SceneGraph } from '../../scene-graph'
+import type { SceneGraph } from '#core/scene-graph'
 
 /**
  * Populate empty INSTANCE nodes from their source components.
@@ -7,7 +7,22 @@ import type { SceneGraph } from '../../scene-graph'
  * itself an unpopulated instance, populate the source first so cloned
  * children are complete.
  */
-export function populateInstances(graph: SceneGraph): void {
+function collectSubtreeIds(graph: SceneGraph, rootIds: Iterable<string>): Set<string> {
+  const result = new Set<string>()
+  const queue = [...rootIds]
+  for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+    if (result.has(id)) continue
+    result.add(id)
+    const node = graph.getNode(id)
+    if (node) queue.push(...node.childIds)
+  }
+  return result
+}
+
+export function populateInstances(
+  graph: SceneGraph,
+  rootIds?: Iterable<string>
+): Set<string> | undefined {
   const visiting = new Set<string>()
 
   function ensurePopulated(nodeId: string): void {
@@ -34,24 +49,25 @@ export function populateInstances(graph: SceneGraph): void {
     }
   }
 
-  for (const node of graph.getAllNodes()) {
-    if (node.type === 'INSTANCE' && node.componentId && node.childIds.length === 0) {
-      ensurePopulated(node.id)
-    }
-  }
-
-  // Cloning may introduce new empty instances not seen in the first pass
-  // (nested clones). Repeat until stable.
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const node of graph.getAllNodes()) {
-      if (node.type !== 'INSTANCE' || !node.componentId || node.childIds.length > 0) continue
-      const comp = graph.getNode(node.componentId)
-      if (comp && comp.childIds.length > 0) {
-        graph.populateInstanceChildren(node.id, node.componentId)
-        changed = true
+  if (!rootIds) {
+    for (const node of graph.nodes.values()) {
+      if (node.type === 'INSTANCE' && node.componentId && node.childIds.length === 0) {
+        ensurePopulated(node.id)
       }
     }
+    return undefined
   }
+
+  const queue = [...rootIds]
+  const visited = new Set<string>()
+  while (queue.length > 0) {
+    const nodeId = queue.shift()
+    if (!nodeId || visited.has(nodeId)) continue
+    visited.add(nodeId)
+    ensurePopulated(nodeId)
+    const node = graph.getNode(nodeId)
+    if (!node) continue
+    queue.push(...node.childIds)
+  }
+  return collectSubtreeIds(graph, rootIds)
 }

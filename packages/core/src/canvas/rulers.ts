@@ -10,10 +10,10 @@ import {
   RULER_HIGHLIGHT_ALPHA,
   RULER_TARGET_PIXEL_SPACING,
   RULER_MAJOR_TOLERANCE
-} from '../constants'
-import { computeAbsoluteBounds } from '../geometry'
+} from '#core/constants'
+import { computeAbsoluteBounds } from '#core/geometry'
 
-import type { SceneNode, SceneGraph } from '../scene-graph'
+import type { SceneNode, SceneGraph } from '#core/scene-graph'
 import type { SkiaRenderer } from './renderer'
 import type { Canvas, CanvasKit } from 'canvaskit-wasm'
 
@@ -126,6 +126,14 @@ export function drawRulers(
   const vw = r.viewportWidth
   const vh = r.viewportHeight
   if (vw === 0 || vh === 0) return
+
+  if (r.rulerTheme) {
+    const { background, tick, text, label } = r.rulerTheme
+    r.rulerBgPaint.setColor(r.ck.Color4f(background.r, background.g, background.b, background.a))
+    r.rulerTickPaint.setColor(r.ck.Color4f(tick.r, tick.g, tick.b, tick.a))
+    r.rulerTextPaint.setColor(r.ck.Color4f(text.r, text.g, text.b, text.a))
+    r.rulerLabelPaint.setColor(r.ck.Color4f(label.r, label.g, label.b, label.a))
+  }
 
   canvas.drawRect(r.ck.LTRBRect(0, 0, vw, R), r.rulerBgPaint)
   canvas.drawRect(r.ck.LTRBRect(0, R, R, vh), r.rulerBgPaint)

@@ -7,7 +7,7 @@ export class CanvasHelper {
 
   constructor(page: Page) {
     this.page = page
-    this.canvas = page.locator('canvas')
+    this.canvas = page.locator('[data-test-id="canvas-area"]')
     page.on('pageerror', (err) => this.errors.push(err.message))
     page.on('console', (msg) => {
       if (msg.type() === 'error') this.errors.push(msg.text())
@@ -27,8 +27,13 @@ export class CanvasHelper {
   }
 
   async waitForInit() {
-    await this.page.locator('canvas[data-ready="1"]').waitFor({ timeout: 30000 })
-    await this.page.locator('[data-test-id="canvas-loading"]').waitFor({ state: 'hidden', timeout: 30000 })
+    await this.page
+      .locator('[data-test-id="canvas-element"][data-ready="1"]')
+      .waitFor({ timeout: 30000 })
+    await this.page
+      .locator('[data-test-id="canvas-loading"]')
+      .waitFor({ state: 'hidden', timeout: 30000 })
+    await this.page.locator('#loader').waitFor({ state: 'detached', timeout: 30000 })
   }
 
   async clearCanvas() {
@@ -52,13 +57,7 @@ export class CanvasHelper {
     await this.page.mouse.click(box.x + canvasX, box.y + canvasY)
   }
 
-  async drag(
-    fromX: number,
-    fromY: number,
-    toX: number,
-    toY: number,
-    steps = 10
-  ) {
+  async drag(fromX: number, fromY: number, toX: number, toY: number, steps = 10) {
     const box = await this.canvasBounds()
     await this.page.mouse.move(box.x + fromX, box.y + fromY)
     await this.page.mouse.down()
@@ -82,10 +81,19 @@ export class CanvasHelper {
     await this.waitForRender()
   }
 
-  async selectTool(tool: 'select' | 'frame' | 'rectangle' | 'ellipse' | 'text' | 'pen' | 'hand') {
+  async drawSection(x: number, y: number, width: number, height: number) {
+    await this.pressKey('s')
+    await this.drag(x, y, x + width, y + height)
+    await this.waitForRender()
+  }
+
+  async selectTool(
+    tool: 'select' | 'frame' | 'section' | 'rectangle' | 'ellipse' | 'text' | 'pen' | 'hand'
+  ) {
     const keys: Record<string, string> = {
       select: 'v',
       frame: 'f',
+      section: 's',
       rectangle: 'r',
       ellipse: 'o',
       text: 't',

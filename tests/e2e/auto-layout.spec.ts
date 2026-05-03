@@ -72,22 +72,90 @@ test('gap ScrubInput sets itemSpacing', async () => {
   canvas.assertNoErrors()
 })
 
-test('uniform padding ScrubInput sets all four padding sides', async () => {
+test('gap menu sets auto space-between alignment', async () => {
   await selectFrame()
 
-  const paddingScrub = page.locator('[data-test-id="layout-uniform-padding-input"]')
-  await paddingScrub.click()
+  await page.locator('[data-test-id="layout-gap-menu"]').click()
+  await page.getByRole('option', { name: 'Auto' }).click()
   await canvas.waitForRender()
-  const paddingInput = page.locator('[data-test-id="layout-uniform-padding-input"] [data-test-id="scrub-input-field"]')
-  await paddingInput.fill('16')
-  await paddingInput.press('Enter')
+
+  let frame = await getNodeById(page, frameId)
+  expect(frame!.primaryAxisAlign).toBe('SPACE_BETWEEN')
+  await expect(page.locator('[data-test-id="layout-alignment-grid"] button')).toHaveCount(9)
+
+  await page.locator('[data-test-id="layout-gap-menu"]').click()
+  await page.getByRole('option', { name: String(Math.round(frame!.itemSpacing)) }).click()
+  await canvas.waitForRender()
+
+  frame = await getNodeById(page, frameId)
+  expect(frame!.primaryAxisAlign).toBe('MIN')
+  await expect(page.locator('[data-test-id="layout-alignment-grid"] button')).toHaveCount(9)
+  canvas.assertNoErrors()
+})
+
+test('wrap mode exposes cross-axis gap control', async () => {
+  await selectFrame()
+
+  await page.locator('[data-test-id="layout-direction-wrap"]').click()
+  await canvas.waitForRender()
+
+  const before = await getNodeById(page, frameId)
+  const initialSpacing = before!.counterAxisSpacing
+  await canvas.dragScrubInput(page.locator('[data-test-id="layout-cross-gap-input"]'), 40)
+
+  const after = await getNodeById(page, frameId)
+  expect(after!.layoutWrap).toBe('WRAP')
+  expect(after!.counterAxisSpacing).toBeGreaterThan(initialSpacing + 5)
+  canvas.assertNoErrors()
+})
+
+test('padding controls set horizontal and vertical padding pairs', async () => {
+  await selectFrame()
+
+  await page.locator('[data-test-id="layout-horizontal-padding-input"]').click()
+  await canvas.waitForRender()
+  const horizontalInput = page.locator(
+    '[data-test-id="layout-horizontal-padding-input"] [data-test-id="scrub-input-field"]'
+  )
+  await horizontalInput.fill('24')
+  await horizontalInput.press('Enter')
+  await canvas.waitForRender()
+
+  await page.locator('[data-test-id="layout-vertical-padding-input"]').click()
+  await canvas.waitForRender()
+  const verticalInput = page.locator(
+    '[data-test-id="layout-vertical-padding-input"] [data-test-id="scrub-input-field"]'
+  )
+  await verticalInput.fill('16')
+  await verticalInput.press('Enter')
   await canvas.waitForRender()
 
   const frame = await getNodeById(page, frameId)
   expect(frame!.paddingTop).toBe(16)
-  expect(frame!.paddingRight).toBe(16)
+  expect(frame!.paddingRight).toBe(24)
   expect(frame!.paddingBottom).toBe(16)
-  expect(frame!.paddingLeft).toBe(16)
+  expect(frame!.paddingLeft).toBe(24)
+  canvas.assertNoErrors()
+})
+
+test('size dropdown adds and removes min width', async () => {
+  await selectFrame()
+
+  await page.locator('[data-test-id="layout-width-sizing-menu"]').click()
+  await page.getByText('Add min width').click()
+  await canvas.waitForRender()
+
+  let frame = await getNodeById(page, frameId)
+  expect(frame!.minWidth).toBe(Math.round(frame!.width))
+  await expect(page.locator('[data-test-id="layout-min-width-input"]')).toBeVisible()
+
+  await page.locator('[data-test-id="layout-width-sizing-menu"]').click()
+  await page.getByText('Remove min width').click()
+  await canvas.waitForRender()
+
+  frame = await getNodeById(page, frameId)
+  expect(frame!.minWidth).toBeNull()
+  await expect(page.locator('[data-test-id="layout-min-width-input"]')).toHaveCount(0)
   canvas.assertNoErrors()
 })
 

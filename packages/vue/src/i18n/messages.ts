@@ -1,6 +1,27 @@
-import { params } from '@nanostores/i18n'
+import { locale } from '#vue/i18n/locale'
+import { createI18n, params } from '@nanostores/i18n'
 
-import { i18n } from './i18n'
+import type { Locale } from '#vue/i18n/locale'
+import type { ComponentsJSON } from '@nanostores/i18n'
+
+const localeLoaders: Record<Exclude<Locale, 'en'>, () => Promise<{ default: ComponentsJSON }>> = {
+  de: () => import('#vue/locales/de.json'),
+  es: () => import('#vue/locales/es.json'),
+  fr: () => import('#vue/locales/fr.json'),
+  it: () => import('#vue/locales/it.json'),
+  pl: () => import('#vue/locales/pl.json'),
+  ru: () => import('#vue/locales/ru.json'),
+  'zh-CN': () => import('#vue/locales/zh-CN.json')
+}
+
+const i18n = createI18n<Locale, 'en'>(locale, {
+  baseLocale: 'en',
+  async get(code) {
+    if (code === 'en') return {}
+    const mod = await localeLoaders[code]()
+    return mod.default
+  }
+})
 
 export const menuMessages = i18n('menu', {
   file: 'File',
@@ -24,6 +45,7 @@ export const menuMessages = i18n('menu', {
   zoomOut: 'Zoom out',
   profiler: 'Performance profiler',
   language: 'Language',
+  checkUpdates: 'Check for updates…',
 
   moveToPage: 'Move to page',
   createInstance: 'Create instance',
@@ -177,6 +199,9 @@ export const panelMessages = i18n('panels', {
   multiplayerCursors: 'Multiplayer cursors',
   direction: 'Direction',
   flow: 'Flow',
+  gapAuto: 'Auto gap',
+  horizontalGap: 'Horizontal gap',
+  verticalGap: 'Vertical gap',
   auto: 'Auto',
   columns: 'Columns',
   rows: 'Rows',
@@ -185,6 +210,20 @@ export const panelMessages = i18n('panels', {
   sizingFill: 'Fill',
   sizingHugShort: 'Hug',
   sizingFillShort: 'Fill',
+  addMinWidth: 'Add min width',
+  removeMinWidth: 'Remove min width',
+  addMaxWidth: 'Add max width',
+  removeMaxWidth: 'Remove max width',
+  addMinHeight: 'Add min height',
+  removeMinHeight: 'Remove min height',
+  addMaxHeight: 'Add max height',
+  removeMaxHeight: 'Remove max height',
+  minWidthShort: 'Min W',
+  maxWidthShort: 'Max W',
+  minHeightShort: 'Min H',
+  maxHeightShort: 'Max H',
+  setToCurrentWidth: 'Set to current width',
+  setToCurrentHeight: 'Set to current height',
   sizingFillFr: 'Fill (fr)',
   sizingFixedPx: 'Fixed (px)'
 })
@@ -229,5 +268,16 @@ export const dialogMessages = i18n('dialogs', {
   connected: 'Connected',
   search: 'Search…',
   noResults: 'No results',
-  share: 'Share'
+  share: 'Share',
+  appUpToDate: 'OpenPencil is up to date',
+  updateAvailableTitle: 'Update OpenPencil',
+  updateAvailable: params('OpenPencil {version} is available.'),
+  updateInstallPrompt:
+    'Download and install it now? The app will restart after the update is installed.',
+  downloadingUpdate: params('Downloading OpenPencil {version}'),
+  updateInstalledTitle: 'Update installed',
+  updateInstalled: params('OpenPencil {version} was installed{size}. Restarting now.'),
+  updateUnavailable:
+    'Updates are not available yet. Publish a signed release with latest.json first.',
+  updateCheckFailed: params('Could not check for updates: {error}')
 })

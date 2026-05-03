@@ -1,38 +1,13 @@
 import { defineCommand } from 'citty'
 
-import { executeRpcCommand } from '@open-pencil/core'
+import { loadRpcData } from '#cli/rpc-data'
+import { printNodeResults, printError } from '#cli/format'
 
-import { isAppMode, requireFile, rpc } from '../app-client'
-import { printNodeResults, printError } from '../format'
-import { loadDocument } from '../headless'
-
-import type { QueryNodeResult } from '@open-pencil/core'
-
-async function getData(
-  file: string | undefined,
-  args: { selector: string; page?: string; limit?: string }
-): Promise<QueryNodeResult[] | { error: string }> {
-  const rpcArgs = {
-    selector: args.selector,
-    page: args.page,
-    limit: args.limit ? Number(args.limit) : undefined
-  }
-  if (isAppMode(file)) return rpc<QueryNodeResult[]>('query', rpcArgs)
-  const graph = await loadDocument(requireFile(file))
-  return (await executeRpcCommand(graph, 'query', rpcArgs)) as QueryNodeResult[] | { error: string }
-}
+import type { QueryNodeResult } from '@open-pencil/core/rpc'
 
 export default defineCommand({
   meta: {
-    description: `Query nodes using XPath selectors
-
-Examples:
-  open-pencil query file.fig "//FRAME"                              # All frames
-  open-pencil query file.fig "//FRAME[@width < 300]"                # Frames narrower than 300px
-  open-pencil query file.fig "//COMPONENT[starts-with(@name, 'Button')]"  # Components starting with Button
-  open-pencil query file.fig "//SECTION/FRAME"                      # Direct frame children of sections
-  open-pencil query file.fig "//SECTION//TEXT"                      # All text inside sections
-  open-pencil query file.fig "//*[@cornerRadius > 0]"               # Any node with corner radius`
+    description: 'Query nodes using XPath selectors'
   },
   args: {
     file: {
@@ -50,10 +25,10 @@ Examples:
     json: { type: 'boolean', description: 'Output as JSON' }
   },
   async run({ args }) {
-    const results = await getData(args.file, {
+    const results = await loadRpcData<QueryNodeResult[] | { error: string }>(args.file, 'query', {
       selector: args.selector,
       page: args.page,
-      limit: args.limit
+      limit: args.limit ? Number(args.limit) : undefined
     })
 
     if ('error' in results) {

@@ -1,9 +1,14 @@
-import { copyGeometryPaths } from '../../scene-graph/copy'
-import { resolveGeometryPaths } from '../convert'
+import {
+  convertLetterSpacing,
+  convertLineHeight,
+  resolveGeometryPaths
+} from '#core/kiwi/node-change/convert'
+import { copyGeometryPaths } from '#core/scene-graph/copy'
+
 import { resolveOverrideTarget } from './resolve'
 import { buildClonesMap } from './sync'
 
-import type { SceneNode, GeometryPath } from '../../scene-graph'
+import type { SceneNode, GeometryPath } from '#core/scene-graph'
 import type { OverrideContext, DerivedSymbolOverride } from './types'
 
 function scaleGeometryBlobs(geom: GeometryPath[], sx: number, sy: number): GeometryPath[] {
@@ -64,9 +69,98 @@ function resolveDsdGeometry(
   return result
 }
 
+function getVisibleSiblingCount(
+  ctx: OverrideContext,
+  cache: Map<string, number>,
+  parentId: string
+): number {
+  const cached = cache.get(parentId)
+  if (cached !== undefined) return cached
+  const count = ctx.graph.getChildren(parentId).filter((child) => child.visible).length
+  cache.set(parentId, count)
+  return count
+}
+
+function hasSingleVisibleSibling(
+  ctx: OverrideContext,
+  visibleSiblingCount: Map<string, number>,
+  node: SceneNode
+): boolean {
+  if (!node.parentId) return false
+  return getVisibleSiblingCount(ctx, visibleSiblingCount, node.parentId) === 1
+}
+
+function resolveSizeOnlyPosition(
+  ctx: OverrideContext,
+  visibleSiblingCount: Map<string, number>,
+  node: SceneNode
+): Pick<SceneNode, 'x' | 'y'> | null {
+  if (!hasSingleVisibleSibling(ctx, visibleSiblingCount, node) || !node.componentId) return null
+
+  const source = ctx.graph.getNode(node.componentId)
+  if (!source) return null
+  const sourceParent = source.parentId ? ctx.graph.getNode(source.parentId) : null
+  if (!sourceParent) return { x: source.x, y: source.y }
+
+  const withinParent =
+    source.x >= 0 &&
+    source.y >= 0 &&
+    source.x + source.width <= sourceParent.width + 0.01 &&
+    source.y + source.height <= sourceParent.height + 0.01
+  return withinParent ? { x: source.x, y: source.y } : { x: 0, y: 0 }
+}
+
+function buildDsdTextUpdates(d: DerivedSymbolOverride): Partial<SceneNode> {
+  const updates: Partial<SceneNode> = {}
+  if (d.fontSize !== undefined) updates.fontSize = d.fontSize
+  if (d.lineHeight !== undefined) updates.lineHeight = convertLineHeight(d.lineHeight, d.fontSize)
+  if (d.letterSpacing !== undefined) {
+    updates.letterSpacing = convertLetterSpacing(d.letterSpacing, d.fontSize)
+  }
+  return updates
+}
+
+function buildDsdLayoutUpdates(
+  ctx: OverrideContext,
+  visibleSiblingCount: Map<string, number>,
+  d: DerivedSymbolOverride,
+  target: SceneNode
+): { updates: Partial<SceneNode>; hasSize: boolean } {
+  const updates: Partial<SceneNode> = buildDsdTextUpdates(d)
+  const figmaDerivedLayout: NonNullable<SceneNode['figmaDerivedLayout']> = {}
+
+  if (d.size) {
+    updates.width = d.size.x
+    updates.height = d.size.y
+    figmaDerivedLayout.width = d.size.x
+    figmaDerivedLayout.height = d.size.y
+  }
+  if (d.transform) {
+    updates.x = d.transform.m02
+    updates.y = d.transform.m12
+    figmaDerivedLayout.x = d.transform.m02
+    figmaDerivedLayout.y = d.transform.m12
+  } else if (d.size) {
+    const position = resolveSizeOnlyPosition(ctx, visibleSiblingCount, target)
+    if (position) {
+      updates.x = position.x
+      updates.y = position.y
+      figmaDerivedLayout.x = position.x
+      figmaDerivedLayout.y = position.y
+    }
+  }
+  if (Object.keys(figmaDerivedLayout).length > 0) {
+    updates.figmaDerivedLayout = figmaDerivedLayout
+  }
+  Object.assign(updates, resolveDsdGeometry(d, target, ctx.blobs))
+
+  return { updates, hasSize: d.size !== undefined }
+}
+
 function resolveDsdUpdates(ctx: OverrideContext): { modified: Set<string>; sizeSet: Set<string> } {
   const modified = new Set<string>()
   const sizeSet = new Set<string>()
+  const visibleSiblingCount = new Map<string, number>()
 
   for (const [ncId, nc] of ctx.changeMap) {
     if (nc.type !== 'INSTANCE') continue
@@ -74,7 +168,7 @@ function resolveDsdUpdates(ctx: OverrideContext): { modified: Set<string>; sizeS
     if (!derived?.length) continue
 
     const nodeId = ctx.guidToNodeId.get(ncId)
-    if (!nodeId) continue
+    if (!nodeId || (ctx.activeNodeIds && !ctx.activeNodeIds.has(nodeId))) continue
 
     for (const d of derived) {
       const guids = d.guidPath?.guids
@@ -86,21 +180,15 @@ function resolveDsdUpdates(ctx: OverrideContext): { modified: Set<string>; sizeS
       const target = ctx.graph.getNode(targetId)
       if (!target) continue
 
-      const updates: Partial<SceneNode> = {}
-      if (d.size) {
-        updates.width = d.size.x
-        updates.height = d.size.y
+      const { updates, hasSize } = buildDsdLayoutUpdates(ctx, visibleSiblingCount, d, target)
+      if (d.fillGeometry?.length || d.strokeGeometry?.length) {
+        ctx.geometryOverrideNodes.add(targetId)
       }
-      if (d.transform) {
-        updates.x = d.transform.m02
-        updates.y = d.transform.m12
-      }
-      Object.assign(updates, resolveDsdGeometry(d, target, ctx.blobs))
 
       if (Object.keys(updates).length > 0) {
         ctx.graph.updateNode(targetId, updates)
         modified.add(targetId)
-        if (d.size) sizeSet.add(targetId)
+        if (hasSize) sizeSet.add(targetId)
       }
     }
   }
@@ -115,7 +203,7 @@ function propagateDsdChanges(
 ): void {
   if (modified.size === 0) return
 
-  const clonesOf = buildClonesMap(ctx.graph)
+  const clonesOf = buildClonesMap(ctx.graph, ctx.activeNodeIds)
   const queue = [...modified]
   const visited = new Set<string>()
 
@@ -135,10 +223,12 @@ function propagateDsdChanges(
         if (source.height !== clone.height) cu.height = source.height
         if (source.x !== clone.x) cu.x = source.x
         if (source.y !== clone.y) cu.y = source.y
-        if (source.fillGeometry !== clone.fillGeometry)
-          cu.fillGeometry = copyGeometryPaths(source.fillGeometry)
-        if (source.strokeGeometry !== clone.strokeGeometry)
-          cu.strokeGeometry = copyGeometryPaths(source.strokeGeometry)
+        if (!ctx.geometryOverrideNodes.has(cloneId)) {
+          if (source.fillGeometry !== clone.fillGeometry)
+            cu.fillGeometry = copyGeometryPaths(source.fillGeometry)
+          if (source.strokeGeometry !== clone.strokeGeometry)
+            cu.strokeGeometry = copyGeometryPaths(source.strokeGeometry)
+        }
         if (Object.keys(cu).length > 0) ctx.graph.updateNode(cloneId, cu)
       }
       queue.push(cloneId)
