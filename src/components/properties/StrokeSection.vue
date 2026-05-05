@@ -11,6 +11,7 @@ import {
 } from '@open-pencil/vue'
 
 import ColorStyleRow from '@/components/properties/ColorStyleRow.vue'
+import { boundVariableColor } from '@/components/properties/color-style-row'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import ColorInput from '@/components/ColorPicker/ColorInput.vue'
 import ScrubInput from '@/components/ScrubInput.vue'
@@ -18,7 +19,7 @@ import Tip from '@/components/ui/Tip.vue'
 import { useIconButtonUI } from '@/components/ui/icon-button'
 import { useSectionUI } from '@/components/ui/section'
 
-import type { SceneNode, Stroke } from '@open-pencil/core/scene-graph'
+import type { Color, SceneNode, Stroke } from '@open-pencil/core/scene-graph'
 
 const strokeCtx = useStrokeControls()
 const strokeVarCtx = useColorVariableBinding('strokes')
@@ -27,6 +28,18 @@ const { panels } = useI18n()
 const sectionCls = useSectionUI()
 
 const expandedSides = ref(false)
+
+function updateStrokeColor(
+  activeNode: SceneNode | null | undefined,
+  index: number,
+  color: Color,
+  patch: (index: number, changes: Record<string, unknown>) => void
+) {
+  if (activeNode && strokeVarCtx.getBoundVariable(activeNode.id, index)) {
+    strokeVarCtx.unbindVariable(activeNode.id, index)
+  }
+  patch(index, applySolidStrokeColor(color))
+}
 
 function onToggleSides(activeNode: SceneNode) {
   const next = !expandedSides.value
@@ -43,6 +56,29 @@ function onToggleSides(activeNode: SceneNode) {
   } else if (!next && activeNode.independentStrokeWeights) {
     strokeCtx.selectSide('ALL', activeNode)
   }
+}
+
+type StrokePatch = (i: number, partial: Partial<Stroke>) => void
+
+function dashState(stroke: Stroke | undefined): { dash: number; gap: number; on: boolean } {
+  const p = stroke?.dashPattern
+  if (!p || p.length === 0) return { dash: 6, gap: 6, on: false }
+  return { dash: p[0] ?? 6, gap: p[1] ?? p[0] ?? 6, on: true }
+}
+
+function toggleDash(stroke: Stroke | undefined, patch: StrokePatch) {
+  const { dash, gap, on } = dashState(stroke)
+  patch(0, { dashPattern: on ? [] : [Math.max(dash, 1), Math.max(gap, 1)] })
+}
+
+function setDash(stroke: Stroke | undefined, patch: StrokePatch, value: number) {
+  const { gap } = dashState(stroke)
+  patch(0, { dashPattern: [Math.max(1, value), gap] })
+}
+
+function setGap(stroke: Stroke | undefined, patch: StrokePatch, value: number) {
+  const { dash } = dashState(stroke)
+  patch(0, { dashPattern: [dash, Math.max(1, value)] })
 }
 </script>
 
@@ -73,7 +109,9 @@ function onToggleSides(activeNode: SceneNode) {
         :index="i"
         :active-node-id="activeNode?.id ?? null"
         :binding-api="strokeVarCtx"
+        :variable-color="stroke.color"
         :visibility-test-id="`stroke-visibility-${i}`"
+        :apply-variable-test-id="`stroke-apply-variable-${i}`"
         unbind-test-id="stroke-unbind-variable"
         data-test-id="stroke-item"
         :data-test-index="i"
@@ -83,7 +121,11 @@ function onToggleSides(activeNode: SceneNode) {
       >
         <ColorInput
           class="min-w-0 flex-1"
-          :color="stroke.color"
+          :color="
+            activeNode
+              ? (boundVariableColor(strokeVarCtx, activeNode.id, i) ?? stroke.color)
+              : stroke.color
+          "
           :okhcl="
             activeNode
               ? {
@@ -97,7 +139,7 @@ function onToggleSides(activeNode: SceneNode) {
               : null
           "
           editable
-          @update="patch(i, applySolidStrokeColor($event))"
+          @update="updateStrokeColor(activeNode, i, $event, patch)"
         />
       </ColorStyleRow>
 
@@ -147,6 +189,79 @@ function onToggleSides(activeNode: SceneNode) {
             </svg>
           </button>
         </Tip>
+      </div>
+
+      <div
+        v-if="!isMixed && (items as unknown[]).length > 0"
+        class="mt-1.5 flex items-center gap-1.5"
+      >
+        <button
+          data-test-id="stroke-dash-toggle"
+          :aria-label="panels.strokeDash"
+          class="flex h-[26px] shrink-0 cursor-pointer items-center gap-1 rounded border bg-input px-1.5 text-[11px]"
+          :class="
+            dashState((items as Stroke[])[0]).on
+              ? '!border-accent !text-accent'
+              : 'border-border text-muted hover:bg-hover hover:text-surface'
+          "
+          @click="toggleDash((items as Stroke[])[0], patch)"
+        >
+          <svg
+            class="size-3"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <line x1="1" y1="6" x2="11" y2="6" stroke-dasharray="3 2" />
+          </svg>
+        </button>
+        <template v-if="dashState((items as Stroke[])[0]).on">
+          <ScrubInput
+            class="flex-1"
+            :model-value="(items as Stroke[])[0].dashPattern?.[0] ?? 6"
+            :min="1"
+            data-test-id="stroke-dash-length"
+            @update:model-value="setDash((items as Stroke[])[0], patch, $event)"
+          >
+            <template #icon>
+              <svg
+                class="size-3"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <line x1="1" y1="6" x2="5" y2="6" />
+                <line x1="7" y1="6" x2="11" y2="6" />
+              </svg>
+            </template>
+          </ScrubInput>
+          <ScrubInput
+            class="flex-1"
+            :model-value="
+              (items as Stroke[])[0].dashPattern?.[1] ??
+              (items as Stroke[])[0].dashPattern?.[0] ??
+              6
+            "
+            :min="1"
+            data-test-id="stroke-dash-gap"
+            @update:model-value="setGap((items as Stroke[])[0], patch, $event)"
+          >
+            <template #icon>
+              <svg
+                class="size-3"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <line x1="1" y1="6" x2="3" y2="6" />
+                <line x1="9" y1="6" x2="11" y2="6" />
+              </svg>
+            </template>
+          </ScrubInput>
+        </template>
       </div>
 
       <div

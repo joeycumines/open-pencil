@@ -159,6 +159,7 @@ export type AIProviderID =
   | 'anthropic'
   | 'openai'
   | 'google'
+  | 'deepseek'
   | 'openai-compatible'
   | 'zai'
   | 'minimax'
@@ -239,6 +240,17 @@ export const AI_PROVIDERS: AIProviderDef[] = [
     models: [
       { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', tag: '1M context' },
       { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', tag: 'Fast' }
+    ]
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    keyPlaceholder: 'sk-…',
+    keyURL: 'https://platform.deepseek.com/api_keys',
+    defaultModel: 'deepseek-chat',
+    models: [
+      { id: 'deepseek-chat', name: 'DeepSeek V3', tag: 'Fast' },
+      { id: 'deepseek-reasoner', name: 'DeepSeek R1', tag: 'Reasoning' }
     ]
   },
   {

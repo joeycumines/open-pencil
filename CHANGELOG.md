@@ -10,6 +10,10 @@
 - Use `@use-gesture/vanilla` for wheel gesture lifecycle handling and faster trackpad zoom behavior.
 - Add auto-layout inspector controls for min/max dimensions, Auto gap distribution, wrap cross-axis gap, and two-axis padding controls.
 - Add signed Tauri updater configuration, release artifacts, startup update checks, and a native Check for Updates menu item.
+- Add inspector variable binding controls for fill and stroke colors plus width/height sizing, including existing variable selection and named variable creation.
+- Add stroke dash/gap controls to the stroke inspector panel.
+- Bump AI SDK dependencies for improved DeepSeek reasoning mode and newer model support.
+- Add PDF export — vector PDF output via SVG→PDF conversion. Available in export panel, CLI (`--format pdf`), and MCP (`export_pdf` tool).
 
 ### Fixes
 
@@ -28,6 +32,8 @@
 - Keep the global startup loader visible until CanvasKit fonts load and the first font-backed render completes, avoiding a flash of missing text in opened files and the demo.
 - Fix hot reload creating duplicate editor tabs during development.
 - Improve layout inspector dropdown anchoring and icon clarity for spacing and padding controls.
+- Fix bound color variable inspector swatches to display the resolved variable color and detach the binding when edited directly.
+- Fix dashed strokes on vector nodes rendering as solid lines — dash pattern now uses `PathEffect.MakeDash` directly instead of outline conversion, and closed crescent shapes (e.g. annular wedges) render a single dashed centerline arc instead of two parallel arcs.
 
 ### Performance
 

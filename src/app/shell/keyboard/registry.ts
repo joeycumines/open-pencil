@@ -124,7 +124,7 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
         keys,
         (event: KeyboardEvent) => {
           if (shouldIgnoreShortcut(event, options)) return
-          ;(handler as (event: KeyboardEvent) => void)(event)
+          handler(event)
         }
       ])
     )

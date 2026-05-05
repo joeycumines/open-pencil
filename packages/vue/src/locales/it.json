@@ -169,7 +169,12 @@
     "strokeAlignOutside": "Esterno",
     "exportPreview": "Anteprima",
     "exportRenderingPreview": "Rendering anteprima…",
-    "createVariable": "Crea variabile"
+    "createVariable": "Crea variabile",
+    "createColorVariable": "Crea variabile colore da {value}",
+    "variableName": "Nome variabile",
+    "create": "Crea",
+    "createNumberVariable": "Crea variabile numerica da {value}",
+    "strokeDash": "Tratto tratteggiato"
   },
   "pages": {
     "newPage": "Nuova pagina",

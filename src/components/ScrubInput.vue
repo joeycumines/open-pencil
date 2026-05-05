@@ -49,7 +49,9 @@ defineOptions({ inheritAttrs: false })
         'group flex h-[26px] min-w-0 flex-1 items-center rounded border border-border bg-input focus-within:border-accent focus:border-accent'
       ]"
       :style="{ cursor: editing ? 'auto' : 'ew-resize' }"
-      @pointerdown="!editing && startScrub($event)"
+      @pointerdown="
+        !editing && !($event.target as HTMLElement)?.closest?.('button') && startScrub($event)
+      "
       @focus="!editing && startEdit()"
     >
       <span v-if="attrs['data-test-id']" data-test-id="scrub-input" class="hidden" />
@@ -68,6 +70,7 @@ defineOptions({ inheritAttrs: false })
         :max="max === Infinity ? undefined : max"
         :step="step"
       />
+      <slot v-if="editing" name="suffix" />
       <ScrubInputDisplay
         class="flex flex-1 items-center truncate overflow-hidden text-xs select-none"
         :class="$slots.suffix ? 'pr-0' : 'pr-1.5'"
