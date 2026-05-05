@@ -26,7 +26,9 @@ test('ScrubInput drag changes X position', async () => {
   expect(before).not.toBeNull()
   const initialX = before!.x
 
-  const xScrub = page.locator('[data-test-id="position-section"] [data-test-id="scrub-input"]').first()
+  const xScrub = page
+    .locator('[data-test-id="position-section"] [data-test-id="scrub-input"]')
+    .first()
   await canvas.dragScrubInput(xScrub, 50)
 
   const after = await getSelectedNode(page)
@@ -41,7 +43,9 @@ test('corner radius uniform sets cornerRadius', async () => {
   const scrubContainer = page.locator('[data-test-id="corner-radius-input"]')
   await scrubContainer.click()
   await canvas.waitForRender()
-  const input = page.locator('[data-test-id="corner-radius-input"] [data-test-id="scrub-input-field"]')
+  const input = page.locator(
+    '[data-test-id="corner-radius-input"] [data-test-id="scrub-input-field"]'
+  )
   await input.fill('12')
   await input.press('Enter')
   await canvas.waitForRender()
@@ -103,6 +107,112 @@ test('variable bind badge appears on fill', async () => {
   await canvas.waitForRender()
 
   await expect(page.locator('[data-test-id="fill-unbind-variable"]')).toBeVisible()
+  canvas.assertNoErrors()
+})
+
+test('fill color can bind an existing variable', async () => {
+  await canvas.clearCanvas()
+  await canvas.drawRect(200, 200, 80, 80)
+
+  const variableId = await page.evaluate(() => {
+    const store = window.__OPEN_PENCIL_STORE__!
+    const col = store.graph.createCollection('Colors')
+    const variable = store.graph.createVariable('test-brand-red', 'COLOR', col.id, {
+      r: 1,
+      g: 0,
+      b: 0,
+      a: 1
+    })
+    store.state.sceneVersion++
+    return variable.id
+  })
+  await canvas.waitForRender()
+
+  await page.locator('[data-test-id="fill-apply-variable-0"]').click()
+  await page.getByText('test-brand-red', { exact: true }).click()
+  await canvas.waitForRender()
+
+  await expect(page.locator('[data-test-id="fill-unbind-variable"]')).toBeVisible()
+  const fillSwatch = page.locator('[data-test-id="fill-picker-swatch"]')
+  await expect(fillSwatch).toHaveCSS('background-color', 'rgb(255, 0, 0)')
+  await fillSwatch.click()
+  const colorInputs = page.locator('[role="dialog"] input[type="number"]:not(.hidden)')
+  await expect(colorInputs.first()).toHaveValue('255')
+  await colorInputs.first().fill('0')
+  await colorInputs.first().press('Enter')
+  await canvas.waitForRender()
+  await expect(page.locator('[data-test-id="fill-unbind-variable"]')).toBeHidden()
+  const boundVariableId = await page.evaluate(() => {
+    const store = window.__OPEN_PENCIL_STORE__!
+    const id = [...store.state.selectedIds][0]
+    return id ? (store.getNode(id)?.boundVariables['fills/0/color'] ?? null) : null
+  })
+  expect(boundVariableId).toBeNull()
+  canvas.assertNoErrors()
+})
+
+test('fill color can create and bind a variable', async () => {
+  await canvas.clearCanvas()
+  await canvas.drawRect(200, 200, 80, 80)
+
+  await page.locator('[data-test-id="fill-apply-variable-0"]').click()
+  await expect(page.getByText(/Create color variable from #?[0-9A-F]{6}/)).toBeVisible()
+  await page.locator('[data-test-id="fill-apply-variable-0-create"]').click()
+  await page.getByPlaceholder('Variable name').fill('Surface/default')
+  await page.locator('[data-test-id="fill-apply-variable-0-create"]').click()
+  await canvas.waitForRender()
+
+  await expect(page.locator('[data-test-id="fill-unbind-variable"]')).toBeVisible()
+  const boundVariable = await page.evaluate(() => {
+    const store = window.__OPEN_PENCIL_STORE__!
+    const id = [...store.state.selectedIds][0]
+    if (!id) return null
+    const node = store.getNode(id)
+    const variableId = node?.boundVariables['fills/0/color']
+    return variableId ? store.getVariable(variableId)?.name : null
+  })
+  expect(boundVariable).toBe('Surface/default')
+  canvas.assertNoErrors()
+})
+
+test('width can create, bind, and detach a number variable', async () => {
+  await canvas.clearCanvas()
+  await canvas.drawRect(200, 200, 80, 80)
+  await page.locator('[data-test-id="layout-height-input"]').click()
+
+  await page.locator('[data-test-id="layout-width-apply-variable"]').click()
+  await expect(page.getByText('Create number variable from 80')).toBeVisible()
+  await page.locator('[data-test-id="layout-width-apply-variable-create"]').click()
+  await page.getByPlaceholder('Variable name').fill('Card/width')
+  await page.locator('[data-test-id="layout-width-apply-variable-create"]').click()
+  await canvas.waitForRender()
+
+  await expect(page.locator('[data-test-id="layout-width-unbind-variable"]')).toBeVisible()
+  const boundVariable = await page.evaluate(() => {
+    const store = window.__OPEN_PENCIL_STORE__!
+    const id = [...store.state.selectedIds][0]
+    if (!id) return null
+    const node = store.getNode(id)
+    const variableId = node?.boundVariables.width
+    return variableId ? store.getVariable(variableId)?.name : null
+  })
+  expect(boundVariable).toBe('Card/width')
+
+  const widthField = page.locator('[data-test-id="layout-width-input"]')
+  await widthField.click()
+  const widthInput = widthField.locator('[data-test-id="scrub-input-field"]')
+  await widthInput.fill('120')
+  await widthInput.press('Enter')
+  await canvas.waitForRender()
+
+  await expect(page.locator('[data-test-id="layout-width-unbind-variable"]')).toBeHidden()
+  const directWidth = await page.evaluate(() => {
+    const store = window.__OPEN_PENCIL_STORE__!
+    const id = [...store.state.selectedIds][0]
+    const node = id ? store.getNode(id) : null
+    return node ? { width: node.width, binding: node.boundVariables.width ?? null } : null
+  })
+  expect(directWidth).toEqual({ width: 120, binding: null })
   canvas.assertNoErrors()
 })
 

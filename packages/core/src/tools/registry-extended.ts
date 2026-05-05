@@ -4,7 +4,7 @@ import {
   analyzeSpacing,
   analyzeTypography,
   diffCreate,
-  diffShow,
+  diffShow
 } from './analyze'
 import { designToComponentMap, designToTokens } from './codegen'
 import {
@@ -15,8 +15,9 @@ import {
   createSlice,
   createVector,
   fetchIconsTool,
+  importSvg,
   insertIcon,
-  searchIconsTool,
+  searchIconsTool
 } from './create'
 import {
   setBlend,
@@ -31,7 +32,7 @@ import {
   setRotation,
   setStrokeAlign,
   setTextResize,
-  setVisible,
+  setVisible
 } from './modify'
 import {
   diffJsx,
@@ -44,7 +45,7 @@ import {
   pageBounds,
   queryNodes,
   selectNodes,
-  switchPage,
+  switchPage
 } from './read'
 import {
   arrangeNodes,
@@ -60,7 +61,7 @@ import {
   nodeToComponent,
   nodeTree,
   renameNode,
-  ungroupNode,
+  ungroupNode
 } from './structure'
 import {
   bindVariable,
@@ -73,7 +74,7 @@ import {
   getVariable,
   listCollections,
   listVariables,
-  setVariable,
+  setVariable
 } from './variables'
 import {
   booleanExclude,
@@ -81,6 +82,7 @@ import {
   booleanSubtract,
   booleanUnion,
   exportImage,
+  exportPdf,
   exportSvg,
   pathFlip,
   pathGet,
@@ -88,7 +90,7 @@ import {
   pathScale,
   pathSet,
   viewportGet,
-  viewportSet,
+  viewportSet
 } from './vector'
 
 import type { ToolDef } from './schema'
@@ -120,6 +122,7 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   createPage,
   createVector,
   createSlice,
+  importSvg,
   // Modify (advanced)
   setEffects,
   setOpacity,
@@ -174,6 +177,7 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   viewportGet,
   viewportSet,
   exportSvg,
+  exportPdf,
   exportImage,
   // Analyze & diff
   analyzeColors,
@@ -184,5 +188,5 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   diffShow,
   // Codegen
   designToTokens,
-  designToComponentMap,
+  designToComponentMap
 ]

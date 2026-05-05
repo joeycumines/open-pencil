@@ -1,5 +1,3 @@
-import { useEditor } from '#vue/editor/context'
-import { useSceneComputed } from '#vue/internal/scene-computed/use'
 import {
   EXPORT_FORMATS,
   EXPORT_SCALES,
@@ -8,9 +6,11 @@ import {
   createExportTargetState,
   formatSupportsScale
 } from '#vue/document/export/helpers'
+import { useEditor } from '#vue/editor/context'
+import { useSceneComputed } from '#vue/internal/scene-computed/use'
 import { ref } from 'vue'
 
-export type ExportFormatId = 'png' | 'jpg' | 'webp' | 'svg' | 'fig'
+export type ExportFormatId = 'png' | 'jpg' | 'webp' | 'svg' | 'pdf' | 'fig'
 export type ExportPanelTarget = 'selection' | 'page'
 
 export interface ExportSetting {

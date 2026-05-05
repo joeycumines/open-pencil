@@ -1,6 +1,6 @@
 import { DEFAULT_FONT_FAMILY } from '#core/constants'
 import { resolveNodeTextDirection } from '#core/text/direction'
-import { collectTailwindClasses } from './tailwind-classes'
+
 import {
   collectCornerRadii,
   collectPadding,
@@ -13,6 +13,7 @@ import {
   solidFillColor,
   solidStroke
 } from './helpers'
+import { collectTailwindClasses } from './tailwind-classes'
 
 import type { SceneGraph, SceneNode, NodeType } from '#core/scene-graph'
 
@@ -152,6 +153,7 @@ function collectAppearanceProps(node: SceneNode, props: [string, unknown][]): vo
   if (stroke) {
     props.push(['stroke', stroke.color])
     if (stroke.weight !== 1) props.push(['strokeWidth', stroke.weight])
+    if (stroke.dash) props.push(['strokeDash', stroke.dash])
   }
 
   collectCornerRadiiProps(node, props)

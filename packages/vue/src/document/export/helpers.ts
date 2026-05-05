@@ -7,7 +7,7 @@ import type { Editor } from '@open-pencil/core/editor'
 import type { Ref } from 'vue'
 
 export const EXPORT_SCALES = [0.5, 0.75, 1, 1.5, 2, 3, 4] as const
-export const EXPORT_FORMATS: ExportFormatId[] = ['png', 'jpg', 'webp', 'svg', 'fig']
+export const EXPORT_FORMATS: ExportFormatId[] = ['png', 'jpg', 'webp', 'svg', 'pdf', 'fig']
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
 
@@ -54,7 +54,14 @@ export function createExportTargetState(
     activeTarget.value === 'selection' ? selectionSettings.value : pageSettings.value
   )
 
-  return { hasSelection, activeTarget, selectedNodeName, currentPageName, activeName, activeSettings }
+  return {
+    hasSelection,
+    activeTarget,
+    selectedNodeName,
+    currentPageName,
+    activeName,
+    activeSettings
+  }
 }
 
 export function createExportSettingActions(
@@ -80,7 +87,8 @@ export function createExportSettingActions(
     addPageSetting: () => addSetting(pageSettings),
     removeSelectionSetting: (index: number) => selectionSettings.value.splice(index, 1),
     removePageSetting: (index: number) => pageSettings.value.splice(index, 1),
-    updateSelectionScale: (index: number, scale: number) => updateScale(selectionSettings, index, scale),
+    updateSelectionScale: (index: number, scale: number) =>
+      updateScale(selectionSettings, index, scale),
     updatePageScale: (index: number, scale: number) => updateScale(pageSettings, index, scale),
     updateSelectionFormat: (index: number, format: ExportFormatId) =>
       updateFormat(selectionSettings, index, format),

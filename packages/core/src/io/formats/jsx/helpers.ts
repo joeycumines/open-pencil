@@ -1,6 +1,14 @@
 import { colorToHex8, colorToCSSCompact } from '#core/color'
 
-import type { SceneGraph, SceneNode, Fill, Stroke, Effect, Color, GridTrack } from '#core/scene-graph'
+import type {
+  SceneGraph,
+  SceneNode,
+  Fill,
+  Stroke,
+  Effect,
+  Color,
+  GridTrack
+} from '#core/scene-graph'
 
 export function formatColor(color: Color, opacity = 1): string {
   return colorToHex8(color, opacity)
@@ -12,12 +20,16 @@ export function solidFillColor(fills: Fill[]): string | null {
   return formatColor(visible[0].color, visible[0].opacity)
 }
 
-export function solidStroke(strokes: Stroke[]): { color: string; weight: number } | null {
+export function solidStroke(
+  strokes: Stroke[]
+): { color: string; weight: number; dash: number[] | null } | null {
   const visible = strokes.filter((s) => s.visible)
   if (visible.length !== 1) return null
+  const s = visible[0]
   return {
-    color: formatColor(visible[0].color, visible[0].opacity),
-    weight: visible[0].weight
+    color: formatColor(s.color, s.opacity),
+    weight: s.weight,
+    dash: s.dashPattern && s.dashPattern.length > 0 ? [...s.dashPattern] : null
   }
 }
 
@@ -127,4 +139,3 @@ export function formatTrack(t: GridTrack): string {
 export function formatTracks(tracks: GridTrack[]): string {
   return tracks.map(formatTrack).join(' ')
 }
-
