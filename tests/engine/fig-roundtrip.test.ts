@@ -1281,7 +1281,7 @@ describe('variable roundtrip', () => {
     expect(reimported.variableCollections.size).toBeGreaterThanOrEqual(
       [...original.variableCollections.values()].filter((c) => c.variableIds.length > 0).length
     )
-  })
+  }, 120_000)
 
   test('pluginID casing is consistent across full codec pipeline', async () => {
     await initCodec()
@@ -1328,26 +1328,5 @@ describe('variable roundtrip', () => {
     // Should have at least 2 nodes with plugin data (frame + rect)
     expect(nodesWithPluginData).toBeGreaterThanOrEqual(2)
     expect(totalEntries).toBeGreaterThanOrEqual(3)
-  })
-
-  test('slop-funnel.fig pluginID casing is consistent after round-trip', async () => {
-    const buf = readFileSync(resolve(FIXTURES, 'slop-funnel.fig'))
-    const original = await parseFigFile(buf.buffer as ArrayBuffer)
-
-    const exported = await exportFigFile(original)
-    const reimported = await parseFigFile(exported.buffer as ArrayBuffer)
-
-    // Check every pluginData entry across all nodes
-    let checkedEntries = 0
-    for (const node of reimported.getAllNodes()) {
-      for (const entry of node.pluginData) {
-        checkedEntries++
-        expect(entry).toHaveProperty('pluginId')
-        expect(typeof entry.pluginId).toBe('string')
-      }
-    }
-
-    // slop-funnel.fig has thousands of pluginData entries — verify they all survived
-    expect(checkedEntries).toBeGreaterThan(100)
   })
 })

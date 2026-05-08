@@ -419,20 +419,18 @@ describe('extractPluginRelaunchData deduplication via importNodeChanges', () => 
 })
 
 describe('plugin data namespace collision guards', () => {
-  test('getPluginDataKeys excludes shared-format keys (keys containing "/")', () => {
+  test('getPluginDataKeys excludes encoded shared keys but allows private slash keys', () => {
     const graph = new SceneGraph()
     const api = new FigmaAPI(graph)
     const frame = api.createFrame()
 
-    // Simulate: setPluginData writes {pluginId: 'open-pencil', key: 'foo'}
     frame.setPluginData('foo', 'private-value')
-
-    // Simulate: setSharedPluginData('open-pencil', 'bar') writes
-    // {pluginId: 'open-pencil', key: 'open-pencil/bar'}
+    frame.setPluginData('foo/bar', 'private-slash-value')
     frame.setSharedPluginData('open-pencil', 'bar', 'shared-value')
 
     const keys = frame.getPluginDataKeys()
     expect(keys).toContain('foo')
+    expect(keys).toContain('foo/bar')
     expect(keys).not.toContain('open-pencil/bar')
     expect(keys).not.toContain('bar')
   })

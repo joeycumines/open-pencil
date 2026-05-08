@@ -7,8 +7,9 @@ import type { FigmaMessage, NodeChange } from '#core/kiwi/binary/codec'
 
 /**
  * Deduplicates pluginData/pluginRelaunchData entries on raw NodeChange objects.
- * Some .fig files have millions of identical entries (e.g. slop-funnel.fig
- * has 10.9M entries where only ~5.5K are unique by full triple).
+ * Some .fig files (like slop-funnel.fig with 10.9M entries where only ~5.5K
+ * are unique) have millions of identical entries; deduplicateNodeChangePluginData
+ * prevents them from reaching the scene graph.
  * Full-triple key (id+key+value) preserves multi-entry subsystems like OkHCL.
  */
 export function deduplicateNodeChangePluginData(nodeChanges: NodeChange[]): void {
