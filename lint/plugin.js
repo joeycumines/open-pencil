@@ -8,6 +8,59 @@ function importSource(node) {
   return typeof node.source?.value === 'string' ? node.source.value : null
 }
 
+function createProgramFilenameRule({ description, check }) {
+  return {
+    meta: {
+      docs: { description }
+    },
+    create(context) {
+      const file = normalizedFilename(context)
+      const message = check(file)
+      if (!message) return {}
+
+      return {
+        Program(node) {
+          context.report({ node, message })
+        }
+      }
+    }
+  }
+}
+
+function createImportSourceRule({
+  description,
+  applies = () => true,
+  includeExports = false,
+  includeDynamic = false,
+  check
+}) {
+  return {
+    meta: {
+      docs: { description }
+    },
+    create(context) {
+      const file = normalizedFilename(context)
+      if (!applies(file)) return {}
+
+      function reportIfRestricted(node) {
+        const source = importSource(node)
+        if (!source) return
+        const message = check(source, file)
+        if (!message) return
+        context.report({ node, message })
+      }
+
+      const visitors = { ImportDeclaration: reportIfRestricted }
+      if (includeExports) {
+        visitors.ExportAllDeclaration = reportIfRestricted
+        visitors.ExportNamedDeclaration = reportIfRestricted
+      }
+      if (includeDynamic) visitors.ImportExpression = reportIfRestricted
+      return visitors
+    }
+  }
+}
+
 function isUnknownTypeAnnotation(typeAnnotation) {
   return typeAnnotation?.type === 'TSUnknownKeyword'
 }
@@ -272,119 +325,25 @@ const noTypeofWindowCheck = {
   }
 }
 
-const noLegacyAppImports = {
-  meta: {
-    docs: {
-      description:
-        'Disallow imports from removed app/store compatibility shims — import canonical src/app modules instead'
-    }
-  },
-  create(context) {
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source) return
-        const legacyPrefixes = [
-          '@/ai/',
-          '@/automation/',
-          '@/stores/',
-          '@/composables/use-canvas',
-          '@/composables/use-canvas-input',
-          '@/composables/use-collab',
-          '@/composables/use-keyboard'
-        ]
-        if (legacyPrefixes.some((prefix) => source === prefix || source.startsWith(prefix))) {
-          context.report({
-            node,
-            message: `Import from the canonical src/app module instead of legacy shim '${source}'.`
-          })
-        }
-      }
-    }
-  }
-}
+const noVueSelfPackageImports = createImportSourceRule({
+  description: 'Disallow @open-pencil/vue self-imports inside the Vue SDK — use #vue/* aliases',
+  applies: (file) => file.includes('/packages/vue/src/'),
+  check: (source) =>
+    source.startsWith('@open-pencil/vue') &&
+    `Use #vue/* for internal Vue SDK imports instead of self-package import '${source}'.`
+})
 
-const noVueSelfPackageImports = {
-  meta: {
-    docs: {
-      description: 'Disallow @open-pencil/vue self-imports inside the Vue SDK — use #vue/* aliases'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.includes('/packages/vue/src/')) return {}
+const noCrossPackageSourceImports = createImportSourceRule({
+  description:
+    'Disallow imports that reach into another workspace package source tree — use package exports or package-local aliases',
+  check: (source) =>
+    (source.includes('/packages/') ||
+      /^(?:\.\.\/){2,}packages\//.test(source) ||
+      /^(?:\.\.\/)+(?:core|vue|cli|mcp)\/src\//.test(source)) &&
+    `Use workspace package exports or package-local aliases instead of cross-package source import '${source}'.`
+})
 
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source?.startsWith('@open-pencil/vue')) return
-        context.report({
-          node,
-          message: `Use #vue/* for internal Vue SDK imports instead of self-package import '${source}'.`
-        })
-      }
-    }
-  }
-}
-
-const noCrossPackageSourceImports = {
-  meta: {
-    docs: {
-      description:
-        'Disallow imports that reach into another workspace package source tree — use package exports or package-local aliases'
-    }
-  },
-  create(context) {
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source) return
-        if (
-          source.includes('/packages/') ||
-          /^(?:\.\.\/){2,}packages\//.test(source) ||
-          /^(?:\.\.\/)+(?:core|vue|cli|mcp)\/src\//.test(source)
-        ) {
-          context.report({
-            node,
-            message: `Use workspace package exports or package-local aliases instead of cross-package source import '${source}'.`
-          })
-        }
-      }
-    }
-  }
-}
-
-const noStaleViteAppPaths = {
-  meta: {
-    docs: {
-      description: 'Disallow stale Vite config paths to removed top-level app folders'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.endsWith('/vite.config.ts')) return {}
-
-    function reportIfStale(node, value) {
-      if (typeof value !== 'string') return
-      if (!value.includes('src/automation') && !value.includes('src/shims')) return
-      context.report({
-        node,
-        message: 'Use current src/app/* paths instead of removed src/automation or src/shims paths.'
-      })
-    }
-
-    return {
-      Literal(node) {
-        reportIfStale(node, node.value)
-      },
-      TemplateElement(node) {
-        reportIfStale(node, node.value?.raw)
-      }
-    }
-  }
-}
-
-function createParentRelativeImportRule({ description, applies, message }) {
+function createParentRelativeImportRule({ description, applies, message, minDepth = 1 }) {
   return {
     meta: {
       docs: { description }
@@ -395,6 +354,8 @@ function createParentRelativeImportRule({ description, applies, message }) {
 
       function reportSource(node, source) {
         if (!source?.startsWith('../')) return
+        const depth = source.match(/^(?:\.\.\/)+/)?.[0].split('../').length - 1
+        if ((depth ?? 0) < minDepth) return
         if (/^(?:\.\.\/)+package\.json$/.test(source)) return
         context.report({ node, message })
       }
@@ -414,6 +375,13 @@ function createParentRelativeImportRule({ description, applies, message }) {
     }
   }
 }
+
+const noDeepParentRelativeImports = createParentRelativeImportRule({
+  description: 'Disallow deep parent-relative imports — use package/test aliases instead',
+  applies: () => true,
+  message: 'Use an import alias instead of path drilling with ../.. imports.',
+  minDepth: 2
+})
 
 const noCoreParentRelativeImports = createParentRelativeImportRule({
   description: 'Disallow parent-relative imports in core internals — use #core/* aliases',
@@ -440,88 +408,42 @@ const noCliParentRelativeImports = createParentRelativeImportRule({
   message: 'Use the #cli/* package-local alias instead of parent-relative CLI imports.'
 })
 
-const noRootDemoModule = {
-  meta: {
-    docs: {
-      description: 'Disallow root src/demo.ts — keep demo builders under src/app/demo'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.endsWith('/src/demo.ts')) return {}
-
-    return {
-      Program(node) {
-        context.report({
-          node,
-          message: 'Move demo document builders under src/app/demo instead of root src/demo.ts.'
-        })
-      }
-    }
-  }
-}
-
 function createExactCoreBarrelImportRule({ description, applies, message }) {
-  return {
-    meta: {
-      docs: { description }
-    },
-    create(context) {
-      const file = normalizedFilename(context)
-      if (!applies(file)) return {}
-
-      return {
-        ImportDeclaration(node) {
-          const source = importSource(node)
-          if (source !== '@open-pencil/core') return
-          context.report({ node, message })
-        }
-      }
-    }
-  }
+  return createImportSourceRule({
+    description,
+    applies,
+    check: (source) => source === '@open-pencil/core' && message
+  })
 }
 
 const noMcpCoreBarrelImports = createExactCoreBarrelImportRule({
   description: 'Disallow MCP imports from @open-pencil/core root barrel — use domain subpaths',
   applies: (file) => file.includes('/packages/mcp/src/'),
-  message: 'Use a targeted @open-pencil/core subpath in MCP code instead of the compatibility barrel.'
+  message:
+    'Use a targeted @open-pencil/core subpath in MCP code instead of the compatibility barrel.'
 })
 
 const noCliCoreBarrelImports = createExactCoreBarrelImportRule({
   description: 'Disallow CLI imports from @open-pencil/core root barrel — use domain subpaths',
   applies: (file) => file.includes('/packages/cli/src/'),
-  message: 'Use a targeted @open-pencil/core subpath in CLI code instead of the compatibility barrel.'
+  message:
+    'Use a targeted @open-pencil/core subpath in CLI code instead of the compatibility barrel.'
 })
 
 const noScriptCoreBarrelImports = createExactCoreBarrelImportRule({
   description: 'Disallow script imports from @open-pencil/core root barrel — use domain subpaths',
   applies: (file) => file.includes('/scripts/'),
-  message: 'Use a targeted @open-pencil/core subpath or #core/* alias in scripts instead of the compatibility barrel.'
+  message:
+    'Use a targeted @open-pencil/core subpath or #core/* alias in scripts instead of the compatibility barrel.'
 })
 
-const noCoreSelfPackageImports = {
-  meta: {
-    docs: {
-      description: 'Disallow @open-pencil/core self-imports inside packages/core/src'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.includes('/packages/core/src/')) return {}
-
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source?.startsWith('@open-pencil/core')) return
-        context.report({
-          node,
-          message:
-            'Core internals must import local modules directly instead of importing the @open-pencil/core public package entrypoints.'
-        })
-      }
-    }
-  }
-}
+const noCoreSelfPackageImports = createImportSourceRule({
+  description: 'Disallow @open-pencil/core self-imports inside packages/core/src',
+  applies: (file) => file.includes('/packages/core/src/'),
+  check: (source) =>
+    source.startsWith('@open-pencil/core') &&
+    'Core internals must import local modules directly instead of importing the @open-pencil/core public package entrypoints.'
+})
 
 const noInlinePromptConstants = {
   meta: {
@@ -545,90 +467,31 @@ const noInlinePromptConstants = {
   }
 }
 
-const noLegacyAppSupportImports = {
-  meta: {
-    docs: {
-      description: 'Disallow imports from legacy top-level app support folders'
-    }
-  },
-  create(context) {
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source || !/^@\/(?:utils|engine)\//.test(source)) return
-        context.report({
-          node,
-          message:
-            'Move app support imports to cohesive src/app modules instead of using legacy @/utils/* or @/engine/* paths.'
-        })
-      }
-    }
-  }
-}
-
 const noAppVueCoreBarrelImports = createExactCoreBarrelImportRule({
   description:
     'Disallow app and Vue SDK imports from @open-pencil/core root barrel — use domain subpaths',
   applies: (file) =>
-    (file.includes('/src/') && !file.includes('/packages/')) ||
-    file.includes('/packages/vue/src/'),
+    (file.includes('/src/') && !file.includes('/packages/')) || file.includes('/packages/vue/src/'),
   message:
     'Use a targeted @open-pencil/core subpath (editor, scene-graph, constants, io, etc.) instead of the compatibility barrel.'
 })
 
-const noAppImportsInPackages = {
-  meta: {
-    docs: {
-      description: 'Disallow app-shell imports from workspace packages'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.includes('/packages/')) return {}
+const noAppImportsInPackages = createImportSourceRule({
+  description: 'Disallow app-shell imports from workspace packages',
+  applies: (file) => file.includes('/packages/'),
+  check: (source) =>
+    source.startsWith('@/') && `Workspace packages must not import app-shell alias '${source}'.`
+})
 
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source?.startsWith('@/')) return
-        context.report({
-          node,
-          message: `Workspace packages must not import app-shell alias '${source}'.`
-        })
-      }
-    }
-  }
-}
+const frameworkImportPrefixes = ['@vue/', '@open-pencil/vue', '@tauri-apps/', '@/']
 
-const noCoreFrameworkImports = {
-  meta: {
-    docs: {
-      description: 'Keep @open-pencil/core framework-agnostic by disallowing Vue/Tauri/app imports'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.includes('/packages/core/src/')) return {}
-
-    return {
-      ImportDeclaration(node) {
-        const source = importSource(node)
-        if (!source) return
-        if (
-          source === 'vue' ||
-          source.startsWith('@vue/') ||
-          source.startsWith('@open-pencil/vue') ||
-          source.startsWith('@tauri-apps/') ||
-          source.startsWith('@/')
-        ) {
-          context.report({
-            node,
-            message: `@open-pencil/core must stay framework-agnostic; do not import '${source}'.`
-          })
-        }
-      }
-    }
-  }
-}
+const noCoreFrameworkImports = createImportSourceRule({
+  description: 'Keep @open-pencil/core framework-agnostic by disallowing Vue/Tauri/app imports',
+  applies: (file) => file.includes('/packages/core/src/'),
+  check: (source) =>
+    (source === 'vue' || frameworkImportPrefixes.some((prefix) => source.startsWith(prefix))) &&
+    `@open-pencil/core must stay framework-agnostic; do not import '${source}'.`
+})
 
 const noDirectStorageAccess = {
   meta: {
@@ -662,109 +525,15 @@ const noDirectStorageAccess = {
   }
 }
 
-const noLegacyShimFiles = {
-  meta: {
-    docs: {
-      description: 'Disallow recreating removed compatibility shim files'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    const blocked = [
-      '/src/stores/editor.ts',
-      '/src/stores/tabs.ts',
-      '/src/composables/use-canvas.ts',
-      '/src/composables/use-canvas-input.ts',
-      '/src/composables/use-collab.ts',
-      '/src/composables/use-keyboard.ts'
-    ]
-    const blockedDirs = ['/src/ai/', '/src/automation/']
-    const isBlocked =
-      blocked.some((suffix) => file.endsWith(suffix)) ||
-      blockedDirs.some((segment) => file.includes(segment))
-
-    if (!isBlocked) return {}
-
-    return {
-      Program(node) {
-        context.report({
-          node,
-          message: 'Do not recreate removed compatibility shims; use the canonical src/app module.'
-        })
-      }
-    }
-  }
-}
-
-const noLegacyTestAppImports = {
-  meta: {
-    docs: {
-      description: 'Disallow tests importing removed top-level app modules'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.includes('/tests/')) return {}
-
-    function reportLegacyTestImport(node) {
-      const source = importSource(node)
-      if (!source || !/^(?:\.\.\/)+src\/(?:ai|automation|composables|stores|utils|engine)\//.test(source)) {
-        return
-      }
-      context.report({
-        node,
-        message: 'Use the current src/app/* module path instead of a removed top-level app module.'
-      })
-    }
-
-    return {
-      ExportAllDeclaration: reportLegacyTestImport,
-      ExportNamedDeclaration: reportLegacyTestImport,
-      ImportDeclaration: reportLegacyTestImport
-    }
-  }
-}
-
-const noTestCoreSourceImports = {
-  meta: {
-    docs: {
-      description: 'Disallow tests importing non-vendored core internals by relative source path'
-    }
-  },
-  create(context) {
-    const file = normalizedFilename(context)
-    if (!file.includes('/tests/')) return {}
-
-    function reportCoreSourceImport(node) {
-      const source = importSource(node)
-      if (!source || !/^(?:\.\.\/)+packages\/core\/src\/(?!kiwi\/kiwi-schema)/.test(source)) {
-        return
-      }
-      context.report({
-        node,
-        message: 'Use #core/* instead of a relative packages/core/src import in tests.'
-      })
-    }
-
-    return {
-      ExportAllDeclaration: reportCoreSourceImport,
-      ExportNamedDeclaration: reportCoreSourceImport,
-      ImportDeclaration: reportCoreSourceImport,
-      ImportExpression: reportCoreSourceImport
-    }
-  }
-}
-
 const noBroadDoubleCast = {
   meta: {
     docs: {
-      description: 'Disallow broad `as unknown as` casts in app and Vue SDK code'
+      description: 'Disallow broad `as unknown as` casts outside vendored code'
     }
   },
   create(context) {
     const file = normalizedFilename(context)
-    const applies = file.includes('/src/app/') || file.includes('/packages/vue/src/')
-    if (!applies) return {}
+    if (file.includes('/packages/core/src/kiwi/kiwi-schema/')) return {}
 
     return {
       TSAsExpression(node) {
@@ -772,6 +541,102 @@ const noBroadDoubleCast = {
           context.report({
             node,
             message: 'Avoid `as unknown as ...`; model the value with a precise type or helper.'
+          })
+        }
+      }
+    }
+  }
+}
+
+const noUnknownRecordDoubleCast = {
+  meta: {
+    docs: {
+      description: 'Disallow `as unknown as Record<string, unknown>` broad object casts'
+    }
+  },
+  create(context) {
+    return {
+      TSAsExpression(node) {
+        if (!isUnknownTypeAnnotation(node.expression?.typeAnnotation)) return
+        const targetType = context.sourceCode.getText(node.typeAnnotation).replace(/\s+/g, '')
+        if (targetType !== 'Record<string,unknown>') return
+        context.report({
+          node,
+          message:
+            'Avoid `as unknown as Record<string, unknown>`; use a precise type or direct public API.'
+        })
+      }
+    }
+  }
+}
+
+const noFunctionType = {
+  meta: {
+    docs: {
+      description: 'Disallow the broad Function type; use an explicit callable signature'
+    }
+  },
+  create(context) {
+    return {
+      TSTypeReference(node) {
+        if (node.typeName?.type !== 'Identifier' || node.typeName.name !== 'Function') return
+        context.report({
+          node,
+          message: 'Use an explicit function signature instead of the broad Function type.'
+        })
+      }
+    }
+  }
+}
+
+const noReflectDeleteGlobalThisOutsideTests = {
+  meta: {
+    docs: {
+      description: 'Disallow Reflect.deleteProperty(globalThis, ...) outside tests'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (file.includes('/tests/')) return {}
+
+    return {
+      CallExpression(node) {
+        if (node.callee?.type !== 'MemberExpression') return
+        if (node.callee.object?.type !== 'Identifier' || node.callee.object.name !== 'Reflect')
+          return
+        if (
+          node.callee.property?.type !== 'Identifier' ||
+          node.callee.property.name !== 'deleteProperty'
+        )
+          return
+        const firstArg = node.arguments?.[0]
+        if (firstArg?.type !== 'Identifier' || firstArg.name !== 'globalThis') return
+        context.report({
+          node,
+          message:
+            'Do not mutate globalThis outside tests; isolate platform state behind a boundary.'
+        })
+      }
+    }
+  }
+}
+
+const noTsSuppressionComments = {
+  meta: {
+    docs: {
+      description: 'Disallow TypeScript suppression comments; fix types instead'
+    }
+  },
+  create(context) {
+    return {
+      Program() {
+        const comments = context.sourceCode.getAllComments?.() ?? []
+        for (const comment of comments) {
+          if (!/@ts-(?:ignore|expect-error|nocheck|check)\b/.test(comment.value)) continue
+          context.report({
+            node: comment,
+            message:
+              'Do not use TypeScript suppression comments; fix the type or add a typed helper.'
           })
         }
       }
@@ -1006,7 +871,11 @@ const vueComponentFilePascalCase = {
 
     return {
       Program(node) {
-        const basename = file.split('/').at(-1)?.replace(/\.vue$/, '') ?? ''
+        const basename =
+          file
+            .split('/')
+            .at(-1)
+            ?.replace(/\.vue$/, '') ?? ''
         if (isPascalCaseName(basename)) return
         context.report({
           node,
@@ -1138,7 +1007,8 @@ const noComponentRootSiblingFolder = {
 const noUselessPassThroughWrappers = {
   meta: {
     docs: {
-      description: 'Disallow functions that only return another function call with the same arguments'
+      description:
+        'Disallow functions that only return another function call with the same arguments'
     }
   },
   create(context) {
@@ -1192,7 +1062,11 @@ const noUselessPassThroughWrappers = {
       VariableDeclarator(node) {
         if (node.id?.type !== 'Identifier') return
         const init = node.init
-        if (!init || (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression')) return
+        if (
+          !init ||
+          (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression')
+        )
+          return
         check(node, node.id.name, init.params, init.body)
       }
     }
@@ -1222,32 +1096,104 @@ const noFunctionAliasImports = {
   }
 }
 
-const noFlatKiwiModules = {
+const noDirectOpenPencilBrowserStore = {
   meta: {
     docs: {
-      description: 'Disallow flat top-level Kiwi modules — group code under Kiwi subdomains'
+      description: 'Disallow direct window.openPencil.store access'
     }
   },
   create(context) {
-    const file = normalizedFilename(context)
-    const marker = '/packages/core/src/kiwi/'
-    const start = file.indexOf(marker)
-    if (start === -1) return {}
+    function propertyName(property) {
+      if (property?.type === 'Identifier') return property.name
+      if (property?.type === 'Literal' && typeof property.value === 'string') return property.value
+      return null
+    }
 
-    const relativePath = file.slice(start + marker.length)
-    if (relativePath.includes('/') || relativePath === 'index.ts') return {}
+    function isOpenPencilMember(node) {
+      return (
+        node?.type === 'MemberExpression' &&
+        propertyName(node.property) === 'openPencil' &&
+        ((node.object?.type === 'Identifier' && node.object.name === 'window') ||
+          (node.object?.type === 'Identifier' && node.object.name === 'globalThis'))
+      )
+    }
 
     return {
-      Program(node) {
+      MemberExpression(node) {
+        if (propertyName(node.property) !== 'store') return
+        if (!isOpenPencilMember(node.object)) return
         context.report({
           node,
-          message:
-            'Move Kiwi modules under binary/, fig/, node-change/, instance-overrides/, or kiwi-schema/ instead of adding flat top-level files.'
+          message: 'Use window.openPencil.getStore() instead of accessing window.openPencil.store directly.'
         })
       }
     }
   }
 }
+
+const noDirectOpenPencilWindowInternals = {
+  meta: {
+    docs: {
+      description: 'Disallow direct access to private OpenPencil window internals'
+    }
+  },
+  create(context) {
+    function propertyName(property) {
+      if (property?.type === 'Identifier') return property.name
+      if (property?.type === 'Literal' && typeof property.value === 'string') return property.value
+      return null
+    }
+
+    return {
+      MemberExpression(node) {
+        const name = propertyName(node.property)
+        if (!name?.startsWith('__OPEN_PENCIL')) return
+        context.report({
+          node,
+          message:
+            'Do not access window.__OPEN_PENCIL* directly. Use src/app/browser-bridge.ts or tests/helpers/store.ts instead.'
+        })
+      }
+    }
+  }
+}
+
+const noTopLevelPrefixedTestFiles = createProgramFilenameRule({
+  description: 'Disallow top-level test files that encode domains as filename prefixes',
+  check(file) {
+    const match = file.match(/\/tests\/(engine|e2e)\/([^/]+-[^/]+\.(?:test|spec)\.ts)$/)
+    if (!match) return false
+    return `Move '${match[2]}' under a domain folder instead of encoding the domain as a filename prefix.`
+  }
+})
+
+const noSiblingDomainPrefixedFiles = createProgramFilenameRule({
+  description: 'Disallow files that repeat an existing sibling domain folder as a filename prefix',
+  check(file) {
+    const match = file.match(/^(.*\/)([^/]+)-[^/]+\.(?:test\.)?(?:spec\.)?(?:ts|tsx|vue)$/)
+    if (!match) return false
+
+    const [, dir, prefix] = match
+    if (!existsSync(`${dir}${prefix}`)) return false
+
+    const filename = file.slice(dir.length)
+    return `Move '${filename}' under the existing '${prefix}/' folder instead of repeating the domain as a filename prefix.`
+  }
+})
+
+const noFlatKiwiModules = createProgramFilenameRule({
+  description: 'Disallow flat top-level Kiwi modules — group code under Kiwi subdomains',
+  check(file) {
+    const marker = '/packages/core/src/kiwi/'
+    const start = file.indexOf(marker)
+    if (start === -1) return false
+
+    const relativePath = file.slice(start + marker.length)
+    if (relativePath.includes('/') || relativePath === 'index.ts') return false
+
+    return 'Move Kiwi modules under binary/, fig/, node-change/, instance-overrides/, or kiwi-schema/ instead of adding flat top-level files.'
+  }
+})
 
 const plugin = {
   meta: { name: 'open-pencil' },
@@ -1259,30 +1205,30 @@ const plugin = {
     'no-raw-console-format': noRawConsoleFormat,
     'no-silent-catch': noSilentCatch,
     'no-typeof-window-check': noTypeofWindowCheck,
-    'no-legacy-app-imports': noLegacyAppImports,
     'no-vue-self-package-imports': noVueSelfPackageImports,
     'no-cross-package-source-imports': noCrossPackageSourceImports,
+    'no-deep-parent-relative-imports': noDeepParentRelativeImports,
     'no-core-parent-relative-imports': noCoreParentRelativeImports,
     'no-mcp-parent-relative-imports': noMcpParentRelativeImports,
     'no-vue-parent-relative-imports': noVueParentRelativeImports,
-    'no-stale-vite-app-paths': noStaleViteAppPaths,
     'no-cli-parent-relative-imports': noCliParentRelativeImports,
-    'no-root-demo-module': noRootDemoModule,
     'no-mcp-core-barrel-imports': noMcpCoreBarrelImports,
     'no-cli-core-barrel-imports': noCliCoreBarrelImports,
     'no-script-core-barrel-imports': noScriptCoreBarrelImports,
     'no-core-self-package-imports': noCoreSelfPackageImports,
     'no-inline-prompt-constants': noInlinePromptConstants,
-    'no-legacy-app-support-imports': noLegacyAppSupportImports,
     'no-app-vue-core-barrel-imports': noAppVueCoreBarrelImports,
     'no-app-imports-in-packages': noAppImportsInPackages,
     'no-core-framework-imports': noCoreFrameworkImports,
     'no-direct-storage-access': noDirectStorageAccess,
-    'no-legacy-shim-files': noLegacyShimFiles,
-    'no-legacy-test-app-imports': noLegacyTestAppImports,
-    'no-test-core-source-imports': noTestCoreSourceImports,
     'no-broad-double-cast': noBroadDoubleCast,
+    'no-unknown-record-double-cast': noUnknownRecordDoubleCast,
+    'no-ts-suppression-comments': noTsSuppressionComments,
+    'no-function-type': noFunctionType,
+    'no-reflect-delete-global-this-outside-tests': noReflectDeleteGlobalThisOutsideTests,
     'no-core-browser-globals': noCoreBrowserGlobals,
+    'no-direct-open-pencil-window-internals': noDirectOpenPencilWindowInternals,
+    'no-direct-open-pencil-browser-store': noDirectOpenPencilBrowserStore,
     'no-direct-graph-emitter-subscriptions': noDirectGraphEmitterSubscriptions,
     'no-on-unmounted-in-composition-roots': noOnUnmountedInCompositionRoots,
     'no-composable-state-wrappers': noComposableStateWrappers,
@@ -1295,7 +1241,9 @@ const plugin = {
     'no-component-root-sibling-folder': noComponentRootSiblingFolder,
     'no-useless-pass-through-wrappers': noUselessPassThroughWrappers,
     'no-function-alias-imports': noFunctionAliasImports,
-    'no-flat-kiwi-modules': noFlatKiwiModules
+    'no-flat-kiwi-modules': noFlatKiwiModules,
+    'no-top-level-prefixed-test-files': noTopLevelPrefixedTestFiles,
+    'no-sibling-domain-prefixed-files': noSiblingDomainPrefixedFiles
   }
 }
 

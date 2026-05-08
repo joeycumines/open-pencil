@@ -1,7 +1,8 @@
-import type { DragState } from '#vue/shared/input/types'
 import type { Editor } from '@open-pencil/core/editor'
 import type { VectorSegment } from '@open-pencil/core/scene-graph'
 import type { Vector } from '@open-pencil/core/types'
+
+import type { DragState } from '#vue/shared/input/types'
 
 export type CanvasNodeEditState = {
   segments: VectorSegment[]
@@ -27,8 +28,7 @@ export type CanvasNodeEditMethods = Partial<{
 }>
 
 export function getCanvasNodeEditState(editor: Editor): CanvasNodeEditState | null | undefined {
-  return (editor.state as Editor['state'] & { nodeEditState?: CanvasNodeEditState | null })
-    .nodeEditState
+  return editor.state.nodeEditState as CanvasNodeEditState | null | undefined
 }
 
 export function resolveBendTargetHandle(

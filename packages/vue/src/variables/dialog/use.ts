@@ -1,46 +1,32 @@
+import { useInlineRename } from '#vue/editor/inline-rename/use'
 import { useVariables } from '#vue/variables/use'
-import { nextTick, ref } from 'vue'
 
 export function useVariablesDialogState() {
   const variables = useVariables()
 
-  const editingCollectionId = ref<string | null>(null)
-  const collectionInputRefs = new Map<string, HTMLInputElement>()
-  const pendingCollectionFocusId = ref<string | null>(null)
+  const collectionRename = useInlineRename((id, newName) => {
+    variables.renameCollection(id, newName)
+  })
 
-  function setCollectionInputRef(id: string, el: HTMLInputElement | null) {
-    if (el) collectionInputRefs.set(id, el)
-    else collectionInputRefs.delete(id)
-
-    if (el && pendingCollectionFocusId.value === id) {
-      pendingCollectionFocusId.value = null
-      void nextTick(() => {
-        el.focus()
-        el.select()
-      })
-    }
-  }
+  const modeRename = useInlineRename((modeId, newName) => {
+    variables.renameMode(modeId, newName)
+  })
 
   function startRenameCollection(id: string) {
-    editingCollectionId.value = id
-    pendingCollectionFocusId.value = id
+    const col = variables.collections.value.find((c) => c.id === id)
+    if (col) collectionRename.start(id, col.name)
   }
 
-  function commitRenameCollection(id: string, input: HTMLInputElement) {
-    if (editingCollectionId.value !== id) return
-    const value = input.value.trim()
-    const col = variables.collections.value.find((collection) => collection.id === id)
-    if (col && value && value !== col.name) {
-      variables.renameCollection(id, value)
-    }
-    editingCollectionId.value = null
+  function startRenameMode(modeId: string) {
+    const mode = variables.activeModes.value.find((m) => m.modeId === modeId)
+    if (mode) modeRename.start(modeId, mode.name)
   }
 
   return {
     ...variables,
-    editingCollectionId,
-    setCollectionInputRef,
+    collectionRename,
+    modeRename,
     startRenameCollection,
-    commitRenameCollection
+    startRenameMode
   }
 }

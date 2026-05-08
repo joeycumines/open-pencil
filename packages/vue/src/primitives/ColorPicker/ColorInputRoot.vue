@@ -23,15 +23,13 @@ function updateFromHex(value: string) {
   const parsed = parseColor(value.startsWith('#') ? value : `#${value}`)
   emit('update', { ...parsed, a: color.a })
 }
+
+const actions = {
+  updateFromHex,
+  updateColor: (nextColor: Color) => emit('update', nextColor)
+}
 </script>
 
 <template>
-  <slot
-    :color="color"
-    :editable="editable"
-    :hex="hex"
-    :update-from-hex="updateFromHex"
-    :update-color="(nextColor: Color) => emit('update', nextColor)"
-    :okhcl="okhcl"
-  />
+  <slot :color="color" :editable="editable" :hex="hex" :actions="actions" :okhcl="okhcl" />
 </template>

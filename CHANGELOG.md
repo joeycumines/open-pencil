@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- Add variable mode management — create, rename, duplicate, delete modes and set the default mode per collection. Modes appear as interactive table column headers (double-click to rename, right-click for context menu).
+- Add collection deletion from the variables dialog.
+- Bind variables to line height, letter spacing, font weight, paragraph spacing, and paragraph indent in the typography inspector.
+- Add editor event bus with typed lifecycle events — subscribe via `editor.onEditorEvent()` in core or `useEditorEvent()` composable in the Vue SDK.
+
 ### Changed
 
 - Refactor the editor architecture across core, app, Vue SDK, CLI, MCP, docs, and desktop into smaller domain modules with structural lint rules to keep package boundaries explicit.
@@ -14,6 +21,7 @@
 - Add stroke dash/gap controls to the stroke inspector panel.
 - Bump AI SDK dependencies for improved DeepSeek reasoning mode and newer model support.
 - Add PDF export — vector PDF output via SVG→PDF conversion. Available in export panel, CLI (`--format pdf`), and MCP (`export_pdf` tool).
+- Add font settings controls for local font access, fallback font predownloads, and downloaded font cache management.
 
 ### Fixes
 
@@ -34,9 +42,13 @@
 - Improve layout inspector dropdown anchoring and icon clarity for spacing and padding controls.
 - Fix bound color variable inspector swatches to display the resolved variable color and detach the binding when edited directly.
 - Fix dashed strokes on vector nodes rendering as solid lines — dash pattern now uses `PathEffect.MakeDash` directly instead of outline conversion, and closed crescent shapes (e.g. annular wedges) render a single dashed centerline arc instead of two parallel arcs.
+- Fix gradient fills on text nodes by clipping gradient paints through the shaped paragraph mask.
 
 ### Performance
 
+- Cache downloaded remote fonts in app-local storage so reopened documents can reuse them without repeated network fetches.
+- Add Tauri API mock coverage for font loading, font cache, external links, document read/write, and save dialogs.
+- Add a curated fallback font manifest for CJK and Arabic font downloads.
 - Cache instance override resolution and lazily populate opened `.fig` pages to reduce load time for large community files.
 - Reduce zoom and overlay rendering work by separating scene rendering from rulers, selection, labels, and input overlays.
 

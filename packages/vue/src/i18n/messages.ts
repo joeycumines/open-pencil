@@ -1,8 +1,8 @@
-import { locale } from '#vue/i18n/locale'
 import { createI18n, params } from '@nanostores/i18n'
-
-import type { Locale } from '#vue/i18n/locale'
 import type { ComponentsJSON } from '@nanostores/i18n'
+
+import { locale } from '#vue/i18n/locale'
+import type { Locale } from '#vue/i18n/locale'
 
 const localeLoaders: Record<Exclude<Locale, 'en'>, () => Promise<{ default: ComponentsJSON }>> = {
   de: () => import('#vue/locales/de.json'),
@@ -130,6 +130,7 @@ export const panelMessages = i18n('panels', {
   export: 'Export',
   typography: 'Typography',
   variables: 'Variables',
+  variants: 'Variants',
   constraints: 'Constraints',
 
   addFill: 'Add fill',
@@ -173,6 +174,7 @@ export const panelMessages = i18n('panels', {
   exportPreview: 'Preview',
   exportRenderingPreview: 'Rendering preview…',
   create: 'Create',
+  add: 'Add',
   createVariable: 'Create variable',
   createColorVariable: params('Create color variable from {value}'),
   createNumberVariable: params('Create number variable from {value}'),
@@ -233,6 +235,17 @@ export const panelMessages = i18n('panels', {
   sizingFixedPx: 'Fixed (px)'
 })
 
+export const variableTypeMessages = i18n('variableTypes', {
+  color: 'Color',
+  colorHint: 'Paint values',
+  number: 'Number',
+  numberHint: 'Sizes, spacing, opacity',
+  text: 'Text',
+  textHint: 'Copy and labels',
+  boolean: 'Boolean',
+  booleanHint: 'True or false'
+})
+
 export const pageMessages = i18n('pages', {
   newPage: 'New page',
   rename: 'Rename',
@@ -248,8 +261,16 @@ export const dialogMessages = i18n('dialogs', {
   copy: 'Copy',
   copied: 'Copied',
   createCollection: 'Create collection',
+  renameCollection: 'Rename collection',
+  deleteCollection: 'Delete collection',
   localVariables: 'Local variables',
   noVariableCollections: 'No variable collections',
+  modes: 'Modes',
+  addMode: 'Add mode',
+  renameMode: 'Rename mode',
+  duplicateMode: 'Duplicate mode',
+  deleteMode: 'Delete mode',
+  setDefaultMode: 'Set as default',
   selectLayerForJSX: 'Select a layer to see its JSX code',
   connectAIProvider: 'Connect an AI provider to start chatting.',
   connect: 'Connect',

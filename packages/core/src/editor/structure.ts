@@ -1,10 +1,10 @@
+import type { NodeType, SceneNode } from '#core/scene-graph'
+
 import { wrapInAutoLayout as wrapInAutoLayoutImpl } from './structure/auto-layout-wrap'
 import { wrapSelectionInContainer as wrapSelectionInContainerImpl } from './structure/container-wrap'
 import { ungroupSelected as ungroupImpl } from './structure/group'
 import { createStructureReorderActions } from './structure/reorder'
 import { createStructureStateActions } from './structure/state'
-
-import type { NodeType, SceneNode } from '#core/scene-graph'
 import type { EditorContext } from './types'
 
 export function createStructureActions(ctx: EditorContext) {
@@ -60,7 +60,7 @@ export function createStructureActions(ctx: EditorContext) {
     for (const id of ids) {
       ctx.graph.reparentNode(id, pageId)
     }
-    ctx.state.selectedIds = new Set()
+    ctx.setSelectedIds(new Set())
   }
 
   function renameNode(id: string, name: string) {

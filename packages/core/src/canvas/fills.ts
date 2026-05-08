@@ -1,13 +1,16 @@
-import type { SceneNode, SceneGraph, Fill } from '#core/scene-graph'
-import type { SkiaRenderer } from './renderer'
 import type { Canvas, Paint } from 'canvaskit-wasm'
+
+import type { SceneNode, SceneGraph, Fill } from '#core/scene-graph'
+
+import type { SkiaRenderer } from './renderer'
 
 export function drawNodeFill(
   r: SkiaRenderer,
   canvas: Canvas,
   node: SceneNode,
   rect: Float32Array,
-  hasRadius: boolean
+  hasRadius: boolean,
+  fill?: Fill
 ): void {
   switch (node.type) {
     case 'VECTOR': {
@@ -30,7 +33,7 @@ export function drawNodeFill(
       }
       break
     case 'TEXT':
-      r.renderText(canvas, node)
+      r.renderText(canvas, node, fill)
       break
     case 'LINE':
       canvas.drawLine(0, 0, node.width, node.height, r.fillPaint)

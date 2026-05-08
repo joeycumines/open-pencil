@@ -3,19 +3,22 @@ import { join } from 'node:path'
 
 import { initCanvasKit } from '#cli/headless'
 import { SkiaRenderer } from '#core/canvas'
+import type { SceneNode } from '#core/scene-graph'
 import { SceneGraph } from '#core/scene-graph'
-import { initFontService, markFontLoaded } from '#core/text'
+import { fontManager } from '#core/text'
+
+import { expectDefined } from '#tests/helpers/assert'
 
 async function main() {
   const ck = await initCanvasKit()
 
   // Initialize font service
   const fontProvider = ck.TypefaceFontProvider.Make()
-  initFontService(ck, fontProvider)
+  fontManager.attachProvider(ck, fontProvider)
 
   const fontPath = join(process.cwd(), 'public/Inter-SemiBold.ttf')
   const fontData = await readFile(fontPath)
-  markFontLoaded(
+  fontManager.markLoaded(
     'Inter',
     'SemiBold',
     fontData.buffer.slice(fontData.byteOffset, fontData.byteOffset + fontData.byteLength)
@@ -50,12 +53,11 @@ async function main() {
         spread: 0
       }
     ]
-  }
+  } satisfies Partial<SceneNode>
 
-  const textNode = graph.createNode('TEXT', pageId, textProps as any)
-  const nodeId = textNode.id
+  graph.createNode('TEXT', pageId, textProps)
 
-  const surface = ck.MakeSurface(width, height)!
+  const surface = expectDefined(ck.MakeSurface(width, height), 'CanvasKit surface')
   const canvas = surface.getCanvas()
   const renderer = new SkiaRenderer(ck, surface)
   renderer.fontProvider = fontProvider
@@ -86,11 +88,13 @@ async function main() {
   // Scan the center line to find the 'O' boundaries
   // Background (Blue) | Left Stem (White/Shadow) | Counter (Blue) | Right Stem (White/Shadow) | Background (Blue)
 
-  let transitions = []
+  const transitions = []
   let lastColor = ''
   for (let x = 0; x < width; x++) {
     const p = getPixel(x, centerY)
-    const color = p[0] > 200 ? 'white' : p[2] > 200 ? 'blue' : 'black'
+    let color = 'black'
+    if (p[0] > 200) color = 'white'
+    else if (p[2] > 200) color = 'blue'
     if (color !== lastColor) {
       transitions.push({ x, color })
       lastColor = color

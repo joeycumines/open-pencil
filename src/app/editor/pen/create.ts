@@ -1,3 +1,6 @@
+import type { Editor, Tool } from '@open-pencil/core/editor'
+import type { SceneGraph } from '@open-pencil/core/scene-graph'
+
 import {
   absoluteVertices,
   cloneSegments,
@@ -7,15 +10,12 @@ import {
   type PenState
 } from '@/app/editor/pen/resume'
 
-import type { Editor, Tool } from '@open-pencil/core/editor'
-import type { SceneGraph } from '@open-pencil/core/scene-graph'
-
 export function createPenActions(editor: Editor, graph: SceneGraph, state: PenState) {
   function setTool(tool: Tool) {
     if (state.penState && tool !== 'PEN' && tool !== 'HAND') {
       editor.penCommit(false)
     }
-    state.activeTool = tool
+    editor.setTool(tool)
   }
 
   function penResumeOnPath(nodeId: string) {
@@ -29,8 +29,8 @@ export function createPenActions(editor: Editor, graph: SceneGraph, state: PenSt
     )
 
     graph.deleteNode(nodeId)
-    state.selectedIds = new Set()
-    state.activeTool = 'PEN'
+    editor.clearSelection()
+    editor.setTool('PEN')
     editor.requestRender()
   }
 
@@ -49,8 +49,8 @@ export function createPenActions(editor: Editor, graph: SceneGraph, state: PenSt
 
     state.penState = createResumedPenState(node, orderedVertices, orderedSegments)
     graph.deleteNode(nodeId)
-    state.selectedIds = new Set()
-    state.activeTool = 'PEN'
+    editor.clearSelection()
+    editor.setTool('PEN')
     editor.requestRender()
   }
 

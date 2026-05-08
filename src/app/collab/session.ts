@@ -1,18 +1,17 @@
-import { watch } from 'vue'
-import { IndexeddbPersistence } from 'y-indexeddb'
-import * as awarenessProtocol from 'y-protocols/awareness'
-import * as Y from 'yjs'
-
-import { connectCollabRoom } from '@/app/collab/room'
-import { bindCollabGraphEvents, registerYjsObservers } from '@/app/collab/yjs-sync'
-import { PEER_COLORS } from '@/constants'
-import { randomIndex } from '@open-pencil/core/random'
-
-import type { CollabState } from '@/app/collab/types'
-import type { EditorStore } from '@/app/editor/active-store'
 import type { Room } from 'trystero'
 import type { Ref } from 'vue'
+import { IndexeddbPersistence } from 'y-indexeddb'
+import * as awarenessProtocol from 'y-protocols/awareness'
 import type { Awareness } from 'y-protocols/awareness'
+import * as Y from 'yjs'
+
+import { randomIndex } from '@open-pencil/core/random'
+
+import { connectCollabRoom } from '@/app/collab/room'
+import type { CollabState } from '@/app/collab/types'
+import { bindCollabGraphEvents, registerYjsObservers } from '@/app/collab/yjs-sync'
+import type { EditorStore } from '@/app/editor/active-store'
+import { PEER_COLORS } from '@/constants'
 
 export type CollabRuntime = {
   ydoc: Y.Doc | null
@@ -136,19 +135,16 @@ export function createCollabConnectionActions({
 }
 
 export function watchAwarenessZoom(store: EditorStore, getAwareness: () => Awareness | null) {
-  return watch(
-    () => store.state.zoom,
-    (zoom) => {
-      const awareness = getAwareness()
-      if (!awareness) return
-      const prev = awareness.getLocalState()?.cursor as
-        | { x: number; y: number; pageId: string; zoom: number }
-        | undefined
-      if (prev) {
-        awareness.setLocalStateField('cursor', { ...prev, zoom })
-      }
+  return store.onEditorEvent('viewport:changed', (viewport) => {
+    const awareness = getAwareness()
+    if (!awareness) return
+    const prev = awareness.getLocalState()?.cursor as
+      | { x: number; y: number; pageId: string; zoom: number }
+      | undefined
+    if (prev) {
+      awareness.setLocalStateField('cursor', { ...prev, zoom: viewport.zoom })
     }
-  )
+  })
 }
 
 export function connectCollabSession({

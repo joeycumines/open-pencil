@@ -174,7 +174,26 @@
     "variableName": "Variablenname",
     "create": "Erstellen",
     "createNumberVariable": "Zahlenvariable aus {value} erstellen",
-    "strokeDash": "Gestrichelter Strich"
+    "strokeDash": "Gestrichelter Strich",
+    "add": "Hinzufügen",
+    "variants": "Varianten",
+    "gapAuto": "Automatischer Abstand",
+    "horizontalGap": "Horizontaler Abstand",
+    "verticalGap": "Vertikaler Abstand",
+    "addMinWidth": "Mindestbreite hinzufuegen",
+    "removeMinWidth": "Mindestbreite entfernen",
+    "addMaxWidth": "Maximalbreite hinzufuegen",
+    "removeMaxWidth": "Maximalbreite entfernen",
+    "addMinHeight": "Mindesthoehe hinzufuegen",
+    "removeMinHeight": "Mindesthoehe entfernen",
+    "addMaxHeight": "Maximalhoehe hinzufuegen",
+    "removeMaxHeight": "Maximalhoehe entfernen",
+    "minWidthShort": "Min B",
+    "maxWidthShort": "Max B",
+    "minHeightShort": "Min H",
+    "maxHeightShort": "Max H",
+    "setToCurrentWidth": "Auf aktuelle Breite setzen",
+    "setToCurrentHeight": "Auf aktuelle Hoehe setzen"
   },
   "pages": {
     "newPage": "Neue Seite",
@@ -224,6 +243,24 @@
     "updateInstalledTitle": "Update installiert",
     "updateInstalled": "OpenPencil {version} wurde installiert{size}. Neustart jetzt.",
     "updateCheckFailed": "Updates konnten nicht geprüft werden: {error}",
-    "updateUnavailable": "Updates sind noch nicht verfügbar. Veröffentliche zuerst ein signiertes Release mit latest.json."
+    "updateUnavailable": "Updates sind noch nicht verfügbar. Veröffentliche zuerst ein signiertes Release mit latest.json.",
+    "renameCollection": "Sammlung umbenennen",
+    "deleteCollection": "Sammlung loeschen",
+    "modes": "Modi",
+    "addMode": "Modus hinzufuegen",
+    "renameMode": "Modus umbenennen",
+    "duplicateMode": "Modus duplizieren",
+    "deleteMode": "Modus loeschen",
+    "setDefaultMode": "Als Standard festlegen"
+  },
+  "variableTypes": {
+    "color": "Farbe",
+    "colorHint": "Farbwerte",
+    "number": "Zahl",
+    "numberHint": "Größen, Abstände, Deckkraft",
+    "text": "Text",
+    "textHint": "Text und Beschriftungen",
+    "boolean": "Boolean",
+    "booleanHint": "Wahr oder falsch"
   }
 }

@@ -1,5 +1,7 @@
 import { ref } from 'vue'
 
+import { IS_BROWSER } from '@open-pencil/core/constants'
+
 import {
   apiKey,
   customAPIType,
@@ -17,8 +19,8 @@ import {
   unsplashAccessKey
 } from '@/app/ai/chat/storage'
 import { createChatSessionManager } from '@/app/ai/chat/transports'
+import { exposeChatTransportOverride } from '@/app/browser-bridge'
 import { getActiveEditorStore } from '@/app/editor/active-store'
-import { IS_BROWSER } from '@open-pencil/core/constants'
 
 const activeTab = ref<'design' | 'code' | 'ai'>('design')
 
@@ -38,9 +40,9 @@ const chatSession = createChatSessionManager({
 registerAIChatEffects(chatSession.markTransportDirty)
 
 if (IS_BROWSER) {
-  window.__OPEN_PENCIL_SET_TRANSPORT__ = (factory) => {
+  exposeChatTransportOverride((factory) => {
     chatSession.setOverrideTransport(factory)
-  }
+  })
 }
 
 export function useAIChat() {

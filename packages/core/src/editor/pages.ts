@@ -1,9 +1,8 @@
 import { computeAllLayouts } from '#core/layout'
-import { collectFontKeys } from '#core/text/fonts'
+import { fontManager } from '#core/text/fonts'
+import type { Color } from '#core/types'
 
 import { createPageViewportStore } from './page-viewports'
-
-import type { Color } from '#core/types'
 import type { EditorContext } from './types'
 
 export function createPageActions(ctx: EditorContext) {
@@ -15,13 +14,15 @@ export function createPageActions(ctx: EditorContext) {
 
     pageViewportStore.saveCurrentPageViewport()
 
+    const previousPageId = ctx.state.currentPageId
     ctx.state.currentPageId = pageId
     ctx.state.enteredContainerId = null
-    ctx.state.selectedIds = new Set()
+    ctx.setSelectedIds(new Set())
+    if (previousPageId !== pageId) ctx.emitEditorEvent('page:changed', pageId, previousPageId)
 
     pageViewportStore.restorePageViewport(pageId)
 
-    const toLoad = collectFontKeys(
+    const toLoad = fontManager.collectFontKeys(
       ctx.graph,
       ctx.graph.getChildren(pageId).map((n) => n.id)
     )

@@ -1,3 +1,4 @@
+import type { NodeChange, Paint, Effect as KiwiEffect } from '#core/kiwi/binary/codec'
 import {
   convertFills,
   mapStackSizing,
@@ -12,16 +13,14 @@ import {
   convertStrokes,
   convertEffects
 } from '#core/kiwi/node-change/convert'
-import { styleToWeight } from '#core/text/fonts'
-
-import type { NodeChange, Paint, Effect as KiwiEffect } from '#core/kiwi/binary/codec'
 import type { SceneNode, ArcData, TextAutoResize } from '#core/scene-graph'
+import { styleToWeight } from '#core/text/fonts'
 
 function applyOverridePaints(ov: Record<string, unknown>, updates: Partial<SceneNode>): void {
   if (ov.textData != null) {
     const td = ov.textData as { characters?: string }
     if (td.characters != null) updates.text = td.characters
-    const runs = importStyleRuns(ov as unknown as NodeChange)
+    const runs = importStyleRuns(ov as NodeChange)
     if (runs.length > 0) updates.styleRuns = runs
   }
   if (ov.fillPaints != null) updates.fills = convertFills(ov.fillPaints as Paint[])

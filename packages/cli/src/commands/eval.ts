@@ -1,9 +1,10 @@
-import { isAppMode, requireFile, rpc } from '#cli/app-client'
-import { printError } from '#cli/format'
-import { loadDocument } from '#cli/headless'
 import { defineCommand } from 'citty'
 
 import { FigmaAPI } from '@open-pencil/core/figma-api'
+
+import { isAppMode, requireFile, rpc } from '#cli/app-client'
+import { printError } from '#cli/format'
+import { loadDocument } from '#cli/headless'
 
 function printResult(value: unknown, json: boolean) {
   if (json || !process.stdout.isTTY) {
@@ -68,8 +69,11 @@ export default defineCommand({
     const graph = await loadDocument(file)
     const figma = new FigmaAPI(graph)
 
-    // eslint-disable-next-line no-empty-function -- needed to get AsyncFunction constructor
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+    type AsyncFunctionConstructor = new (
+      ...args: string[]
+    ) => (...args: unknown[]) => Promise<unknown>
+    const AsyncFunction = Object.getPrototypeOf(async () => undefined)
+      .constructor as AsyncFunctionConstructor
     const wrappedCode = code.trim().startsWith('return')
       ? code
       : `return (async () => { ${code} })()`

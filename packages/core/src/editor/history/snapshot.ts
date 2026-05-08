@@ -1,6 +1,5 @@
-import { computeAllLayouts } from '#core/layout'
-
 import type { EditorContext } from '#core/editor/types'
+import { computeAllLayouts } from '#core/layout'
 import type { SceneGraph, SceneNode } from '#core/scene-graph'
 
 export type PageSnapshot = Map<string, SceneNode>
@@ -28,7 +27,7 @@ export function restorePageFromSnapshot(ctx: EditorContext, snapshot: PageSnapsh
 
   ctx.graph.clearAbsPosCache()
   computeAllLayouts(ctx.graph, pageId)
-  ctx.state.selectedIds = new Set()
+  ctx.setSelectedIds(new Set())
   ctx.state.hoveredNodeId = null
   ctx.requestRender()
 }

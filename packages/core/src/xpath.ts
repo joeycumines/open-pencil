@@ -1,5 +1,6 @@
-import type { SceneGraph, SceneNode } from './scene-graph'
 import type { IDomFacade } from 'fontoxpath'
+
+import type { SceneGraph, SceneNode } from './scene-graph'
 
 const NODE_TYPES = {
   ELEMENT_NODE: 1,
@@ -40,7 +41,7 @@ const QUERYABLE_ATTRS = [
 interface XPathDocument {
   nodeType: number
   nodeName: string
-  documentElement: XPathNode
+  documentElement: XPathNode | null
   _children?: XPathNode[]
 }
 
@@ -63,7 +64,7 @@ interface XPathNode {
   prefix: null
   _sceneNode: SceneNode
   _attrs?: XPathAttr[]
-  _parent?: XPathNode | null
+  _parent?: XPathNode | XPathDocument | null
   _children?: XPathNode[]
 }
 
@@ -79,7 +80,7 @@ function wrapNode(
     namespaceURI: null,
     prefix: null,
     _sceneNode: node,
-    _parent: parent as XPathNode | null
+    _parent: parent
   }
   return wrapped
 }
@@ -88,9 +89,9 @@ function createDocument(graph: SceneGraph, rootNode: SceneNode): XPathDocument {
   const doc: XPathDocument = {
     nodeType: NODE_TYPES.DOCUMENT_NODE,
     nodeName: '#document',
-    documentElement: null as unknown as XPathNode
+    documentElement: null
   }
-  const root = wrapNode(graph, rootNode, doc as unknown as XPathNode)
+  const root = wrapNode(graph, rootNode, doc)
   doc.documentElement = root
   doc._children = [root]
   return doc
@@ -104,7 +105,7 @@ function getAttrs(wrapped: XPathNode): XPathAttr[] {
 
   for (const attrName of QUERYABLE_ATTRS) {
     if (attrName in node) {
-      const value = (node as unknown as Record<string, unknown>)[attrName]
+      const value = Reflect.get(node, attrName)
       if (value === undefined || value === null || typeof value === 'symbol') continue
       const stringValue =
         typeof value === 'object'
@@ -150,7 +151,7 @@ function siblingNode(
 ): XPathNode | null {
   if (isDocument(node)) return null
   const parent = node._parent
-  if (!parent) return null
+  if (!parent || isDocument(parent)) return null
   const siblings = getChildren(graph, parent)
   const index = siblings.indexOf(node)
   if (index === -1) return null
@@ -168,7 +169,7 @@ function createDomFacade(graph: SceneGraph) {
       if (isDocument(node)) return null
       const sceneNode = node._sceneNode
       if (attributeName in sceneNode) {
-        const value = (sceneNode as unknown as Record<string, unknown>)[attributeName]
+        const value = Reflect.get(sceneNode, attributeName)
         if (value === undefined || value === null || typeof value === 'symbol') return null
         return typeof value === 'object'
           ? JSON.stringify(value)
@@ -230,7 +231,7 @@ export async function queryByXPath(
   if (targetPages.length === 0) return []
 
   const { evaluateXPathToNodes } = await import('fontoxpath')
-  const domFacade = createDomFacade(graph) as unknown as IDomFacade
+  const domFacade = createDomFacade(graph) as IDomFacade
   const results: SceneNode[] = []
 
   for (const page of targetPages) {
@@ -309,7 +310,7 @@ export async function matchByXPath(
   node: SceneNode
 ): Promise<boolean> {
   const { evaluateXPathToBoolean } = await import('fontoxpath')
-  const domFacade = createDomFacade(graph) as unknown as IDomFacade
+  const domFacade = createDomFacade(graph) as IDomFacade
   const wrapped = wrapNode(graph, node)
   try {
     return evaluateXPathToBoolean(`self::*[${selector}]`, wrapped, domFacade)

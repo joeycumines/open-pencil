@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { useAttrs } from 'vue'
+import { useAttrs, watch } from 'vue'
+import { templateRef } from '@vueuse/core'
 import { TreeRoot, TreeItem, ContextMenuRoot, ContextMenuTrigger, ContextMenuPortal } from 'reka-ui'
 
 import {
@@ -19,9 +20,14 @@ defineOptions({ inheritAttrs: false })
 const INDENT = 16
 const attrs = useAttrs()
 const store = useEditorStore()
+const renameInput = templateRef<HTMLInputElement>('renameInput')
 const rename = useInlineRename((id, name) => store.renameNode(id, name))
 const { menu: t } = useI18n()
 const { draggingId, instruction, instructionTargetId } = useLayerDrag(store, INDENT)
+
+watch(renameInput, (input) => {
+  if (input) void rename.focusInput(input)
+})
 
 function onLayerRightClick(e: MouseEvent) {
   const row = (e.target as HTMLElement).closest<HTMLElement>('[data-node-id]')
@@ -59,15 +65,7 @@ function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
             <LayerTreeItem
               v-for="item in flattenItems"
               :key="item._id"
-              v-slot="{
-                node,
-                isSelected,
-                padLeft,
-                select: selectNode,
-                toggleExpand,
-                toggleVisibility,
-                toggleLock
-              }"
+              v-slot="{ node, isSelected, padLeft, actions }"
               :node="item.value"
               :level="item.level"
               :has-children="item.hasChildren"
@@ -77,7 +75,7 @@ function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
                 :value="item.value"
                 :level="item.level"
                 as-child
-                @select="(e: CustomEvent) => onTreeSelect(e, selectNode)"
+                @select="(e: CustomEvent) => onTreeSelect(e, actions.select)"
                 @toggle="
                   (e: CustomEvent) => {
                     if (e.detail.originalEvent?.type === 'click') e.preventDefault()
@@ -94,23 +92,19 @@ function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
                     v-if="item.hasChildren"
                     class="flex w-4 shrink-0 cursor-pointer items-center justify-center text-muted transition-transform hover:text-surface"
                     :class="isExpanded ? 'rotate-90' : 'rotate-0'"
-                    @click.stop="toggleExpand"
+                    @click.stop="actions.toggleExpand"
                   >
                     <icon-lucide-chevron-right class="size-3" />
                   </span>
                   <span v-else class="w-4 shrink-0" />
                   <component :is="nodeIcon(node)" class="size-3 shrink-0 opacity-70" />
                   <input
-                    :ref="
-                      (el) => {
-                        if (el) rename.focusInput(el as HTMLInputElement)
-                      }
-                    "
+                    ref="renameInput"
                     data-layer-edit
                     data-test-id="layers-item-input"
                     class="min-w-0 flex-1 rounded border border-accent bg-input px-1 py-0 text-xs text-surface outline-none"
                     :value="node.name"
-                    @blur="rename.commit(node.id, $event.target as HTMLInputElement)"
+                    @blur="rename.commit(node.id, $event)"
                     @keydown.stop="rename.onKeydown"
                   />
                 </div>
@@ -137,7 +131,7 @@ function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
                     v-if="item.hasChildren"
                     class="flex w-4 shrink-0 cursor-pointer items-center justify-center text-muted transition-transform hover:text-surface"
                     :class="isExpanded ? 'rotate-90' : 'rotate-0'"
-                    @click.stop="toggleExpand"
+                    @click.stop="actions.toggleExpand"
                   >
                     <icon-lucide-chevron-right class="size-3" />
                   </span>
@@ -162,7 +156,7 @@ function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
                       <span
                         class="flex size-4 items-center justify-center rounded hover:bg-white/15"
                         @pointerdown.stop
-                        @click.stop="toggleLock"
+                        @click.stop="actions.toggleLock"
                       >
                         <icon-lucide-lock
                           v-if="node.locked"
@@ -180,7 +174,7 @@ function onTreeSelect(e: CustomEvent, select: (additive: boolean) => void) {
                       <span
                         class="flex size-4 items-center justify-center rounded hover:bg-white/15"
                         @pointerdown.stop
-                        @click.stop="toggleVisibility"
+                        @click.stop="actions.toggleVisibility"
                       >
                         <icon-lucide-eye-off
                           v-if="!node.visible"

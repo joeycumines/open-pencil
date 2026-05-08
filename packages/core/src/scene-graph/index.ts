@@ -12,9 +12,11 @@ import { normalizeVectorNetwork } from './vector-network'
 export type { GUID, Color } from '#core/types'
 export * from './types'
 
-import { getAbsolutePosition } from '#core/canvas/coordinate'
+import type { Emitter } from 'nanoevents'
 
+import { getAbsolutePosition } from '#core/canvas/coordinate'
 import type { Color, Rect, Vector } from '#core/types'
+
 import type {
   DocumentColorSpace,
   NodeType,
@@ -26,7 +28,6 @@ import type {
   VariableType,
   VariableValue
 } from './types'
-import type { Emitter } from 'nanoevents'
 
 export { cloneVectorNetwork, normalizeVectorNetwork, validateVectorNetwork } from './vector-network'
 
@@ -157,6 +158,22 @@ export class SceneGraph {
 
   setActiveMode(collectionId: string, modeId: string): void {
     Variables.setActiveMode(this, collectionId, modeId)
+  }
+
+  addMode(collectionId: string, modeId: string, name: string, sourceMode?: string): void {
+    Variables.addMode(this, collectionId, modeId, name, sourceMode)
+  }
+
+  removeMode(collectionId: string, modeId: string): void {
+    Variables.removeMode(this, collectionId, modeId)
+  }
+
+  renameMode(collectionId: string, modeId: string, name: string): void {
+    Variables.renameMode(this, collectionId, modeId, name)
+  }
+
+  setDefaultMode(collectionId: string, modeId: string): void {
+    Variables.setDefaultMode(this, collectionId, modeId)
   }
 
   resolveVariable(

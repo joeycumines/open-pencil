@@ -1,12 +1,18 @@
+import type { EditorStore } from '@/app/editor/active-store'
 import { openFileFromPath } from '@/app/shell/menu/use'
 import { createTab, openFileInNewTab } from '@/app/tabs'
-import { IS_TAURI } from '@open-pencil/core/constants'
-
-import type { EditorStore } from '@/app/editor/active-store'
+import { isTauri } from '@/app/tauri/env'
 
 export async function handleSaveFile(store: EditorStore): Promise<unknown> {
   await store.saveFigFile()
   return { ok: true }
+}
+
+export async function ensureTauriParentDirectory(path: string): Promise<void> {
+  if (!isTauri()) return
+  const { mkdir } = await import('@tauri-apps/plugin-fs')
+  const dir = path.replace(/[\\/][^\\/]+$/, '')
+  await mkdir(dir, { recursive: true })
 }
 
 export async function handleNewDocument(_store: EditorStore, args: unknown): Promise<unknown> {
@@ -14,11 +20,7 @@ export async function handleNewDocument(_store: EditorStore, args: unknown): Pro
   const tab = createTab()
   if (path) {
     tab.store.setPlannedFilePath(path)
-    if (IS_TAURI) {
-      const { mkdir } = await import('@tauri-apps/plugin-fs')
-      const dir = path.replace(/[\\/][^\\/]+$/, '')
-      await mkdir(dir, { recursive: true })
-    }
+    await ensureTauriParentDirectory(path)
     await tab.store.saveFigFile()
     tab.store.startWatchingCurrentFile()
   }
@@ -28,7 +30,7 @@ export async function handleNewDocument(_store: EditorStore, args: unknown): Pro
 export async function handleOpenFile(_store: EditorStore, args: unknown): Promise<unknown> {
   const path = (args as { path?: string }).path
   if (!path) throw new Error('Missing "path" in args')
-  if (IS_TAURI) {
+  if (isTauri()) {
     await openFileFromPath(path)
   } else {
     const response = await fetch(path)

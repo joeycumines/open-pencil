@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { nextTick } from 'vue'
+import { templateRef, unrefElement } from '@vueuse/core'
 import {
   ComboboxAnchor,
   ComboboxContent,
@@ -13,44 +14,37 @@ import {
   type AcceptableValue
 } from 'reka-ui'
 
-import { useFontPicker } from '#vue/primitives/FontPicker/useFontPicker'
+import { useFontPicker, type FontAccessController } from '#vue/primitives/FontPicker/useFontPicker'
 
-const {
-  listFamilies,
-  triggerClass,
-  contentClass,
-  itemClass,
-  searchClass,
-  viewportClass,
-  emptyClass,
-  emptySearchText,
-  emptyFontsText,
-  emptyFontsHint
-} = defineProps<{
-  listFamilies: () => Promise<string[]>
-  triggerClass?: string
-  contentClass?: string
-  itemClass?: string
-  searchClass?: string
-  viewportClass?: string
-  emptyClass?: string
-  emptySearchText?: string
-  emptyFontsText?: string
-  emptyFontsHint?: string
-}>()
+import type { FontPickerUi } from '#vue/primitives/FontPicker/types'
+
+const { listFamilies, localFontAccess, ui, emptySearchText, emptyFontsText, emptyFontsHint } =
+  defineProps<{
+    listFamilies: () => Promise<string[]>
+    localFontAccess?: FontAccessController
+    ui?: FontPickerUi
+    emptySearchText?: string
+    emptyFontsText?: string
+    emptyFontsHint?: string
+  }>()
 
 const modelValue = defineModel<string>({ required: true })
 const emit = defineEmits<{ select: [family: string] }>()
 
-const inputRef = ref<HTMLInputElement | null>(null)
+const contentRef = templateRef<HTMLElement>('contentRef')
 
-function setInputRef(el: HTMLInputElement | null) {
-  inputRef.value = el
+function focusSearchInput() {
+  nextTick(() => {
+    const content = unrefElement(contentRef)
+    if (!(content instanceof HTMLElement)) return
+    content.querySelector<HTMLInputElement>('input')?.focus()
+  })
 }
 
-const { searchTerm, open, filtered, select } = useFontPicker({
+const { searchTerm, open, filtered, loading, accessState, requestAccess, select } = useFontPicker({
   modelValue,
   listFamilies,
+  localFontAccess,
   onSelect: (family) => emit('select', family)
 })
 </script>
@@ -68,7 +62,7 @@ const { searchTerm, open, filtered, select } = useFontPicker({
   >
     <ComboboxAnchor as-child>
       <slot name="trigger" :value="modelValue" :open="open">
-        <button :class="triggerClass">
+        <button :class="ui?.trigger">
           <span class="truncate">{{ modelValue }}</span>
         </button>
       </slot>
@@ -79,15 +73,15 @@ const { searchTerm, open, filtered, select } = useFontPicker({
         :side-offset="2"
         align="start"
         position="popper"
-        :class="contentClass"
+        :class="ui?.content"
         @open-auto-focus.prevent
-        @vue:mounted="nextTick(() => inputRef?.focus())"
+        ref="contentRef"
+        @vue:mounted="focusSearchInput"
       >
-        <slot name="search" :search-term="searchTerm" :set-input-ref="setInputRef">
+        <slot name="search" :search-term="searchTerm">
           <ComboboxInput
-            ref="inputRef"
             v-model="searchTerm"
-            :class="searchClass"
+            :class="ui?.search"
             placeholder="Search fonts…"
             autocomplete="off"
             autocorrect="off"
@@ -96,7 +90,7 @@ const { searchTerm, open, filtered, select } = useFontPicker({
           />
         </slot>
 
-        <ComboboxViewport :class="viewportClass ?? 'max-h-72 overflow-y-auto'">
+        <ComboboxViewport :class="ui?.viewport ?? 'max-h-72 overflow-y-auto'">
           <ComboboxVirtualizer
             v-slot="{ option }"
             :options="filtered"
@@ -106,7 +100,7 @@ const { searchTerm, open, filtered, select } = useFontPicker({
             <slot name="item" :family="option" :selected="option === modelValue">
               <ComboboxItem
                 :value="option"
-                :class="itemClass"
+                :class="ui?.item"
                 :style="{ fontFamily: `'${option}', sans-serif` }"
               >
                 <ComboboxItemIndicator>
@@ -117,16 +111,32 @@ const { searchTerm, open, filtered, select } = useFontPicker({
             </slot>
           </ComboboxVirtualizer>
 
-          <div v-if="filtered.length === 0 && searchTerm" :class="emptyClass">
+          <div v-if="filtered.length === 0 && searchTerm" :class="ui?.empty">
             {{ emptySearchText ?? 'No fonts found' }}
           </div>
-          <div v-else-if="filtered.length === 0" :class="emptyClass">
-            <slot name="empty">
-              <div>
-                <p>{{ emptyFontsText ?? 'No local fonts available.' }}</p>
-                <p v-if="emptyFontsHint" class="mt-1">{{ emptyFontsHint }}</p>
-              </div>
-            </slot>
+          <div v-else-if="filtered.length === 0" :class="ui?.empty">
+            <div>
+              <p v-if="accessState === 'prompt'">
+                Allow local font access to browse installed fonts.
+              </p>
+              <p v-else-if="accessState === 'denied'">
+                Local font access is blocked for this site.
+              </p>
+              <p v-else-if="accessState === 'unsupported'">
+                Local fonts are not available in this browser.
+              </p>
+              <p v-else>{{ emptyFontsText ?? 'No local fonts available.' }}</p>
+              <p v-if="emptyFontsHint" class="mt-1">{{ emptyFontsHint }}</p>
+              <button
+                v-if="accessState === 'prompt'"
+                type="button"
+                :class="ui?.emptyAction"
+                :disabled="loading"
+                @click="requestAccess"
+              >
+                {{ loading ? 'Loading…' : 'Allow local fonts' }}
+              </button>
+            </div>
           </div>
         </ComboboxViewport>
       </ComboboxContent>

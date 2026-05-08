@@ -164,29 +164,26 @@ export {
 } from './text/direction'
 export {
   FONT_WEIGHT_NAMES,
-  collectFontKeys,
-  loadFont,
-  listFamilies,
-  initFontService,
-  getFontProvider,
-  isFontLoaded,
-  getLoadedFontData,
-  markFontLoaded,
-  ensureNodeFont,
-  ensureCJKFallback,
-  ensureArabicFallback,
-  getCJKFallbackFamily,
-  getCJKFallbackFamilies,
-  getArabicFallbackFamilies,
-  setCJKFallbackFamily,
-  setArabicFallbackFamily,
+  FontManager,
+  fontManager,
   styleToWeight,
   weightToStyle,
   normalizeFontFamily,
   isVariableFont,
   styleToVariant,
-  fetchBundledFont
+  type DownloadedFontCache,
+  type FontInfo,
+  type LocalFontAccessState
 } from './text/fonts'
+export {
+  ARABIC_LOCAL_FALLBACK_FAMILIES,
+  ARABIC_REMOTE_FALLBACK_FAMILIES,
+  cjkLocalFallbackFamilies,
+  fontFallbackEntry,
+  fontFallbackManifest,
+  type FontFallbackManifestEntry,
+  type FontFallbackScript
+} from './text/fallbacks'
 export {
   parseColor,
   normalizeColor,

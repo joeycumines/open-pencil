@@ -1,9 +1,14 @@
-import { colorToHexRaw, parseColor } from '@open-pencil/core/color'
-import { randomHex } from '@open-pencil/core/random'
-
-import type { Editor } from '@open-pencil/core/editor'
-import type { Variable, VariableCollection, VariableValue } from '@open-pencil/core/scene-graph'
 import type { Ref } from 'vue'
+
+import { colorToHexRaw, parseColor } from '@open-pencil/core/color'
+import type { Editor } from '@open-pencil/core/editor'
+import { randomHex } from '@open-pencil/core/random'
+import type {
+  Variable,
+  VariableCollection,
+  VariableType,
+  VariableValue
+} from '@open-pencil/core/scene-graph'
 
 export function createVariableCollectionActions(editor: Editor, activeCollectionId: Ref<string>) {
   function setActiveCollection(id: string) {
@@ -27,27 +32,94 @@ export function createVariableCollectionActions(editor: Editor, activeCollection
     editor.renameCollection(id, newName)
   }
 
-  return { setActiveCollection, addCollection, renameCollection }
+  function removeCollection(id: string) {
+    editor.removeCollection(id)
+    const cols = [...editor.getCollections()]
+    activeCollectionId.value = cols[0]?.id ?? ''
+  }
+
+  function addMode(): string | undefined {
+    const colId = activeCollectionId.value
+    if (!colId) return undefined
+    return editor.addMode(colId)
+  }
+
+  function removeMode(modeId: string) {
+    const colId = activeCollectionId.value
+    if (!colId) return
+    editor.removeMode(colId, modeId)
+  }
+
+  function renameMode(modeId: string, newName: string) {
+    const colId = activeCollectionId.value
+    if (!colId) return
+    editor.renameMode(colId, modeId, newName)
+  }
+
+  function setDefaultMode(modeId: string) {
+    const colId = activeCollectionId.value
+    if (!colId) return
+    editor.setDefaultMode(colId, modeId)
+  }
+
+  function duplicateMode(modeId: string): string | undefined {
+    const colId = activeCollectionId.value
+    if (!colId) return undefined
+    return editor.duplicateMode(colId, modeId)
+  }
+
+  function setActiveMode(modeId: string) {
+    const colId = activeCollectionId.value
+    if (!colId) return
+    editor.setActiveMode(colId, modeId)
+  }
+
+  return {
+    setActiveCollection,
+    addCollection,
+    renameCollection,
+    removeCollection,
+    addMode,
+    removeMode,
+    renameMode,
+    setDefaultMode,
+    duplicateMode,
+    setActiveMode
+  }
 }
 
 export function createVariableValueActions(
   editor: Editor,
   getActiveCollection: () => VariableCollection | null
 ) {
-  function addVariable() {
+  function defaultVariableValue(type: VariableType): VariableValue {
+    if (type === 'COLOR') return { r: 0, g: 0, b: 0, a: 1 }
+    if (type === 'FLOAT') return 0
+    if (type === 'BOOLEAN') return false
+    return ''
+  }
+
+  function defaultVariableName(type: VariableType): string {
+    if (type === 'COLOR') return 'New color'
+    if (type === 'FLOAT') return 'New number'
+    if (type === 'BOOLEAN') return 'New boolean'
+    return 'New text'
+  }
+
+  function addVariable(type: VariableType = 'COLOR') {
     const col = getActiveCollection()
     if (!col) return
 
     const id = `var:${randomHex(8)}`
     const valuesByMode: Record<string, VariableValue> = {}
     for (const mode of col.modes) {
-      valuesByMode[mode.modeId] = { r: 0, g: 0, b: 0, a: 1 }
+      valuesByMode[mode.modeId] = defaultVariableValue(type)
     }
 
     editor.addVariable({
       id,
-      name: 'New variable',
-      type: 'COLOR',
+      name: defaultVariableName(type),
+      type,
       collectionId: col.id,
       valuesByMode,
       description: '',
@@ -83,7 +155,7 @@ export function createVariableValueActions(
       const num = parseFloat(raw)
       return isNaN(num) ? undefined : num
     }
-    if (variable.type === 'BOOLEAN') return raw === 'true'
+    if (variable.type === 'BOOLEAN') return raw.toLowerCase() === 'true'
     return raw
   }
 

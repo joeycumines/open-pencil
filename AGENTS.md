@@ -49,8 +49,8 @@ Runtime `canvaskit-wasm` import exists only in `canvaskit.ts` — all other file
 
 | Module | What |
 |---|---|
-| `types.ts` | EditorState, EditorOptions, Tool, EditorToolDef, EditorContext |
-| `create.ts` | `createEditor()` assembler — wires context + all modules |
+| `types.ts` | EditorState, EditorOptions, EditorEvents, Tool, EditorToolDef, EditorContext |
+| `create.ts` | `createEditor()` assembler — wires context, event bus + all modules |
 | `viewport.ts` | screenToCanvas, applyZoom, pan, zoomToFit/100/Selection |
 | `selection.ts` | select, clearSelection, marquee, snap, hover, entered container |
 | `pages.ts` | switchPage, addPage, deletePage, renamePage |
@@ -65,6 +65,29 @@ Runtime `canvaskit-wasm` import exists only in `canvaskit.ts` — all other file
 Each module exports a factory: `createXxxActions(ctx: EditorContext) => { ... }`.
 `create.ts` assembles context + all modules, spreads into a flat return object.
 `Editor` type = `ReturnType<typeof createEditor>`.
+
+#### Editor event bus
+
+The editor exposes a typed nanoevents emitter for lifecycle events. Defined in `EditorEvents` (`types.ts`), emitted via `emitEditorEvent()` on the context, subscribed via `editor.onEditorEvent(event, handler)` which returns an unbind function.
+
+| Event | Payload | Emitted by |
+|---|---|---|
+| `render:requested` | `{ renderVersion, sceneVersion }` | `requestRender()` |
+| `repaint:requested` | `{ renderVersion, sceneVersion }` | `requestRepaint()` |
+| `graph:replaced` | `SceneGraph` | `replaceGraph()` |
+| `node:created` | `SceneNode` | SceneGraph emitter → `graph-events.ts` |
+| `node:updated` | `id, changes` | SceneGraph emitter → `graph-events.ts` |
+| `node:deleted` | `id` | SceneGraph emitter → `graph-events.ts` |
+| `node:reparented` | `nodeId, oldParentId, newParentId` | SceneGraph emitter → `graph-events.ts` |
+| `node:reordered` | `nodeId, parentId, index` | SceneGraph emitter → `graph-events.ts` |
+| `selection:changed` | `selectedIds[], previousIds[]` | `setSelectedIds()` |
+| `tool:changed` | `tool, previousTool` | `setActiveTool()` |
+| `page:changed` | `pageId, previousPageId` | `switchPage()`, `replaceGraph()` |
+| `viewport:changed` | `{ panX, panY, zoom }, previous` | viewport actions |
+
+All selection mutations in core use `ctx.setSelectedIds()` and all tool changes use `ctx.setActiveTool()` so the event bus fires consistently. App-layer code uses `editor.clearSelection()`, `editor.select()`, or `editor.setTool()` — never direct `state.selectedIds =` or `state.activeTool =` assignments.
+
+Vue SDK provides `useEditorEvent(event, handler)` composable (`packages/vue/src/editor/events/use.ts`) that auto-disposes on scope cleanup.
 
 The app editor session (`src/app/editor/session/create.ts`) is a thin Vue wrapper: creates `shallowReactive` state, calls `createEditor()`, and assembles app-specific modules for document I/O, autosave, export, vector edit, pen resume, flashes, profiler, and mobile clipboard. Tabs live in `src/app/tabs/`; active editor access lives in `src/app/editor/active-store/`.
 
@@ -306,6 +329,9 @@ Self-review checklist:
 ## UI
 
 - Use reka-ui for UI components (Splitter, ContextMenu, DropdownMenu, etc.)
+- Vue UI styling APIs must follow the existing `:ui` / `tailwind-variants` slot pattern. Do not add one-off `fooClass`, `barClass`, `emptyActionClass`, etc. props to components; define a typed `Ui` object with named slots and merge through the local `use*UI()` helper or a `ui` prop.
+- Do not pass imperative setters/actions through slots as `:set-*`, `:update-*`, `:request-*`, `:toggle-*`, etc. unless the component is explicitly a renderless primitive whose whole contract is slot actions. Prefer `v-model`, emitted events, normal component props, or owned default UI. For DOM refs/focus, use VueUse (`templateRef`, `unrefElement`, `useFocus`, etc.) instead of ref callback plumbing through slots.
+- App wrappers around SDK primitives should compose a single `ui` object from shared UI helpers (`useSelectUI`, `usePopoverUI`, etc.) rather than bypassing the design system with raw Tailwind strings spread across multiple props.
 - Browser and Tauri menus share `src/app/shell/menu/schema.ts` as the canonical menu model. Do not add menu items directly in `src/components/AppMenu.vue` or `desktop/src/menu.rs`.
 - Regenerate the native menu with `bun run generate:tauri-menu` after editing the shared menu schema; `desktop/generated/menu.json` is consumed by the Tauri menu builder. Tauri also runs this generator from `desktop/tauri.conf.json` via `beforeDevCommand` and `beforeBuildCommand`.
 - Every shared menu item with an `id` must be handled by `src/app/shell/menu/use.ts`, an editor command, or explicitly marked browser/native-only in the schema.

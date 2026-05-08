@@ -1,6 +1,5 @@
-import { defineTool } from '#core/tools/schema'
-
 import type { RasterExportFormat } from '#core/io/formats/raster'
+import { defineTool } from '#core/tools/schema'
 
 const CHUNK_SIZE = 0x8000
 
@@ -11,7 +10,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   let binary = ''
   for (let index = 0; index < bytes.length; index += CHUNK_SIZE) {
     const chunk = bytes.subarray(index, index + CHUNK_SIZE)
-    binary += String.fromCharCode.apply(null, chunk as unknown as number[])
+    binary += String.fromCharCode(...chunk)
   }
   return btoa(binary)
 }

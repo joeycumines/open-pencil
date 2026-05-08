@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { FigmaHelper } from '../helpers/figma'
+import { FigmaHelper } from '#tests/helpers/figma'
 
 test.describe('figma reference: create shapes', () => {
   let figma: FigmaHelper

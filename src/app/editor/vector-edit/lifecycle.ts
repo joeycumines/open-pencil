@@ -1,11 +1,10 @@
+import type { Editor } from '@open-pencil/core/editor'
 import { cloneVectorNetwork } from '@open-pencil/core/scene-graph'
+import type { SceneGraph, VectorNetwork } from '@open-pencil/core/scene-graph'
 import { computeAccurateBounds } from '@open-pencil/core/vector'
 
 import { getLiveNetwork } from './network'
-
 import type { VectorEditState } from './types'
-import type { Editor } from '@open-pencil/core/editor'
-import type { SceneGraph, VectorNetwork } from '@open-pencil/core/scene-graph'
 
 export function createVectorEditLifecycle(
   editor: Editor,
@@ -72,7 +71,7 @@ export function createVectorEditLifecycle(
       hoveredHandleInfo: null
     }
 
-    state.selectedIds = new Set([nodeId])
+    editor.select([nodeId])
     editor.requestRender()
   }
 

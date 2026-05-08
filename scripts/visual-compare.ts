@@ -14,16 +14,18 @@
  *   diff.png   — visual diff (red = changed pixels)
  */
 
-import { parseArgs } from 'node:util'
 import { existsSync, mkdirSync } from 'node:fs'
+import { parseArgs } from 'node:util'
+
 import { $ } from 'bun'
 
-import { parseFigmaClipboard, importClipboardNodes } from '#core/clipboard'
 import { SkiaRenderer } from '@open-pencil/core/canvas'
 import { renderNodesToImage, initCanvasKit } from '@open-pencil/core/io'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import { SceneGraph } from '@open-pencil/core/scene-graph'
 import { loadFont } from '@open-pencil/core/text'
+
+import { parseFigmaClipboard, importClipboardNodes } from '#core/clipboard'
 
 const { values: opts } = parseArgs({
   options: {
@@ -34,7 +36,7 @@ const { values: opts } = parseArgs({
 })
 
 const scale = Number(opts.scale)
-const outputDir = opts.output!
+const outputDir = opts.output ?? '/tmp/visual-compare'
 const figmaPath = `${outputDir}/figma.png`
 const oursPath = `${outputDir}/ours.png`
 const diffPath = `${outputDir}/diff.png`
@@ -120,7 +122,8 @@ async function renderOurs(html: string) {
   }
 
   const ck = await initCanvasKit()
-  const surface = ck.MakeSurface(1, 1)!
+  const surface = ck.MakeSurface(1, 1)
+  if (!surface) throw new Error('Failed to create CanvasKit surface')
   const renderer = new SkiaRenderer(ck, surface)
   renderer.viewportWidth = 1
   renderer.viewportHeight = 1
@@ -160,7 +163,9 @@ async function renderFigmaViaPaste() {
     console.log(`   → ${figmaPath}`)
   } finally {
     // Clean up: remove temp page
-    await $`figma-use eval ${'(() => { const ps = figma.root.children; const tmp = ps.find(p => p.name === "__visual_compare__"); if (tmp) { const other = ps.find(p => p !== tmp); if (other) figma.currentPage = other; tmp.remove(); } })()'}`.quiet().nothrow()
+    await $`figma-use eval ${'(() => { const ps = figma.root.children; const tmp = ps.find(p => p.name === "__visual_compare__"); if (tmp) { const other = ps.find(p => p !== tmp); if (other) figma.currentPage = other; tmp.remove(); } })()'}`
+      .quiet()
+      .nothrow()
   }
 }
 
@@ -178,17 +183,19 @@ async function diff() {
   }
 
   const result =
-    await $`magick compare -metric AE -highlight-color red -lowlight-color 'rgba(255,255,255,0.2)' -compose src ${figmaPath} ${oursPath} ${diffPath}`
+    await $`magick compare -metric AE -highlight-color red -lowlight-color '#FFFFFF33' -compose src ${figmaPath} ${oursPath} ${diffPath}`
       .quiet()
       .nothrow()
 
-  const diffPixels = parseInt(result.stderr.toString().trim()) || 0
+  const diffPixels = parseInt(result.stderr.toString().trim(), 10) || 0
   const [w, h] = figmaSize.split('x').map(Number)
   const total = w * h
   const pct = ((diffPixels / total) * 100).toFixed(2)
 
   console.log(`   → ${diffPath}`)
-  console.log(`   ${diffPixels.toLocaleString()} different pixels (${pct}% of ${total.toLocaleString()})`)
+  console.log(
+    `   ${diffPixels.toLocaleString()} different pixels (${pct}% of ${total.toLocaleString()})`
+  )
   console.log(`\n✅ Done! Images in ${outputDir}/`)
 }
 
@@ -210,7 +217,9 @@ async function readClipboardHtml(): Promise<string | null> {
 async function ensureFigmaConnected() {
   const s = await $`figma-use status`.quiet().nothrow()
   if (s.exitCode !== 0) {
-    bail('figma-use not connected. Start Figma with:\n  open -a Figma --args --remote-debugging-port=9222')
+    bail(
+      'figma-use not connected. Start Figma with:\n  open -a Figma --args --remote-debugging-port=9222'
+    )
   }
 }
 

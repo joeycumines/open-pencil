@@ -5,21 +5,25 @@ import { initCanvasKit } from '#cli/headless'
 import { SkiaRenderer } from '#core/canvas'
 import { renderNodesToImage } from '#core/io/formats/raster'
 import { SceneGraph } from '#core/scene-graph'
-import { initFontService, markFontLoaded } from '#core/text'
+import type { SceneNode } from '#core/scene-graph'
+import { fontManager } from '#core/text'
+import type { Color, Vector } from '#core/types'
+
+import { expectDefined } from '#tests/helpers/assert'
 
 interface TestCase {
   text: string
   fontSize: number
-  offset: { x: number; y: number }
+  offset: Vector
   radius: number
   spread: number
-  color: { r: number; g: number; b: number; a: number }
+  color: Color
 }
 
 function generateMatrix(): TestCase[] {
   const cases: TestCase[] = []
 
-  const offsets: Array<{ x: number; y: number }> = [
+  const offsets: Vector[] = [
     { x: 0, y: 0 },
     { x: 10, y: 10 },
     { x: -5, y: 5 },
@@ -142,11 +146,11 @@ async function main() {
   const ck = await initCanvasKit()
 
   const fontProvider = ck.TypefaceFontProvider.Make()
-  initFontService(ck, fontProvider)
+  fontManager.attachProvider(ck, fontProvider)
 
   const fontPath = join(process.cwd(), 'public/Inter-SemiBold.ttf')
   const fontData = await readFile(fontPath)
-  markFontLoaded(
+  fontManager.markLoaded(
     'Inter',
     'SemiBold',
     fontData.buffer.slice(fontData.byteOffset, fontData.byteOffset + fontData.byteLength)
@@ -194,13 +198,13 @@ async function main() {
           spread: tc.spread
         }
       ]
-    }
+    } satisfies Partial<SceneNode>
 
-    const textNode = graph.createNode('TEXT', pageId, textProps as any)
+    const textNode = graph.createNode('TEXT', pageId, textProps)
 
     const surfW = Math.ceil(textProps.width) + 40
     const surfH = Math.ceil(textProps.height) + 40
-    const surface = ck.MakeSurface(surfW, surfH)!
+    const surface = expectDefined(ck.MakeSurface(surfW, surfH), 'CanvasKit surface')
     const renderer = new SkiaRenderer(ck, surface)
     renderer.fontProvider = fontProvider
     renderer.fontsLoaded = true

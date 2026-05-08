@@ -1,9 +1,9 @@
 import * as Y from 'yjs'
 
-import { YJS_JSON_FIELDS } from '@/constants'
+import type { SceneNode } from '@open-pencil/core/scene-graph'
 
 import type { EditorStore } from '@/app/editor/active-store'
-import type { SceneNode } from '@open-pencil/core/scene-graph'
+import { YJS_JSON_FIELDS } from '@/constants'
 
 type YNodes = Y.Map<Y.Map<unknown>>
 type YImages = Y.Map<Uint8Array>
@@ -76,12 +76,12 @@ export function bindCollabGraphEvents({
     }
   }
 
-  return store.graph.onNodeEvents({
-    updated: (id) => onGraphMutation(id),
-    created: (node) => onGraphMutation(node.id),
-    reparented: (nodeId) => onGraphMutation(nodeId),
-    reordered: (nodeId) => onGraphMutation(nodeId),
-    deleted: (id) => {
+  const unbinds = [
+    store.onEditorEvent('node:updated', (id) => onGraphMutation(id)),
+    store.onEditorEvent('node:created', (node) => onGraphMutation(node.id)),
+    store.onEditorEvent('node:reparented', (nodeId) => onGraphMutation(nodeId)),
+    store.onEditorEvent('node:reordered', (nodeId) => onGraphMutation(nodeId)),
+    store.onEditorEvent('node:deleted', (id) => {
       const ydoc = getYdoc()
       const ynodes = getYnodes()
       if (!getSuppressGraphSync() && ydoc && ynodes) {
@@ -91,8 +91,11 @@ export function bindCollabGraphEvents({
         })
         setSuppressYjsEvents(false)
       }
-    }
-  })
+    })
+  ]
+  return () => {
+    for (const unbind of unbinds) unbind()
+  }
 }
 
 export function registerYjsObservers({

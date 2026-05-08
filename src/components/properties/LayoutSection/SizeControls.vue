@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useTemplateRefsList } from '@vueuse/core'
 import {
   SelectContent,
   SelectItem,
@@ -12,6 +13,7 @@ import {
 } from 'reka-ui'
 
 import ScrubInput from '@/components/ScrubInput.vue'
+import VariableScrubInput from '@/components/properties/VariableScrubInput.vue'
 import BoundVariableButton from '@/components/properties/BoundVariableButton.vue'
 import VariablePickerPopover from '@/components/properties/VariablePickerPopover.vue'
 import { useSelectUI } from '@/components/ui/select'
@@ -36,12 +38,7 @@ const widthVariableBinding = useNumberVariableBinding('width')
 const heightVariableBinding = useNumberVariableBinding('height')
 const widthFieldRef = ref<HTMLElement | null>(null)
 const heightFieldRef = ref<HTMLElement | null>(null)
-const limitFieldRefs = ref<Record<SizeLimitProp, HTMLElement | null>>({
-  minWidth: null,
-  maxWidth: null,
-  minHeight: null,
-  maxHeight: null
-})
+const limitFieldRefs = useTemplateRefsList<HTMLElement>()
 
 const { panels, dialogs } = useI18n()
 const sizingSelect = useSelectUI({ item: 'rounded py-1.5 pr-2 pl-6 text-xs' })
@@ -94,6 +91,8 @@ const activeSizeLimits: ActiveSizeLimit[] = [
   }
 ]
 
+const visibleSizeLimits = computed(() => activeSizeLimits.filter((item) => item.value() != null))
+
 const heightLimitItems = [
   {
     prop: 'minHeight' as const,
@@ -109,6 +108,10 @@ const heightLimitItems = [
 
 function anchorRef(element: HTMLElement | null): HTMLElement | undefined {
   return element ?? undefined
+}
+
+function limitFieldAnchor(index: number): HTMLElement | undefined {
+  return anchorRef(limitFieldRefs.value[index] ?? null)
 }
 
 function handleLimitSelect(prop: SizeLimitProp, value: string) {
@@ -334,13 +337,54 @@ function handleSizeSelect(axis: 'width' | 'height', value: SizeSelectValue) {
     "
     class="mt-1.5 grid grid-cols-2 gap-1.5"
   >
-    <template v-for="item in activeSizeLimits" :key="item.prop">
-      <div
-        v-if="item.value() != null"
-        :ref="(el) => (limitFieldRefs[item.prop] = el as HTMLElement | null)"
-        class="min-w-0"
-      >
+    <template v-for="(item, index) in visibleSizeLimits" :key="item.prop">
+      <div :ref="limitFieldRefs.set" class="min-w-0">
+        <VariableScrubInput
+          v-if="ctx.node"
+          :data-test-id="item.testId"
+          :icon="item.icon()"
+          :model-value="Math.round(item.value() ?? 0)"
+          :min="0"
+          :node-id="ctx.node.id"
+          :binding-path="item.prop"
+          @update:model-value="ctx.updateSizeLimit(item.prop, $event)"
+          @commit="(v: number, p: number) => ctx.commitSizeLimit(item.prop, v, p)"
+        >
+          <template #after-variable>
+            <SelectRoot
+              :model-value="'VALUE'"
+              @update:model-value="(value) => handleLimitSelect(item.prop, value as string)"
+            >
+              <SelectTrigger
+                :data-test-id="`${item.testId}-menu`"
+                :reference="limitFieldAnchor(index)"
+                class="flex shrink-0 cursor-pointer items-center self-stretch border-none bg-transparent px-1 text-[11px] text-muted outline-none"
+                @pointerdown.stop
+              >
+                <icon-lucide-chevron-down class="size-3" />
+              </SelectTrigger>
+              <SelectPortal>
+                <SelectContent
+                  position="popper"
+                  align="start"
+                  :side-offset="4"
+                  :class="sizingSelect.content"
+                >
+                  <SelectViewport class="p-0.5">
+                    <SelectItem value="CURRENT" :class="sizingSelect.item">
+                      <SelectItemText>{{ item.setLabel() }}</SelectItemText>
+                    </SelectItem>
+                    <SelectItem value="REMOVE" :class="sizingSelect.item">
+                      <SelectItemText>{{ item.removeLabel() }}</SelectItemText>
+                    </SelectItem>
+                  </SelectViewport>
+                </SelectContent>
+              </SelectPortal>
+            </SelectRoot>
+          </template>
+        </VariableScrubInput>
         <ScrubInput
+          v-else
           :data-test-id="item.testId"
           :icon="item.icon()"
           :model-value="Math.round(item.value() ?? 0)"
@@ -355,7 +399,7 @@ function handleSizeSelect(axis: 'width' | 'height', value: SizeSelectValue) {
             >
               <SelectTrigger
                 :data-test-id="`${item.testId}-menu`"
-                :reference="anchorRef(limitFieldRefs[item.prop])"
+                :reference="limitFieldAnchor(index)"
                 class="flex shrink-0 cursor-pointer items-center self-stretch border-none bg-transparent px-1 text-[11px] text-muted outline-none"
                 @pointerdown.stop
               >

@@ -1,12 +1,13 @@
 import { shallowRef, computed, triggerRef } from 'vue'
 
-import { setActiveEditorStore } from '@/app/editor/active-store'
-import { createEditorStore } from '@/app/editor/session'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
-
-import type { EditorStore } from '@/app/editor/session'
 import type { SceneGraph } from '@open-pencil/core/scene-graph'
+
+import { setOpenPencilStore } from '@/app/browser-bridge'
+import { setActiveEditorStore } from '@/app/editor/active-store'
+import { createEditorStore } from '@/app/editor/session'
+import type { EditorStore } from '@/app/editor/session'
 
 export interface Tab {
   id: string
@@ -52,7 +53,7 @@ function activateTab(tab: Tab) {
   activeTabId.value = tab.id
   setActiveEditorStore(tab.store)
   triggerRef(tabsRef)
-  window.__OPEN_PENCIL_STORE__ = tab.store
+  setOpenPencilStore(tab.store)
 }
 
 export function switchTab(tabId: string) {
@@ -115,7 +116,7 @@ export async function openFileInNewTab(
     store.replaceGraph(imported)
     store.undo.clear()
     store.setDocumentSource(file.name, sourceFormat, handle, path)
-    store.state.selectedIds = new Set()
+    store.clearSelection()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     await store.fitCurrentPageToViewport()

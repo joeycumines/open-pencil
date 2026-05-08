@@ -4,11 +4,10 @@ import {
   SECTION_DEFAULT_FILL,
   SECTION_DEFAULT_STROKE
 } from '#core/constants'
+import type { Fill, NodeType, SceneNode } from '#core/scene-graph'
 
 import { createPenActions } from './shapes/pen'
 import { adoptNodesIntoSection as adoptNodesIntoSectionImpl } from './shapes/section-adopt'
-
-import type { Fill, NodeType, SceneNode } from '#core/scene-graph'
 import type { EditorContext } from './types'
 export type { PenDragOptions } from './shapes/pen'
 
@@ -71,7 +70,7 @@ export function createShapeActions(ctx: EditorContext) {
         ctx.graph.deleteNode(id)
         const next = new Set(ctx.state.selectedIds)
         next.delete(id)
-        ctx.state.selectedIds = next
+        ctx.setSelectedIds(next)
       }
     })
     return id
@@ -80,7 +79,7 @@ export function createShapeActions(ctx: EditorContext) {
   const penActions = createPenActions(ctx, createShape)
 
   function setTool(tool: typeof ctx.state.activeTool) {
-    ctx.state.activeTool = tool
+    ctx.setActiveTool(tool)
   }
 
   return {

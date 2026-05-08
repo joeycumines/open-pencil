@@ -2,7 +2,6 @@ import { createSelectionContainerActions } from './selection/container'
 import { createSelectionHitTestActions } from './selection/hit-test'
 import { createSelectionOverlayActions } from './selection/overlays'
 import { createSelectionReadActions } from './selection/read'
-
 import type { EditorContext } from './types'
 
 export function createSelectionActions(ctx: EditorContext) {
@@ -13,19 +12,19 @@ export function createSelectionActions(ctx: EditorContext) {
         if (next.has(id)) next.delete(id)
         else next.add(id)
       }
-      ctx.state.selectedIds = next
+      ctx.setSelectedIds(next)
     } else {
-      ctx.state.selectedIds = new Set(ids)
+      ctx.setSelectedIds(new Set(ids))
     }
   }
 
   function clearSelection() {
-    ctx.state.selectedIds = new Set()
+    ctx.setSelectedIds(new Set())
   }
 
   function selectAll() {
     const children = ctx.graph.getChildren(ctx.state.currentPageId)
-    ctx.state.selectedIds = new Set(children.map((n) => n.id))
+    ctx.setSelectedIds(new Set(children.map((n) => n.id)))
   }
 
   const containerActions = createSelectionContainerActions(ctx)

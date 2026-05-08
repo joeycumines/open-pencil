@@ -5,20 +5,23 @@ import { initCanvasKit } from '#cli/headless'
 import { SkiaRenderer } from '#core/canvas'
 import { renderNodesToImage } from '#core/io/formats/raster'
 import { SceneGraph } from '#core/scene-graph'
-import { initFontService, markFontLoaded } from '#core/text'
+import type { SceneNode } from '#core/scene-graph'
+import { fontManager } from '#core/text'
+
+import { expectDefined } from '#tests/helpers/assert'
 
 async function main() {
   const ck = await initCanvasKit()
 
   // Initialize font service
   const fontProvider = ck.TypefaceFontProvider.Make()
-  initFontService(ck, fontProvider)
+  fontManager.attachProvider(ck, fontProvider)
 
   // Load Inter font from public dir
   const fontPath = join(process.cwd(), 'public/Inter-SemiBold.ttf')
   console.log('Loading font from:', fontPath)
   const fontData = await readFile(fontPath)
-  markFontLoaded(
+  fontManager.markLoaded(
     'Inter',
     'SemiBold',
     fontData.buffer.slice(fontData.byteOffset, fontData.byteOffset + fontData.byteLength)
@@ -49,12 +52,12 @@ async function main() {
         spread: 0
       }
     ]
-  }
+  } satisfies Partial<SceneNode>
 
-  const textNode = graph.createNode('TEXT', pageId, textProps as any)
+  const textNode = graph.createNode('TEXT', pageId, textProps)
   const nodeId = textNode.id
 
-  const surface = ck.MakeSurface(800, 300)!
+  const surface = expectDefined(ck.MakeSurface(800, 300), 'CanvasKit surface')
   const renderer = new SkiaRenderer(ck, surface)
   renderer.fontProvider = fontProvider
   renderer.fontsLoaded = true

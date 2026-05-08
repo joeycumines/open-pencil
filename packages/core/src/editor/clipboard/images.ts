@@ -1,6 +1,6 @@
-import { computeImageHash } from '#core/figma-api'
-
+import { resolvePasteTarget } from '#core/editor/clipboard/paste-target'
 import type { EditorContext } from '#core/editor/types'
+import { computeImageHash } from '#core/figma-api'
 import type { Fill } from '#core/scene-graph'
 
 const IMAGE_MAX_DIMENSION = 4096
@@ -39,7 +39,7 @@ export function createClipboardImageActions(ctx: EditorContext) {
   ): string | null {
     const hash = storeImage(bytes)
     const displayName = name.replace(/\.[^.]+$/, '')
-    const pid = ctx.state.currentPageId
+    const pid = resolvePasteTarget(ctx)
     const fill: Fill = {
       type: 'IMAGE',
       imageHash: hash,
@@ -69,7 +69,7 @@ export function createClipboardImageActions(ctx: EditorContext) {
         ctx.graph.images.delete(hash)
         const next = new Set(ctx.state.selectedIds)
         next.delete(id)
-        ctx.state.selectedIds = next
+        ctx.setSelectedIds(next)
       }
     })
     return id
@@ -98,7 +98,7 @@ export function createClipboardImageActions(ctx: EditorContext) {
       curX += p.w + IMAGE_GAP
     }
     if (ids.length) {
-      ctx.state.selectedIds = new Set(ids)
+      ctx.setSelectedIds(new Set(ids))
       ctx.requestRender()
     }
   }

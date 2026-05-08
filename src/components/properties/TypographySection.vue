@@ -4,7 +4,7 @@ import { ToggleGroupItem, ToggleGroupRoot } from 'reka-ui'
 import { TypographyControlsRoot, useI18n } from '@open-pencil/vue'
 
 import FontPicker from '@/components/FontPicker.vue'
-import ScrubInput from '@/components/ScrubInput.vue'
+import FontSettingsPopover from '@/components/FontSettings/FontSettingsPopover.vue'
 import VariableScrubInput from '@/components/properties/VariableScrubInput.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -13,10 +13,11 @@ import { loadFont } from '@/app/editor/fonts'
 
 const { panels } = useI18n()
 const sectionCls = useSectionUI()
+const fontLoader = { load: loadFont }
 </script>
 
 <template>
-  <TypographyControlsRoot v-slot="ctx" :load-font="loadFont">
+  <TypographyControlsRoot v-slot="ctx" :font-loader="fontLoader">
     <div v-if="ctx.node.value" data-test-id="typography-section" :class="sectionCls.wrapper">
       <label class="mb-1.5 block text-[11px] text-muted">{{ panels.typography }}</label>
 
@@ -24,8 +25,9 @@ const sectionCls = useSectionUI()
         <FontPicker
           class="min-w-0 flex-1"
           :model-value="ctx.node.value.fontFamily"
-          @select="ctx.setFamily"
+          @select="ctx.actions.setFamily"
         />
+        <FontSettingsPopover />
         <Tip
           v-if="ctx.hasMissingFonts.value"
           :label="
@@ -46,7 +48,7 @@ const sectionCls = useSectionUI()
         <AppSelect
           :model-value="ctx.node.value.fontWeight"
           :options="ctx.weights"
-          @update:model-value="ctx.setWeight(+$event)"
+          @update:model-value="ctx.actions.setWeight(+$event)"
         />
         <VariableScrubInput
           class="flex-1"
@@ -55,36 +57,40 @@ const sectionCls = useSectionUI()
           :max="1000"
           :node-id="ctx.node.value.id"
           binding-path="fontSize"
-          @update:model-value="ctx.updateProp('fontSize', $event)"
-          @commit="(v: number, p: number) => ctx.commitProp('fontSize', v, p)"
+          @update:model-value="ctx.actions.updateProp('fontSize', $event)"
+          @commit="(v: number, p: number) => ctx.actions.commitProp('fontSize', v, p)"
         />
       </div>
 
       <div class="mb-1.5 flex gap-1.5">
-        <ScrubInput
+        <VariableScrubInput
           class="flex-1"
           :model-value="
             ctx.node.value.lineHeight ?? Math.round((ctx.node.value.fontSize || 14) * 1.2)
           "
           :min="0"
-          @update:model-value="ctx.updateProp('lineHeight', $event)"
-          @commit="(v: number, p: number) => ctx.commitProp('lineHeight', v, p)"
+          :node-id="ctx.node.value.id"
+          binding-path="lineHeight"
+          @update:model-value="ctx.actions.updateProp('lineHeight', $event)"
+          @commit="(v: number, p: number) => ctx.actions.commitProp('lineHeight', v, p)"
         >
           <template #icon>
             <icon-lucide-baseline class="size-3" />
           </template>
-        </ScrubInput>
-        <ScrubInput
+        </VariableScrubInput>
+        <VariableScrubInput
           class="flex-1"
           suffix="%"
           :model-value="ctx.node.value.letterSpacing"
-          @update:model-value="ctx.updateProp('letterSpacing', $event)"
-          @commit="(v: number, p: number) => ctx.commitProp('letterSpacing', v, p)"
+          :node-id="ctx.node.value.id"
+          binding-path="letterSpacing"
+          @update:model-value="ctx.actions.updateProp('letterSpacing', $event)"
+          @commit="(v: number, p: number) => ctx.actions.commitProp('letterSpacing', v, p)"
         >
           <template #icon>
             <icon-lucide-a-large-small class="size-3" />
           </template>
-        </ScrubInput>
+        </VariableScrubInput>
       </div>
 
       <div class="mb-1.5">
@@ -96,7 +102,7 @@ const sectionCls = useSectionUI()
             { value: 'LTR', label: 'LTR' },
             { value: 'RTL', label: 'RTL' }
           ]"
-          @update:model-value="ctx.setDirection($event as 'AUTO' | 'LTR' | 'RTL')"
+          @update:model-value="ctx.actions.setDirection($event as 'AUTO' | 'LTR' | 'RTL')"
         />
       </div>
 
@@ -105,7 +111,7 @@ const sectionCls = useSectionUI()
           type="single"
           class="flex gap-0.5"
           :model-value="ctx.node.value.textAlignHorizontal"
-          @update:model-value="ctx.onAlignChange"
+          @update:model-value="ctx.actions.align"
         >
           <ToggleGroupItem
             v-for="align in ['LEFT', 'CENTER', 'RIGHT'] as const"
@@ -124,7 +130,7 @@ const sectionCls = useSectionUI()
               data-test-id="typography-bold-button"
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 font-bold text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('bold') ? 'on' : 'off'"
-              @click="ctx.toggleBold"
+              @click="ctx.actions.toggleBold"
             >
               <icon-lucide-bold class="size-3.5" />
             </button>
@@ -133,7 +139,7 @@ const sectionCls = useSectionUI()
             <button
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('italic') ? 'on' : 'off'"
-              @click="ctx.toggleItalic"
+              @click="ctx.actions.toggleItalic"
             >
               <icon-lucide-italic class="size-3.5" />
             </button>
@@ -142,7 +148,7 @@ const sectionCls = useSectionUI()
             <button
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('underline') ? 'on' : 'off'"
-              @click="ctx.toggleDecoration('UNDERLINE')"
+              @click="ctx.actions.toggleDecoration('UNDERLINE')"
             >
               <icon-lucide-underline class="size-3.5" />
             </button>
@@ -151,7 +157,7 @@ const sectionCls = useSectionUI()
             <button
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('strikethrough') ? 'on' : 'off'"
-              @click="ctx.toggleDecoration('STRIKETHROUGH')"
+              @click="ctx.actions.toggleDecoration('STRIKETHROUGH')"
             >
               <icon-lucide-strikethrough class="size-3.5" />
             </button>

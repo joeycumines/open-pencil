@@ -1,6 +1,5 @@
-import { resetFontService } from '#core/text/fonts'
-
 import type { SkiaRenderer } from '#core/canvas/renderer'
+import { fontManager } from '#core/text/fonts'
 
 export function destroyRenderer(r: SkiaRenderer): void {
   if (r.destroyed) return
@@ -28,7 +27,7 @@ export function destroyRenderer(r: SkiaRenderer): void {
   r.fontProvider?.delete()
   r.fontProvider = null
   r.fontsLoaded = false
-  resetFontService()
+  fontManager.detachProvider()
   r.rulerBgPaint.delete()
   r.rulerTickPaint.delete()
   r.rulerTextPaint.delete()

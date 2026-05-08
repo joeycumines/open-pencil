@@ -4,16 +4,16 @@ import {
   parseOpenPencilClipboard
 } from '#core/clipboard'
 import { computeAllLayouts } from '#core/layout'
+import type { SceneNode } from '#core/scene-graph'
+import type { Vector } from '#core/types'
 
 import { createClipboardCopyActions } from './clipboard/copy'
 import { createClipboardExportActions } from './clipboard/export'
 import { createClipboardFontActions } from './clipboard/fonts'
 import { createClipboardImageActions } from './clipboard/images'
+import { resolvePasteTarget } from './clipboard/paste-target'
 import { createClipboardPlacementActions } from './clipboard/placement'
 import { collectSubtrees, restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
-
-import type { SceneNode } from '#core/scene-graph'
-import type { Vector } from '#core/types'
 import type { EditorContext } from './types'
 
 export function createClipboardActions(ctx: EditorContext) {
@@ -39,7 +39,7 @@ export function createClipboardActions(ctx: EditorContext) {
     }
 
     if (newRootIds.length > 0) {
-      ctx.state.selectedIds = new Set(newRootIds)
+      ctx.setSelectedIds(new Set(newRootIds))
       ctx.undo.push({
         label: 'Duplicate',
         forward: () => {
@@ -49,11 +49,11 @@ export function createClipboardActions(ctx: EditorContext) {
             const parentId = snapshot.parentId ?? ctx.state.currentPageId
             restoreSubtree(ctx.graph, snapshot, parentId, allSnapshots)
           }
-          ctx.state.selectedIds = new Set(newRootIds)
+          ctx.setSelectedIds(new Set(newRootIds))
         },
         inverse: () => {
           for (const id of newRootIds.slice().reverse()) ctx.graph.deleteNode(id)
-          ctx.state.selectedIds = prevSelection
+          ctx.setSelectedIds(prevSelection)
         }
       })
     }
@@ -69,21 +69,15 @@ export function createClipboardActions(ctx: EditorContext) {
     const figma = await parseFigmaClipboard(html)
     if (figma) {
       const prevSelection = new Set(ctx.state.selectedIds)
-      const created = importClipboardNodes(
-        figma.nodes,
-        ctx.graph,
-        ctx.state.currentPageId,
-        0,
-        0,
-        figma.blobs
-      )
+      const pasteTarget = resolvePasteTarget(ctx)
+      const created = importClipboardNodes(figma.nodes, ctx.graph, pasteTarget, 0, 0, figma.blobs)
       if (created.length > 0) {
         const { width: viewW, height: viewH } = ctx.getViewportSize()
         const cx = cursorPos?.x ?? (-ctx.state.panX + viewW / 2) / ctx.state.zoom
         const cy = cursorPos?.y ?? (-ctx.state.panY + viewH / 2) / ctx.state.zoom
         placementActions.centerNodesAt(created, cx, cy)
         computeAllLayouts(ctx.graph, ctx.state.currentPageId)
-        ctx.state.selectedIds = new Set(created)
+        ctx.setSelectedIds(new Set(created))
 
         const allNodes = collectSubtrees(ctx.graph, created)
         const pageId = ctx.state.currentPageId
@@ -97,12 +91,12 @@ export function createClipboardActions(ctx: EditorContext) {
               })
             }
             computeAllLayouts(ctx.graph, pageId)
-            ctx.state.selectedIds = new Set(created)
+            ctx.setSelectedIds(new Set(created))
           },
           inverse: () => {
             for (const id of [...created].reverse()) ctx.graph.deleteNode(id)
             computeAllLayouts(ctx.graph, pageId)
-            ctx.state.selectedIds = prevSelection
+            ctx.setSelectedIds(prevSelection)
           }
         })
         void fontActions.loadFontsForNodes(created)
@@ -133,12 +127,13 @@ export function createClipboardActions(ctx: EditorContext) {
       return node.id
     }
 
-    for (const node of nodes) created.push(createNodeTree(node, ctx.state.currentPageId))
+    const pasteTarget = resolvePasteTarget(ctx)
+    for (const node of nodes) created.push(createNodeTree(node, pasteTarget))
     if (created.length === 0) return
 
     if (cursorPos) placementActions.centerNodesAt(created, cursorPos.x, cursorPos.y)
     computeAllLayouts(ctx.graph, ctx.state.currentPageId)
-    ctx.state.selectedIds = new Set(created)
+    ctx.setSelectedIds(new Set(created))
 
     const allNodes = collectSubtrees(ctx.graph, created)
     const pageId = ctx.state.currentPageId
@@ -152,12 +147,12 @@ export function createClipboardActions(ctx: EditorContext) {
           })
         }
         computeAllLayouts(ctx.graph, pageId)
-        ctx.state.selectedIds = new Set(created)
+        ctx.setSelectedIds(new Set(created))
       },
       inverse: () => {
         for (const id of [...created].reverse()) ctx.graph.deleteNode(id)
         computeAllLayouts(ctx.graph, pageId)
-        ctx.state.selectedIds = prevSelection
+        ctx.setSelectedIds(prevSelection)
       }
     })
   }
@@ -193,7 +188,7 @@ export function createClipboardActions(ctx: EditorContext) {
       label: 'Delete',
       forward: () => {
         for (const { id } of entries) ctx.graph.deleteNode(id)
-        ctx.state.selectedIds = new Set()
+        ctx.setSelectedIds(new Set())
       },
       inverse: () => {
         for (const { id, parentId, index, subtree } of [...entries].reverse()) {
@@ -201,10 +196,10 @@ export function createClipboardActions(ctx: EditorContext) {
           if (rootSnap) restoreSubtree(ctx.graph, rootSnap, parentId, subtree)
           if (index >= 0) ctx.graph.reorderChild(id, parentId, index)
         }
-        ctx.state.selectedIds = prevSelection
+        ctx.setSelectedIds(prevSelection)
       }
     })
-    ctx.state.selectedIds = new Set()
+    ctx.setSelectedIds(new Set())
   }
 
   const copyActions = createClipboardCopyActions(ctx)

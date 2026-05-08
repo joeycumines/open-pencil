@@ -1,9 +1,9 @@
-import { computeDescendantVisualBounds } from '#core/geometry'
+import type { Canvas } from 'canvaskit-wasm'
 
 import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
 import type { EditorState } from '#core/editor/types'
+import { computeDescendantVisualBounds } from '#core/geometry'
 import type { SceneGraph } from '#core/scene-graph'
-import type { Canvas } from 'canvaskit-wasm'
 
 export function renderSceneToCanvas(
   r: SkiaRenderer,
@@ -38,9 +38,6 @@ export function renderFromEditorState(
   dpr = 1,
   layer: RenderLayer = 'full'
 ): void {
-  const extendedState = state as EditorState & {
-    nodeEditState?: RenderOverlays['nodeEditState']
-  }
   r.dpr = dpr
   r.panX = state.panX
   r.panY = state.panY
@@ -72,7 +69,7 @@ export function renderFromEditorState(
             cursorY: state.penCursorY ?? undefined
           } as RenderOverlays['penState'])
         : null,
-      nodeEditState: extendedState.nodeEditState ?? null,
+      nodeEditState: state.nodeEditState ?? null,
       remoteCursors: state.remoteCursors
     },
     state.sceneVersion,

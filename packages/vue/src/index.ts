@@ -2,6 +2,8 @@ export type {
   Editor,
   EditorState,
   EditorOptions,
+  EditorEvents,
+  EditorEventName,
   Tool,
   EditorToolDef
 } from '@open-pencil/core/editor'
@@ -27,6 +29,7 @@ export { useNodeProps, MIXED } from '#vue/controls/node-props/use'
 export type { MixedValue } from '#vue/controls/node-props/use'
 export { useSceneComputed } from '#vue/internal/scene-computed/use'
 export { useSelectionState } from '#vue/editor/selection-state/use'
+export { useEditorEvent } from '#vue/editor/events/use'
 export { useSelectionCapabilities } from '#vue/editor/selection-capabilities/use'
 
 /** Command and menu composition helpers. */
@@ -101,6 +104,7 @@ export {
 export type { ColorFieldFormat, OkHCLControls } from '#vue/primitives/ColorPicker'
 export { FillPickerRoot } from '#vue/primitives/FillPicker'
 export { FontPickerRoot } from '#vue/primitives/FontPicker'
+export type { FontPickerUi } from '#vue/primitives/FontPicker'
 export {
   GradientEditorRoot,
   GradientEditorBar,
@@ -125,6 +129,9 @@ export type { ScrubInputContext } from '#vue/primitives/ScrubInput'
 export { TypographyControlsRoot } from '#vue/primitives/TypographyControls'
 export { ToolbarRoot, ToolbarItem, useToolbar } from '#vue/primitives/Toolbar'
 export type { ToolbarContext } from '#vue/primitives/Toolbar'
+
+/** DOM event helpers for cast-free template bindings. */
+export { blurTarget, inputNumberValue, inputValue, selectTarget } from '#vue/shared/dom-events'
 
 /** Internationalization. */
 export { useI18n } from '#vue/i18n'

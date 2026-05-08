@@ -1,13 +1,11 @@
-import { createPenDrag, handlePenDragMove } from '#vue/canvas/pen-input/drag'
-import { handlePenNodeEditDown } from '#vue/shared/input/node-edit'
-
-import { PEN_CLOSE_THRESHOLD } from '@open-pencil/core/constants'
-
-import type { DragState } from '#vue/shared/input/types'
-import type { Editor } from '@open-pencil/core/editor'
 import type { Ref } from 'vue'
 
-type NodeEditState = NonNullable<Editor['state']> & { nodeEditState?: object | null }
+import { PEN_CLOSE_THRESHOLD } from '@open-pencil/core/constants'
+import type { Editor } from '@open-pencil/core/editor'
+
+import { createPenDrag, handlePenDragMove } from '#vue/canvas/pen-input/drag'
+import { handlePenNodeEditDown } from '#vue/shared/input/node-edit'
+import type { DragState } from '#vue/shared/input/types'
 
 type SetDrag = (drag: DragState) => void
 
@@ -22,7 +20,7 @@ export function startPenInput(
   editor.state.penCursorX = null
   editor.state.penCursorY = null
 
-  const nodeEditState = (editor.state as NodeEditState).nodeEditState
+  const nodeEditState = editor.state.nodeEditState
   if (nodeEditState) {
     handlePenNodeEditDown(e, cx, cy, editor)
     return true
