@@ -7,9 +7,8 @@ import { decodeBinarySchema, compileSchema, ByteBuffer } from '#core/kiwi/schema
 
 /**
  * Deduplicates pluginData/pluginRelaunchData entries on raw NodeChange objects.
- * Some .fig files (like slop-funnel.fig with 10.9M entries where only ~5.5K
- * are unique) have millions of identical entries; deduplicateNodeChangePluginData
- * prevents them from reaching the scene graph.
+ * Some .fig files have millions of identical entries where only a small
+ * fraction are unique by full triple.
  * Full-triple key (id+key+value) preserves multi-entry subsystems like OkHCL.
  */
 export function deduplicateNodeChangePluginData(nodeChanges: NodeChange[]): void {
