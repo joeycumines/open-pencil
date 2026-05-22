@@ -8,11 +8,31 @@ import {
   ContextMenuSubContent,
   ContextMenuPortal
 } from 'reka-ui'
-import { useEditorCommands, useI18n, useMenuModel, useSelectionState } from '@open-pencil/vue'
+import IconCombine from '~icons/lucide/combine'
+import IconCopyMinus from '~icons/lucide/copy-minus'
+import IconCopyX from '~icons/lucide/copy-x'
+import IconListCollapse from '~icons/lucide/list-collapse'
+import IconSpline from '~icons/lucide/spline'
+import IconTypeOutline from '~icons/lucide/type-outline'
+import IconSquaresIntersect from '~icons/lucide/squares-intersect'
+import {
+  vTestId,
+  useEditorCommands,
+  useI18n,
+  useMenuModel,
+  useSelectionState,
+  editorCommandMetadata,
+  formatShortcut
+} from '@open-pencil/vue'
+import type { Component } from 'vue'
+import type { EditorCommandId } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { createCanvasMenuActions } from '@/app/editor/canvas/menu-actions'
-import { canvasMenuItemClass, canvasMenuShortcutClass } from '@/app/editor/canvas/menu-model'
+import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
+import { createCanvasMenuActions } from '@/app/editor/canvas/menu/actions'
+import { useCanvasContextMenu } from '@/app/editor/canvas/menu/context'
+import { canvasMenuItemClass, canvasMenuShortcutClass } from '@/app/editor/canvas/menu/model'
+import AppShortcutText from '@/components/ui/AppShortcutText.vue'
 import { menu, useMenuUI } from '@/components/ui/menu'
 
 const store = useEditorStore()
@@ -22,8 +42,9 @@ const { getCommand } = useEditorCommands()
 const { canvasMenu } = useMenuModel()
 const { menu: t } = useI18n()
 
-const { ids, execCommand, clipboardWrite, copyNodeId, copyXPath, copyAsPNG } =
-  createCanvasMenuActions(store, selectedIds)
+const canvasMenuActions = createCanvasMenuActions(store, selectedIds)
+const { execCommand } = canvasMenuActions
+const contextMenu = useCanvasContextMenu(canvasMenu, hasSelection, editor, canvasMenuActions, t)
 
 const menuCls = useMenuUI({
   content: 'min-w-56 shadow-[0_8px_30px_rgb(0_0_0/0.4)] animate-in fade-in zoom-in-95',
@@ -33,22 +54,29 @@ const componentMenu = menu({ tone: 'component' })
 
 const cls = {
   menu: menuCls.content,
+  submenu: menuCls.content.replace('min-w-56', 'min-w-0 w-max'),
   item: menuCls.item,
   component: componentMenu.item(),
   sep: menuCls.separator
 }
 
-const staticContextCommandIds = new Set(['selection.duplicate', 'selection.delete'])
+const booleanCommandIcons = {
+  'selection.booleanUnion': IconCombine,
+  'selection.booleanSubtract': IconCopyMinus,
+  'selection.booleanIntersect': IconSquaresIntersect,
+  'selection.booleanExclude': IconCopyX,
+  'selection.flatten': IconListCollapse,
+  'selection.outlineText': IconTypeOutline,
+  'selection.outlineStroke': IconSpline
+} satisfies Partial<Record<EditorCommandId, Component>>
 
-const contextCommandTestIds: Record<string, string> = {
-  'selection.duplicate': 'context-duplicate',
-  'selection.delete': 'context-delete',
-  'selection.bringToFront': 'context-bring-to-front',
-  'selection.sendToBack': 'context-send-to-back',
-  'selection.group': 'context-group',
-  'selection.createComponent': 'context-create-component',
-  'selection.toggleVisibility': 'context-toggle-visibility',
-  'selection.toggleLock': 'context-toggle-lock'
+function contextCommandTestId(id: EditorCommandId | undefined): string | undefined {
+  return id ? editorCommandMetadata(id).contextTestId : undefined
+}
+
+function contextCommandIcon(id: EditorCommandId | undefined): Component | undefined {
+  if (!id) return undefined
+  return (booleanCommandIcons as Partial<Record<EditorCommandId, Component>>)[id]
 }
 </script>
 
@@ -61,7 +89,7 @@ const contextCommandTestIds: Record<string, string> = {
       @select="execCommand('copy')"
     >
       <span>{{ t.copy }}</span
-      ><span class="text-[11px] text-muted">⌘C</span>
+      ><AppShortcutText>{{ appMenuShortcutLabel('copy') }}</AppShortcutText>
     </ContextMenuItem>
     <ContextMenuItem
       data-test-id="context-cut"
@@ -70,11 +98,19 @@ const contextCommandTestIds: Record<string, string> = {
       @select="execCommand('cut')"
     >
       <span>{{ t.cut }}</span
-      ><span class="text-[11px] text-muted">⌘X</span>
+      ><AppShortcutText>{{ appMenuShortcutLabel('cut') }}</AppShortcutText>
     </ContextMenuItem>
     <ContextMenuItem data-test-id="context-paste" :class="cls.item" @select="execCommand('paste')">
       <span>{{ t.pasteHere }}</span
-      ><span class="text-[11px] text-muted">⌘V</span>
+      ><AppShortcutText>{{ appMenuShortcutLabel('paste') }}</AppShortcutText>
+    </ContextMenuItem>
+    <ContextMenuItem
+      data-test-id="context-paste-to-replace"
+      :class="cls.item"
+      :disabled="!hasSelection"
+      @select="canvasMenuActions.pasteToReplace"
+    >
+      <span>{{ t.pasteToReplace }}</span>
     </ContextMenuItem>
     <ContextMenuItem
       data-test-id="context-duplicate"
@@ -82,7 +118,10 @@ const contextCommandTestIds: Record<string, string> = {
       :disabled="!hasSelection"
       @select="getCommand('selection.duplicate').run()"
     >
-      <span>Duplicate</span><span class="text-[11px] text-muted">⌘D</span>
+      <span>{{ getCommand('selection.duplicate').label }}</span
+      ><AppShortcutText>{{
+        formatShortcut(editorCommandMetadata('selection.duplicate').shortcut)
+      }}</AppShortcutText>
     </ContextMenuItem>
     <ContextMenuItem
       data-test-id="context-delete"
@@ -90,29 +129,37 @@ const contextCommandTestIds: Record<string, string> = {
       :disabled="!hasSelection"
       @select="getCommand('selection.delete').run()"
     >
-      <span>Delete</span><span class="text-[11px] text-muted">⌫</span>
+      <span>{{ getCommand('selection.delete').label }}</span
+      ><AppShortcutText>{{ editorCommandMetadata('selection.delete').shortcut }}</AppShortcutText>
     </ContextMenuItem>
 
-    <template v-for="(item, i) in canvasMenu" :key="`menu-${i}`">
-      <template v-if="!item.separator && item.id && staticContextCommandIds.has(item.id)" />
-      <ContextMenuSeparator v-else-if="item.separator" :class="cls.sep" />
+    <template v-for="(item, i) in contextMenu" :key="`menu-${i}`">
+      <ContextMenuSeparator v-if="item.separator" :class="cls.sep" />
       <ContextMenuSub v-else-if="item.sub">
-        <ContextMenuSubTrigger :class="cls.item">
+        <ContextMenuSubTrigger v-test-id="item.testId" :class="cls.item">
           <span>{{ item.label }}</span
           ><span class="text-sm text-muted">›</span>
         </ContextMenuSubTrigger>
         <ContextMenuPortal>
-          <ContextMenuSubContent :class="cls.menu">
+          <ContextMenuSubContent :class="cls.submenu">
             <ContextMenuItem
               v-for="(sub, j) in item.sub"
               :key="j"
               :class="cls.item"
+              v-test-id="sub.separator ? undefined : sub.testId"
               :disabled="sub.separator ? true : sub.disabled"
               @select="!sub.separator && sub.action?.()"
             >
               <template v-if="!sub.separator">
-                <span class="flex-1">{{ sub.label }}</span>
-                <span v-if="sub.shortcut" class="text-[11px] text-muted">{{ sub.shortcut }}</span>
+                <span class="flex min-w-0 flex-1 items-center gap-2">
+                  <component
+                    :is="contextCommandIcon(sub.id)"
+                    v-if="contextCommandIcon(sub.id)"
+                    class="size-3.5 shrink-0 text-muted"
+                  />
+                  <span class="truncate">{{ sub.label }}</span>
+                </span>
+                <AppShortcutText v-if="sub.shortcut">{{ sub.shortcut }}</AppShortcutText>
               </template>
             </ContextMenuItem>
           </ContextMenuSubContent>
@@ -120,12 +167,19 @@ const contextCommandTestIds: Record<string, string> = {
       </ContextMenuSub>
       <ContextMenuItem
         v-else
-        :data-test-id="item.id ? contextCommandTestIds[item.id] : undefined"
+        v-test-id="contextCommandTestId(item.id)"
         :class="canvasMenuItemClass(item.label, cls)"
         :disabled="item.disabled"
         @select="item.action?.()"
       >
-        <span class="flex-1">{{ item.label }}</span>
+        <span class="flex min-w-0 flex-1 items-center gap-2">
+          <component
+            :is="contextCommandIcon(item.id)"
+            v-if="contextCommandIcon(item.id)"
+            class="size-3.5 shrink-0 text-muted"
+          />
+          <span class="truncate">{{ item.label }}</span>
+        </span>
         <span
           v-if="item.shortcut"
           class="text-[11px]"
@@ -133,48 +187,6 @@ const contextCommandTestIds: Record<string, string> = {
           >{{ item.shortcut }}</span
         >
       </ContextMenuItem>
-    </template>
-
-    <template v-if="hasSelection">
-      <ContextMenuSeparator :class="cls.sep" />
-
-      <ContextMenuSub>
-        <ContextMenuSubTrigger data-test-id="context-copy-paste-as" :class="cls.item">
-          <span>{{ t.copyPasteAs }}</span
-          ><span class="text-sm text-muted">›</span>
-        </ContextMenuSubTrigger>
-        <ContextMenuPortal>
-          <ContextMenuSubContent :class="cls.menu">
-            <ContextMenuItem
-              :class="cls.item"
-              @select="clipboardWrite(editor.copySelectionAsText(ids()), 'text')"
-              >{{ t.copyAsText }}</ContextMenuItem
-            >
-            <ContextMenuItem
-              data-test-id="context-copy-as-svg"
-              :class="cls.item"
-              @select="clipboardWrite(editor.copySelectionAsSVG(ids()), 'SVG')"
-              >{{ t.copyAsSVG }}</ContextMenuItem
-            >
-            <ContextMenuItem :class="cls.item" @select="copyAsPNG">
-              <span>{{ t.copyAsPNG }}</span
-              ><span class="text-[11px] text-muted">⇧⌘C</span>
-            </ContextMenuItem>
-            <ContextMenuItem
-              data-test-id="context-copy-as-jsx"
-              :class="cls.item"
-              @select="clipboardWrite(editor.copySelectionAsJSX(ids()), 'JSX')"
-              >{{ t.copyAsJSX }}</ContextMenuItem
-            >
-            <ContextMenuItem :class="cls.item" @select="copyNodeId">{{
-              t.copyNodeId
-            }}</ContextMenuItem>
-            <ContextMenuItem :class="cls.item" @select="copyXPath">{{
-              t.copyXPath
-            }}</ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuPortal>
-      </ContextMenuSub>
     </template>
   </ContextMenuContent>
 </template>

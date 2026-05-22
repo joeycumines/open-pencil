@@ -39,10 +39,18 @@ export function createSelectionCommands({
     'selection.group': {
       id: 'selection.group',
       get label() {
-        return t.value.group
+        return t.value.groupSelection
       },
       enabled: capabilities.canGroup,
       run: () => editor.groupSelected()
+    },
+    'selection.frameSelection': {
+      id: 'selection.frameSelection',
+      get label() {
+        return t.value.frameSelection
+      },
+      enabled: capabilities.canFrameSelection,
+      run: () => editor.frameSelection()
     },
     'selection.ungroup': {
       id: 'selection.ungroup',
@@ -122,7 +130,7 @@ export function createSelectionCommands({
     'selection.toggleVisibility': {
       id: 'selection.toggleVisibility',
       get label() {
-        return t.value.toggleVisibility
+        return t.value.showHide
       },
       enabled: capabilities.canToggleVisibility,
       run: () => editor.toggleVisibility()
@@ -130,10 +138,82 @@ export function createSelectionCommands({
     'selection.toggleLock': {
       id: 'selection.toggleLock',
       get label() {
-        return t.value.toggleLock
+        return t.value.lockUnlock
       },
       enabled: capabilities.canToggleLock,
       run: () => editor.toggleLock()
+    },
+    'selection.flipHorizontal': {
+      id: 'selection.flipHorizontal',
+      get label() {
+        return t.value.flipHorizontal
+      },
+      enabled: capabilities.canFlip,
+      run: () => editor.flipNodes([...selection.selectedIds.value], 'horizontal')
+    },
+    'selection.flipVertical': {
+      id: 'selection.flipVertical',
+      get label() {
+        return t.value.flipVertical
+      },
+      enabled: capabilities.canFlip,
+      run: () => editor.flipNodes([...selection.selectedIds.value], 'vertical')
+    },
+    'selection.booleanUnion': {
+      id: 'selection.booleanUnion',
+      get label() {
+        return t.value.unionSelection
+      },
+      enabled: capabilities.canBooleanOperation,
+      run: () => editor.booleanOperationSelected('UNION')
+    },
+    'selection.booleanSubtract': {
+      id: 'selection.booleanSubtract',
+      get label() {
+        return t.value.subtractSelection
+      },
+      enabled: capabilities.canBooleanOperation,
+      run: () => editor.booleanOperationSelected('SUBTRACT')
+    },
+    'selection.booleanIntersect': {
+      id: 'selection.booleanIntersect',
+      get label() {
+        return t.value.intersectSelection
+      },
+      enabled: capabilities.canBooleanOperation,
+      run: () => editor.booleanOperationSelected('INTERSECT')
+    },
+    'selection.booleanExclude': {
+      id: 'selection.booleanExclude',
+      get label() {
+        return t.value.excludeSelection
+      },
+      enabled: capabilities.canBooleanOperation,
+      run: () => editor.booleanOperationSelected('EXCLUDE')
+    },
+    'selection.flatten': {
+      id: 'selection.flatten',
+      get label() {
+        return t.value.flattenSelection
+      },
+      enabled: capabilities.canFlatten,
+      run: () => editor.flattenSelected()
+    },
+    'selection.outlineText': {
+      id: 'selection.outlineText',
+      get label() {
+        return t.value.outlineText
+      },
+      enabled: capabilities.canOutlineText,
+      run: () => editor.outlineTextSelected()
+    },
+    'selection.outlineStroke': {
+      id: 'selection.outlineStroke',
+      get label() {
+        return t.value.outlineStroke
+      },
+      enabled: capabilities.canOutlineStroke,
+      run: () => editor.outlineStrokeSelected()
     },
     'selection.moveToPage': {
       id: 'selection.moveToPage',

@@ -4,18 +4,16 @@ import { useEditorCommands, useI18n } from '@open-pencil/vue'
 import type { MenuEntry } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { createSharedEditorMenuActions } from '@/app/shell/menu/editor-actions'
 import { APP_MENU_SCHEMA } from '@/app/shell/menu/schema'
 import type { AppMenuActionItem, AppMenuEntry, AppMenuGroupSchema } from '@/app/shell/menu/schema'
+import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { useAppTheme } from '@/app/shell/theme'
 
 export interface AppMenuGroup {
   label: string
   items: MenuEntry[]
-}
-
-function shortcutLabel(shortcut: string | undefined, mod: string): string | undefined {
-  return shortcut?.replaceAll('MOD', mod)
 }
 
 function isVisible(entry: { target?: string }): boolean {
@@ -26,7 +24,7 @@ function isSeparator(entry: AppMenuEntry): entry is Extract<AppMenuEntry, { type
   return entry.type === 'separator'
 }
 
-export function useAppMenu(mod: string) {
+export function useAppMenu() {
   const store = useEditorStore()
   const { menuItem: commandMenuItem } = useEditorCommands()
   const { locale, availableLocales, localeLabels, setLocale } = useI18n()
@@ -46,24 +44,6 @@ export function useAppMenu(mod: string) {
     if (store.state.selectedIds.size > 0) void store.exportSelection(1, format)
   }
 
-  function alignSelected(axis: 'horizontal' | 'vertical', align: 'min' | 'center' | 'max') {
-    store.alignNodes([...store.state.selectedIds], axis, align)
-  }
-
-  function updateSelectedText(updates: {
-    fontWeight?: number
-    italic?: boolean
-    textDecoration?: 'NONE' | 'UNDERLINE'
-  }) {
-    for (const node of store.selectedNodes.value) {
-      if (node.type === 'TEXT') store.updateNodeWithUndo(node.id, updates, 'Format text')
-    }
-  }
-
-  function selectedTextNode() {
-    return store.selectedNodes.value.find((item) => item.type === 'TEXT')
-  }
-
   const actions: Partial<Record<string, () => void>> = {
     new: () => {
       void import('@/app/tabs').then((m) => m.createTab())
@@ -72,37 +52,11 @@ export function useAppMenu(mod: string) {
     save: () => void store.saveFigFile(),
     'save-as': () => void store.saveFigFileAs(),
     'export-selection': () => exportSelection('png'),
+    cut: () => document.execCommand('cut'),
     'export-png': () => exportSelection('png'),
     'export-svg': () => exportSelection('svg'),
     'export-fig': () => exportSelection('fig'),
-    'zoom-in': () => store.applyZoom(-100, window.innerWidth / 2, window.innerHeight / 2),
-    'zoom-out': () => store.applyZoom(100, window.innerWidth / 2, window.innerHeight / 2),
-    'toggle-ui': () => {
-      store.state.showUI = !store.state.showUI
-    },
-    'theme-light': () => setTheme('light'),
-    'theme-dark': () => setTheme('dark'),
-    'theme-auto': () => setTheme('auto'),
-    'text.bold': () => {
-      const node = selectedTextNode()
-      updateSelectedText({ fontWeight: node && node.fontWeight >= 700 ? 400 : 700 })
-    },
-    'text.italic': () => {
-      const node = selectedTextNode()
-      updateSelectedText({ italic: node ? !node.italic : true })
-    },
-    'text.underline': () => {
-      const node = selectedTextNode()
-      updateSelectedText({
-        textDecoration: node?.textDecoration === 'UNDERLINE' ? 'NONE' : 'UNDERLINE'
-      })
-    },
-    'align-left': () => alignSelected('horizontal', 'min'),
-    'align-center': () => alignSelected('horizontal', 'center'),
-    'align-right': () => alignSelected('horizontal', 'max'),
-    'align-top': () => alignSelected('vertical', 'min'),
-    'align-middle': () => alignSelected('vertical', 'center'),
-    'align-bottom': () => alignSelected('vertical', 'max')
+    ...createSharedEditorMenuActions(setTheme)
   }
 
   function itemAction(item: AppMenuActionItem): (() => void) | undefined {
@@ -154,12 +108,12 @@ export function useAppMenu(mod: string) {
     }
 
     if (entry.command) {
-      return commandMenuItem(entry.command, shortcutLabel(entry.shortcut, mod))
+      return commandMenuItem(entry.command, appMenuShortcutLabel(entry.id))
     }
 
     return {
       label: entry.label,
-      shortcut: shortcutLabel(entry.shortcut, mod),
+      shortcut: appMenuShortcutLabel(entry.id),
       action: itemAction(entry),
       checked: checked(entry),
       onCheckedChange: onCheckedChange(entry),

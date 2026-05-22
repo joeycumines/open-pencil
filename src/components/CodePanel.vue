@@ -9,6 +9,8 @@ import { JSX_REFERENCE, selectionToJSX } from '@open-pencil/core/design-jsx'
 import { useI18n, useSceneComputed } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import AppTextButton from '@/components/ui/AppTextButton.vue'
+import Tip from '@/components/ui/Tip.vue'
 
 import type { JSXFormat } from '@open-pencil/core/design-jsx'
 
@@ -61,38 +63,41 @@ function copyReference() {
     >
       <div class="flex items-center gap-1.5">
         <span class="text-[11px] text-muted">JSX</span>
-        <button
-          data-test-id="code-panel-format-toggle"
-          class="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
+        <AppTextButton
+          test-id="code-panel-format-toggle"
+          :ui="{ base: 'rounded px-1.5 py-0.5 text-[11px] hover:bg-hover' }"
           @click="toggleFormat"
         >
           {{ jsxFormat === 'openpencil' ? 'OpenPencil' : 'Tailwind' }}
-        </button>
+        </AppTextButton>
       </div>
       <div class="flex items-center gap-1">
-        <button
-          data-test-id="code-panel-copy-ref"
-          class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
-          title="Copy JSX prop reference to clipboard"
-          @click="copyReference"
-        >
-          <icon-lucide-check v-if="copiedRef" class="size-3 text-[var(--color-success)]" />
-          <icon-lucide-book-open v-else class="size-3" />
-        </button>
-        <button
-          data-test-id="code-panel-copy"
-          class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
+        <Tip :label="dialogs.copyJSXReference">
+          <AppTextButton
+            test-id="code-panel-copy-ref"
+            :ui="{
+              base: 'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-hover'
+            }"
+            @click="copyReference"
+          >
+            <icon-lucide-check v-if="copiedRef" class="size-3 text-[var(--color-success)]" />
+            <icon-lucide-book-open v-else class="size-3" />
+          </AppTextButton>
+        </Tip>
+        <AppTextButton
+          test-id="code-panel-copy"
+          :ui="{ base: 'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-hover' }"
           @click="copyCode"
         >
           <icon-lucide-check v-if="copied" class="size-3 text-[var(--color-success)]" />
           <icon-lucide-copy v-else class="size-3" />
           {{ copied ? dialogs.copied : dialogs.copy }}
-        </button>
+        </AppTextButton>
       </div>
     </div>
 
     <ScrollAreaRoot class="min-h-0 flex-1">
-      <ScrollAreaViewport class="size-full">
+      <ScrollAreaViewport class="code-highlight size-full">
         <div class="p-3">
           <div v-for="(html, i) in highlightedLines" :key="i" class="flex text-xs leading-5">
             <span
@@ -112,28 +117,3 @@ function copyReference() {
     </ScrollAreaRoot>
   </div>
 </template>
-
-<style scoped>
-.token.tag {
-  color: var(--color-code-tag);
-}
-.token.attr-name {
-  color: var(--color-code-attribute);
-}
-.token.attr-value,
-.token.string {
-  color: var(--color-code-string);
-}
-.token.number {
-  color: var(--color-code-number);
-}
-.token.punctuation {
-  color: var(--color-code-punctuation);
-}
-.token.boolean {
-  color: var(--color-code-number);
-}
-.token.keyword {
-  color: var(--color-code-attribute);
-}
-</style>

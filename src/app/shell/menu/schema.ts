@@ -31,17 +31,16 @@ export const APP_MENU_SCHEMA = [
   {
     label: 'File',
     items: [
-      { id: 'new', label: 'New', shortcut: 'MOD+N', accelerator: 'CmdOrCtrl+N' },
-      { id: 'open', label: 'Open…', shortcut: 'MOD+O', accelerator: 'CmdOrCtrl+O' },
+      { id: 'new', label: 'New', shortcut: 'MOD+N' },
+      { id: 'open', label: 'Open…', shortcut: 'MOD+O' },
       { type: 'separator' },
-      { id: 'save', label: 'Save', shortcut: 'MOD+S', accelerator: 'CmdOrCtrl+S' },
-      { id: 'save-as', label: 'Save As…', shortcut: 'MOD+⇧S', accelerator: 'CmdOrCtrl+Shift+S' },
+      { id: 'save', label: 'Save', shortcut: 'MOD+S' },
+      { id: 'save-as', label: 'Save As…', shortcut: 'MOD+SHIFT+S' },
       { type: 'separator' },
       {
         id: 'export-selection',
         label: 'Export Selection',
-        shortcut: 'MOD+⇧E',
-        accelerator: 'CmdOrCtrl+Shift+E',
+        shortcut: 'MOD+SHIFT+E',
         sub: [
           { id: 'export-png', label: 'PNG' },
           { id: 'export-svg', label: 'SVG' },
@@ -50,7 +49,7 @@ export const APP_MENU_SCHEMA = [
       },
       { type: 'separator' },
       { id: 'autosave', label: 'Autosave', checkbox: true },
-      { id: 'close', label: 'Close Tab', shortcut: 'MOD+W', accelerator: 'CmdOrCtrl+W' }
+      { id: 'close', label: 'Close Tab', shortcut: 'MOD+W' }
     ]
   },
   {
@@ -59,40 +58,32 @@ export const APP_MENU_SCHEMA = [
       {
         id: 'edit.undo',
         label: 'Undo',
-        shortcut: 'MOD+Z',
-        accelerator: 'CmdOrCtrl+Z',
         command: 'edit.undo'
       },
       {
         id: 'edit.redo',
         label: 'Redo',
-        shortcut: 'MOD+⇧Z',
-        accelerator: 'CmdOrCtrl+Shift+Z',
         command: 'edit.redo'
       },
       { type: 'separator' },
-      { id: 'copy', label: 'Copy', shortcut: 'MOD+C', accelerator: 'CmdOrCtrl+C' },
-      { id: 'paste', label: 'Paste', shortcut: 'MOD+V', accelerator: 'CmdOrCtrl+V' },
+      { id: 'copy', label: 'Copy', shortcut: 'MOD+C' },
+      { id: 'cut', label: 'Cut', shortcut: 'MOD+X' },
+      { id: 'paste', label: 'Paste', shortcut: 'MOD+V' },
+      { id: 'paste-to-replace', label: 'Paste to replace' },
       {
         id: 'selection.duplicate',
         label: 'Duplicate',
-        shortcut: 'MOD+D',
-        accelerator: 'CmdOrCtrl+D',
         command: 'selection.duplicate'
       },
       {
         id: 'selection.delete',
         label: 'Delete',
-        shortcut: '⌫',
-        accelerator: 'Backspace',
         command: 'selection.delete'
       },
       { type: 'separator' },
       {
         id: 'selection.selectAll',
         label: 'Select All',
-        shortcut: 'MOD+A',
-        accelerator: 'CmdOrCtrl+A',
         command: 'selection.selectAll'
       }
     ]
@@ -103,26 +94,20 @@ export const APP_MENU_SCHEMA = [
       {
         id: 'view.zoom100',
         label: 'Zoom to 100%',
-        shortcut: 'MOD+0',
-        accelerator: 'CmdOrCtrl+0',
         command: 'view.zoom100'
       },
       {
         id: 'view.zoomFit',
         label: 'Zoom to Fit',
-        shortcut: 'MOD+1',
-        accelerator: 'CmdOrCtrl+1',
         command: 'view.zoomFit'
       },
       {
         id: 'view.zoomSelection',
         label: 'Zoom to Selection',
-        shortcut: 'MOD+2',
-        accelerator: 'CmdOrCtrl+2',
         command: 'view.zoomSelection'
       },
-      { id: 'zoom-in', label: 'Zoom In', shortcut: 'MOD+=', accelerator: 'CmdOrCtrl+=' },
-      { id: 'zoom-out', label: 'Zoom Out', shortcut: 'MOD+-', accelerator: 'CmdOrCtrl+-' },
+      { id: 'zoom-in', label: 'Zoom In', shortcut: 'MOD+=' },
+      { id: 'zoom-out', label: 'Zoom Out', shortcut: 'MOD+-' },
       { type: 'separator' },
       {
         id: 'theme',
@@ -135,7 +120,7 @@ export const APP_MENU_SCHEMA = [
       },
       { id: 'language', label: 'Language', target: 'browser' },
       { type: 'separator' },
-      { id: 'toggle-ui', label: 'Toggle UI', shortcut: 'MOD+\\', accelerator: 'CmdOrCtrl+\\' },
+      { id: 'toggle-ui', label: 'Toggle UI', shortcut: 'MOD+\\' },
       { id: 'profiler', label: 'Profiler', checkbox: true, target: 'browser' },
       {
         id: 'dev-tools',
@@ -151,23 +136,58 @@ export const APP_MENU_SCHEMA = [
       {
         id: 'selection.group',
         label: 'Group Selection',
-        shortcut: 'MOD+G',
-        accelerator: 'CmdOrCtrl+G',
         command: 'selection.group'
+      },
+      {
+        id: 'selection.frameSelection',
+        label: 'Frame Selection',
+        command: 'selection.frameSelection'
       },
       {
         id: 'selection.ungroup',
         label: 'Ungroup Selection',
-        shortcut: 'MOD+⇧G',
-        accelerator: 'CmdOrCtrl+Shift+G',
         command: 'selection.ungroup'
+      },
+      { type: 'separator' },
+      {
+        id: 'selection.booleanUnion',
+        label: 'Union selection',
+        command: 'selection.booleanUnion'
+      },
+      {
+        id: 'selection.booleanSubtract',
+        label: 'Subtract selection',
+        command: 'selection.booleanSubtract'
+      },
+      {
+        id: 'selection.booleanIntersect',
+        label: 'Intersect selection',
+        command: 'selection.booleanIntersect'
+      },
+      {
+        id: 'selection.booleanExclude',
+        label: 'Exclude selection',
+        command: 'selection.booleanExclude'
+      },
+      {
+        id: 'selection.flatten',
+        label: 'Flatten',
+        command: 'selection.flatten'
+      },
+      {
+        id: 'selection.outlineText',
+        label: 'Outline text',
+        command: 'selection.outlineText'
+      },
+      {
+        id: 'selection.outlineStroke',
+        label: 'Outline stroke',
+        command: 'selection.outlineStroke'
       },
       { type: 'separator' },
       {
         id: 'selection.createComponent',
         label: 'Create Component',
-        shortcut: 'MOD+⌥K',
-        accelerator: 'CmdOrCtrl+Alt+K',
         command: 'selection.createComponent'
       },
       {
@@ -184,15 +204,11 @@ export const APP_MENU_SCHEMA = [
       {
         id: 'selection.bringToFront',
         label: 'Bring to Front',
-        shortcut: ']',
-        accelerator: ']',
         command: 'selection.bringToFront'
       },
       {
         id: 'selection.sendToBack',
         label: 'Send to Back',
-        shortcut: '[',
-        accelerator: '[',
         command: 'selection.sendToBack'
       }
     ]
@@ -200,9 +216,9 @@ export const APP_MENU_SCHEMA = [
   {
     label: 'Text',
     items: [
-      { id: 'text.bold', label: 'Bold', shortcut: 'MOD+B', accelerator: 'CmdOrCtrl+B' },
-      { id: 'text.italic', label: 'Italic', shortcut: 'MOD+I', accelerator: 'CmdOrCtrl+I' },
-      { id: 'text.underline', label: 'Underline', shortcut: 'MOD+U', accelerator: 'CmdOrCtrl+U' }
+      { id: 'text.bold', label: 'Bold', shortcut: 'MOD+B' },
+      { id: 'text.italic', label: 'Italic', shortcut: 'MOD+I' },
+      { id: 'text.underline', label: 'Underline', shortcut: 'MOD+U' }
     ]
   },
   {
@@ -211,18 +227,16 @@ export const APP_MENU_SCHEMA = [
       {
         id: 'selection.wrapInAutoLayout',
         label: 'Wrap in Auto Layout',
-        shortcut: '⇧A',
-        accelerator: 'Shift+A',
         command: 'selection.wrapInAutoLayout'
       },
       { type: 'separator' },
-      { id: 'align-left', label: 'Align Left', shortcut: '⌥A', accelerator: 'Alt+A' },
-      { id: 'align-center', label: 'Align Center', shortcut: '⌥H', accelerator: 'Alt+H' },
-      { id: 'align-right', label: 'Align Right', shortcut: '⌥D', accelerator: 'Alt+D' },
+      { id: 'align-left', label: 'Align Left', shortcut: 'ALT+A' },
+      { id: 'align-center', label: 'Align Center', shortcut: 'ALT+H' },
+      { id: 'align-right', label: 'Align Right', shortcut: 'ALT+D' },
       { type: 'separator' },
-      { id: 'align-top', label: 'Align Top', shortcut: '⌥W', accelerator: 'Alt+W' },
-      { id: 'align-middle', label: 'Align Middle', shortcut: '⌥V', accelerator: 'Alt+V' },
-      { id: 'align-bottom', label: 'Align Bottom', shortcut: '⌥S', accelerator: 'Alt+S' }
+      { id: 'align-top', label: 'Align Top', shortcut: 'ALT+W' },
+      { id: 'align-middle', label: 'Align Middle', shortcut: 'ALT+V' },
+      { id: 'align-bottom', label: 'Align Bottom', shortcut: 'ALT+S' }
     ]
   }
 ] satisfies AppMenuGroupSchema[]

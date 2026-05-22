@@ -5,7 +5,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { MCP_VERSION, registerTools } from './server.js'
 import { createStdioRpcBridge } from './stdio-bridge.js'
 
-const wsPort = parseInt(process.env.WS_PORT ?? '7601', 10)
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  process.stdout.write(`openpencil-mcp\n\nStart the OpenPencil MCP stdio bridge.\n\nOptions:\n  --help, -h    Show this help message\n`)
+  process.exit(0)
+}
+
+const wsPort = Number.parseInt(process.env.WS_PORT ?? '7601', 10)
 const wsHost = process.env.HOST ?? '127.0.0.1'
 const enableEval = process.env.OPENPENCIL_MCP_EVAL === '1'
 const mcpRoot = process.env.OPENPENCIL_MCP_ROOT?.trim() || process.cwd()

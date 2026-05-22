@@ -1,10 +1,11 @@
-import { createRequire } from 'node:module'
-
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { resolveCommand } from 'package-manager-detector/commands'
+import { detect, getUserAgent } from 'package-manager-detector/detect'
 import { WebSocketServer } from 'ws'
 
+import packageJson from '../package.json' with { type: 'json' }
 import { bearerToken, isAuthorized, mcpRequestToken } from './auth'
 import { createBrowserRpcBridge } from './browser-rpc'
 import { MCP_CORS_HEADERS, MCP_CORS_METHODS, MCP_EXPOSED_HEADERS } from './http-options'
@@ -12,8 +13,28 @@ import { preprocessRpc } from './jsx-preprocess'
 import { createMcpSessionManager } from './mcp-sessions'
 import { registerTools } from './tool/registration'
 
-const require = createRequire(import.meta.url)
-export const MCP_VERSION: string = (require('../package.json') as { version: string }).version
+export const MCP_VERSION: string = packageJson.version
+
+let installCommandPromise: Promise<string> | null = null
+
+async function resolveMcpInstallCommand(): Promise<string> {
+  const agent =
+    getUserAgent() ??
+    (
+      await detect({
+        strategies: ['install-metadata', 'lockfile', 'packageManager-field', 'devEngines-field']
+      })
+    )?.agent ??
+    'npm'
+  const resolved = resolveCommand(agent, 'global', [`@open-pencil/mcp@${MCP_VERSION}`])
+  if (!resolved) return `npm install -g @open-pencil/mcp@${MCP_VERSION}`
+  return [resolved.command, ...resolved.args].join(' ')
+}
+
+function mcpInstallCommand(): Promise<string> {
+  installCommandPromise ??= resolveMcpInstallCommand()
+  return installCommandPromise
+}
 
 export { fail, ok, type MCPContent, type MCPResult } from './result'
 
@@ -53,11 +74,11 @@ export function startServer(options: ServerOptions = {}) {
   const wss = new WebSocketServer({ port: wsPort, host: '127.0.0.1' })
 
   wss.on('connection', (ws) => {
+    browserRpc.handleConnection(ws)
+
     ws.on('message', (raw) => {
-      browserRpc.handleMessage(
-        typeof raw === 'string' ? raw : Buffer.from(raw as Buffer).toString('utf-8'),
-        ws
-      )
+      const data = typeof raw === 'string' ? raw : Buffer.from(raw as Buffer).toString('utf-8')
+      browserRpc.handleMessage(data, ws)
     })
 
     ws.on('close', () => {
@@ -81,9 +102,11 @@ export function startServer(options: ServerOptions = {}) {
     )
   }
 
-  app.get('/health', (c) =>
+  app.get('/health', async (c) =>
     c.json({
       status: browserRpc.isConnected() ? 'ok' : 'no_app',
+      version: MCP_VERSION,
+      installCommand: await mcpInstallCommand(),
       authRequired: authToken !== null,
       ...(browserRpc.currentRpcToken() ? { token: browserRpc.currentRpcToken() } : {})
     })

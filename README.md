@@ -6,7 +6,7 @@ Open-source design editor. Opens `.fig` and `.pen` design files, includes built-
 >
 > **Note:** There is another open-source project with the same name — [OpenPencil by ZSeven-W](https://github.com/ZSeven-W/openpencil), focused on AI-native design-to-code workflows. This project focuses on Figma-compatible visual design with real-time collaboration.
 
-**[Try it online →](https://app.openpencil.dev/demo)** · [Download](https://github.com/open-pencil/open-pencil/releases/latest) · [Documentation](https://openpencil.dev)
+**[Try it online →](https://app.openpencil.dev/demo)** · [Download](https://github.com/open-pencil/open-pencil/releases/latest) · [Documentation](https://openpencil.dev) · [llms.txt](https://openpencil.dev/llms.txt)
 
 ![OpenPencil](packages/docs/public/screenshot.png)
 
@@ -22,10 +22,11 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 
 ## What it does
 
-- **Opens `.fig` and `.pen` files** — read and write native Figma files, open Pencil documents, copy & paste nodes between apps
+- **Opens `.fig` and `.pen` files** — read and write native Figma files, open supported Pencil documents from the app or OS file browser, copy & paste nodes between apps
 - **AI builds designs** — describe what you want in chat, 90+ tools create and modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints
 - **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
 - **Lint, convert, and extract tokens** — inspect documents, lint naming/layout/accessibility, convert between supported formats, analyze colors/typography/spacing/clusters, and extract design tokens
+- **Components and variants** — create reusable components, group variants into component sets, insert local assets as instances, and switch variants from the inspector
 - **Design-to-code export** — export selections as JSX/Tailwind, generate token outputs, and map designs into component-oriented code workflows
 - **Vue SDK for custom editors** — headless components and composables for embedding OpenPencil into other apps or building workflow-specific editing surfaces. [Read the SDK docs →](https://openpencil.dev/programmable/sdk/)
 - **Real-time collaboration** — P2P via WebRTC, no server, no account. Cursors, presence, follow mode
@@ -35,7 +36,8 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 ## CLI
 
 ```sh
-bun add -g @open-pencil/cli
+npm install -g @open-pencil/cli
+# or: bun add -g @open-pencil/cli
 ```
 
 ### Inspect design files
@@ -158,12 +160,12 @@ Use Claude Code, Codex, or Gemini CLI directly in the chat panel. The agent conn
 
 **Setup (Claude Code):**
 
-1. Install the ACP adapter: `npm i -g @agentclientprotocol/claude-agent-acp`
+1. Install the ACP adapter: `npm install -g @agentclientprotocol/claude-agent-acp`
 2. Add MCP permission to `~/.claude/settings.json`:
    ```json
    {
      "permissions": {
-       "allow": ["mcp__open-pencil"]
+       "allow": ["mcp__open-pencil__*"]
      }
    }
    ```
@@ -176,8 +178,11 @@ Connect Claude Code, Cursor, Windsurf, or any MCP client to inspect, modify, and
 **Stdio** (Claude Code, Cursor, Windsurf):
 
 ```sh
-bun add -g @open-pencil/mcp
+npm install -g @open-pencil/mcp
+claude mcp add --scope user open-pencil -- openpencil-mcp
 ```
+
+For other MCP clients:
 
 ```json
 {
@@ -207,6 +212,8 @@ npx skills add open-pencil/skills@open-pencil
 
 Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [skills](https://skills.sh).
 
+For documentation-aware agents, the docs site publishes [llms.txt](https://openpencil.dev/llms.txt), [llms-full.txt](https://openpencil.dev/llms-full.txt), and per-page Markdown files generated from the VitePress docs.
+
 ## Collaboration
 
 Share a link to co-edit in real time. No server, no account — peers connect directly via WebRTC.
@@ -224,14 +231,39 @@ OpenPencil is the alternative: open source (MIT), reads .fig files natively, eve
 
 ## Roadmap
 
-- 100% Figma compatibility — full import/export fidelity, rendering parity, and broader automated compatibility coverage
-- Prototyping — frame transitions, interaction triggers, overlay management, preview mode
-- Shader effects (SkSL) — custom visual effects via GPU shaders
-- Raster tile caching — instant zoom/pan for complex documents
+OpenPencil is moving toward production-grade Figma compatibility while keeping every workflow scriptable and local-first.
+
+### Compatibility and fidelity
+
+- Improve `.fig` import/export parity across large real-world design systems, including component sets, variants, nested instances, variables, auto layout, vector networks, and derived Figma text
+- Expand automated visual compatibility coverage across full multi-page documents, not just isolated fixtures
+- Continue renderer parity work for Skia/CanvasKit output: strokes, effects, gradients, image fills, text outlines, masks, blend modes, export bounds, and raster export compositing
+- Build focused regression fixtures for every discovered Figma compatibility edge case before broadening behavior
+
+### Editor capabilities
+
+- Prototyping — frame transitions, interaction triggers, overlay management, and preview mode
 - Component libraries — publish, share, and consume design systems across files
-- CI tools — design linting, code export, visual regression in pipelines
-- Grid child positioning UI — column/row span controls, grid overlay on canvas
-- Windows code signing (Azure Authenticode certificates)
+- Grid authoring UI — column/row span controls, grid overlays on canvas, and richer inspector controls
+- Variables UI — complete variable collection editing, binding discovery, and token-oriented workflows
+
+### Performance and scale
+
+- Raster tile caching for instant zoom/pan on complex documents
+- Renderer profiling tools for isolating slow nodes, effects, masks, and large imported documents
+- Incremental layout/render invalidation for large documents and collaborative sessions
+
+### Automation and CI
+
+- CI tools for design linting, code export, visual regression, and design-token checks in pipelines
+- Deeper MCP/CLI workflows for headless inspection, migration, and batch editing of `.fig` and `.pen` files
+- More deterministic export and comparison utilities for compatibility testing
+
+### Platform polish
+
+- Shader effects (SkSL) — custom visual effects via GPU shaders
+- Windows code signing with Azure Authenticode certificates
+- Packaged desktop-side MCP integration so agent workflows do not require global installs
 
 ## Contributing
 

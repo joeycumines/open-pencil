@@ -5,14 +5,15 @@ import { useRoute } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
-import { useViewportKind } from '@open-pencil/vue'
+import { useViewportKind, formatShortcut, useI18n } from '@open-pencil/vue'
 import { useKeyboard } from '@/app/shell/keyboard/use'
 import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
-import { useMenu } from '@/app/shell/menu/use'
+import { openFileFromPath, useMenu } from '@/app/shell/menu/use'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
 import { connectAutomation } from '@/app/automation/bridge/server'
 import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
 import { isTauri } from '@/app/tauri/env'
+import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { createDemoShapes } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
@@ -25,6 +26,7 @@ import MobileHud from '@/components/MobileHud/MobileHud.vue'
 import PropertiesPanel from '@/components/PropertiesPanel.vue'
 import SafariBanner from '@/components/SafariBanner.vue'
 import TabBar from '@/components/TabBar.vue'
+import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
 
 const route = useRoute()
@@ -34,6 +36,7 @@ const showChrome = !('no-chrome' in params)
 const createdInitialTab = tabCount() === 0
 const firstTab = createdInitialTab ? createTab() : (activeTab.value ?? createTab())
 const store = useEditorStore()
+const { dialogs } = useI18n()
 const { isMobile } = useViewportKind()
 
 if (createdInitialTab && route.meta.demo && !('test' in params)) {
@@ -58,7 +61,29 @@ useEventListener(
 
 const automationCleanup = ref<(() => void) | null>(null)
 const mcpCleanup = ref<(() => void) | null>(null)
+const fileAssociationCleanup = ref<(() => void) | null>(null)
 const initialEditorLayout = loadEditorLayout()
+
+type PendingOpenFile = {
+  path: string
+}
+
+async function openPendingAssociatedFiles() {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const files = await invoke<PendingOpenFile[]>('take_pending_open')
+  for (const file of files) {
+    await openFileFromPath(file.path)
+  }
+}
+
+async function bindAssociatedFileOpen() {
+  if (!isTauri()) return
+  const { listen } = await import('@tauri-apps/api/event')
+  fileAssociationCleanup.value = await listen('open-associated-files', () => {
+    void openPendingAssociatedFiles().catch((e) => console.error('[Open With]', e))
+  })
+  await openPendingAssociatedFiles()
+}
 
 onMounted(async () => {
   try {
@@ -70,16 +95,19 @@ onMounted(async () => {
     }
   } catch (e) {
     console.warn('[MCP]', e)
-    if (isTauri()) {
-      const { toast } = await import('@/app/shell/ui')
-      toast.warning('MCP server failed to start. Install with: npm i -g @open-pencil/mcp')
-    }
+  }
+
+  try {
+    await bindAssociatedFileOpen()
+  } catch (e) {
+    console.error('[Open With]', e)
   }
 })
 
 onUnmounted(() => {
   mcpCleanup.value?.()
   automationCleanup.value?.()
+  fileAssociationCleanup.value?.()
 })
 </script>
 
@@ -166,14 +194,19 @@ onUnmounted(() => {
           <span data-test-id="editor-document-name" class="text-xs text-surface">{{
             store.state.documentName
           }}</span>
-          <button
-            data-test-id="editor-show-ui"
-            class="ml-1 flex size-6 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-hover hover:text-surface"
-            title="Show UI (⌘\)"
-            @click="store.state.showUI = true"
+          <Tip
+            :label="
+              dialogs.showUI({ shortcut: formatShortcut(appMenuShortcut('toggle-ui')) ?? '' })
+            "
           >
-            <icon-lucide-sidebar class="size-3.5" />
-          </button>
+            <button
+              data-test-id="editor-show-ui"
+              class="ml-1 flex size-6 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-hover hover:text-surface"
+              @click="store.state.showUI = true"
+            >
+              <icon-lucide-sidebar class="size-3.5" />
+            </button>
+          </Tip>
         </div>
       </div>
     </div>

@@ -25,13 +25,17 @@ export function drawNodeFill(
       }
       break
     }
-    case 'ELLIPSE':
-      if (node.arcData) {
+    case 'ELLIPSE': {
+      const fg = r.getFillGeometry(node)
+      if (fg) {
+        for (const p of fg) canvas.drawPath(p, r.fillPaint)
+      } else if (node.arcData) {
         r.drawArc(canvas, node, r.fillPaint)
       } else {
         canvas.drawOval(rect, r.fillPaint)
       }
       break
+    }
     case 'TEXT':
       r.renderText(canvas, node, fill)
       break
@@ -100,6 +104,17 @@ function makeGradientLocalMatrix(
   ])
 }
 
+export function linearGradientEndpoints(
+  width: number,
+  height: number,
+  transform: NonNullable<Fill['gradientTransform']>
+) {
+  return {
+    start: { x: (transform.m00 + transform.m02) * width, y: (transform.m10 + transform.m12) * height },
+    end: { x: transform.m02 * width, y: transform.m12 * height }
+  }
+}
+
 export function applyGradientFill(
   r: SkiaRenderer,
   fill: Fill,
@@ -131,10 +146,11 @@ export function applyGradientFill(
   const h = node.height
 
   if (fill.type === 'GRADIENT_LINEAR') {
-    const startX = t.m02 * w
-    const startY = t.m12 * h
-    const endX = (t.m00 + t.m02) * w
-    const endY = (t.m10 + t.m12) * h
+    const { start, end } = linearGradientEndpoints(w, h, t)
+    const startX = start.x
+    const startY = start.y
+    const endX = end.x
+    const endY = end.y
     const shader = r.ck.Shader.MakeLinearGradient(
       [startX, startY],
       [endX, endY],
@@ -183,9 +199,11 @@ export function applyImageFill(
   if (!img) {
     const data = graph.images.get(hash)
     if (!data) return false
-    img = r.ck.MakeImageFromEncoded(data) ?? undefined
-    if (img) r.imageCache.set(hash, img)
-    else return false
+    const decoded = r.ck.MakeImageFromEncoded(data) ?? undefined
+    if (!decoded) return false
+    img = decoded.makeCopyWithDefaultMipmaps()
+    decoded.delete()
+    r.imageCache.set(hash, img)
   }
 
   const imgW = img.width()
@@ -219,11 +237,11 @@ export function applyImageFill(
     sy = (imgH - sh) / 2
   }
 
-  const shader = img.makeShaderCubic(
+  const shader = img.makeShaderOptions(
     r.ck.TileMode.Clamp,
     r.ck.TileMode.Clamp,
-    1 / 3,
-    1 / 3,
+    r.ck.FilterMode.Linear,
+    r.ck.MipmapMode.Linear,
     r.ck.Matrix.multiply(
       r.ck.Matrix.scaled(node.width / sw, node.height / sh),
       r.ck.Matrix.translated(-sx, -sy)
@@ -233,9 +251,9 @@ export function applyImageFill(
   return true
 }
 
-export function drawArc(r: SkiaRenderer, canvas: Canvas, node: SceneNode, paint: Paint): void {
+export function makeArcPath(r: SkiaRenderer, node: SceneNode) {
   const arc = node.arcData
-  if (!arc) return
+  if (!arc) return null
   const cx = node.width / 2
   const cy = node.height / 2
   const rx = node.width / 2
@@ -258,17 +276,23 @@ export function drawArc(r: SkiaRenderer, canvas: Canvas, node: SceneNode, paint:
     path.addPath(innerPath)
     path.close()
     innerPath.delete()
-  } else {
-    const isFullCircle = Math.abs(sweepDeg) >= 359.99
-    if (isFullCircle) {
-      path.addOval(oval)
-    } else {
-      path.moveTo(cx, cy)
-      path.addArc(oval, startDeg, sweepDeg)
-      path.close()
-    }
+    return path
   }
 
+  const isFullCircle = Math.abs(sweepDeg) >= 359.99
+  if (isFullCircle) {
+    path.addOval(oval)
+  } else {
+    path.moveTo(cx, cy)
+    path.addArc(oval, startDeg, sweepDeg)
+    path.close()
+  }
+  return path
+}
+
+export function drawArc(r: SkiaRenderer, canvas: Canvas, node: SceneNode, paint: Paint): void {
+  const path = makeArcPath(r, node)
+  if (!path) return
   canvas.drawPath(path, paint)
   path.delete()
 }

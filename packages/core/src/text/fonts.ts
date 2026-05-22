@@ -1,7 +1,9 @@
 import type { CanvasKit, TypefaceFontProvider } from 'canvaskit-wasm'
+import { uniq } from 'es-toolkit/array'
 
 import { DEFAULT_FONT_FAMILY, IS_BROWSER, GOOGLE_FONTS_API_KEY } from '#core/constants'
 import type { SceneGraph } from '#core/scene-graph'
+import { fontFaceRenderFamily, parseFontStyle } from '#core/text/face'
 import { fontFallbackEntry } from '#core/text/fallbacks'
 import type { FontFallbackScript } from '#core/text/fallbacks'
 
@@ -13,6 +15,12 @@ export interface FontInfo {
 }
 
 export type LocalFontAccessState = 'unsupported' | 'prompt' | 'granted' | 'denied'
+export type FontFamilySource = 'local' | 'google' | 'bundled'
+
+export interface FontFamilyOption {
+  family: string
+  source: FontFamilySource
+}
 
 export interface DownloadedFontCache {
   read(family: string, style: string): Promise<ArrayBuffer | null>
@@ -21,10 +29,46 @@ export interface DownloadedFontCache {
 
 type FindLocalFontOptions = { allowVariable?: boolean }
 
+type LocalFontMatch = Pick<FontInfo, 'family' | 'style'>
+
+export function chooseLocalFontMatch<T extends LocalFontMatch>(
+  fonts: T[],
+  family: string,
+  style?: string
+): T | undefined {
+  const families = [family]
+  const normalized = normalizeFontFamily(family)
+  if (normalized !== family) families.push(normalized)
+  const requested = parseFontStyle(style)
+
+  for (const f of families) {
+    const exact = style ? fonts.find((x) => x.family === f && x.style === style) : undefined
+    if (exact) return exact
+
+    const candidates = fonts.filter((x) => x.family === f)
+    const sameStyle = candidates.find((x) => {
+      const parsed = parseFontStyle(x.style)
+      return parsed.weight === requested.weight && parsed.italic === requested.italic
+    })
+    if (sameStyle) return sameStyle
+
+    if (style) continue
+
+    const sameSlant = candidates.filter((x) => parseFontStyle(x.style).italic === requested.italic)
+    if (sameSlant.length > 0) return sameSlant[0]
+
+    if (candidates.length > 0) return candidates[0]
+  }
+
+  return undefined
+}
+
 const BUNDLED_FONTS: Record<string, string> = {
   'Inter|Regular': '/Inter-Regular.ttf',
   'Inter|Medium': '/Inter-Medium.ttf',
   'Inter|SemiBold': '/Inter-SemiBold.ttf',
+  'Inter|Bold': '/Inter-Bold.ttf',
+  'Inter|ExtraBold': '/Inter-ExtraBold.ttf',
   'Noto Naskh Arabic|Regular': '/NotoNaskhArabic-Regular.ttf'
 }
 
@@ -69,21 +113,18 @@ export function isVariableFont(data: ArrayBuffer): boolean {
 }
 
 export function styleToWeight(style: string): number {
-  const s = style.toLowerCase().replace(/[\s-_]/g, '')
-  if (s.includes('thin') || s.includes('hairline')) return 100
-  if (s.includes('extralight') || s.includes('ultralight')) return 200
-  if (s.includes('light')) return 300
-  if (s.includes('medium')) return 500
-  if (s.includes('semibold') || s.includes('demibold')) return 600
-  if (s.includes('extrabold') || s.includes('ultrabold')) return 800
-  if (s.includes('black') || s.includes('heavy')) return 900
-  if (s.includes('bold')) return 700
-  return 400
+  return parseFontStyle(style).weight
 }
 
 export function weightToStyle(weight: number, italic = false): string {
   const rounded = Math.round(weight / 100) * 100
   const label = (FONT_WEIGHT_NAMES[rounded] ?? 'Regular').replace(/ /g, '')
+  return italic ? `${label} Italic` : label
+}
+
+export function weightToFigmaStyle(weight: number, italic = false): string {
+  const rounded = Math.round(weight / 100) * 100
+  const label = FONT_WEIGHT_NAMES[rounded] ?? 'Regular'
   return italic ? `${label} Italic` : label
 }
 
@@ -96,6 +137,9 @@ export class FontManager {
   private fallbackUserAgent: string | undefined
   private googleFontsCache = new Map<string, Record<string, string>>()
   private googleFontsFailed = new Set<string>()
+  private googleFamiliesCache: string[] | null = null
+  private googleFamiliesPromise: Promise<string[]> | null = null
+  private registeredRenderFamilies = new Set<string>()
   private cjkFallbackFamilies: string[] = []
   private cjkFallbackPromise: Promise<string[]> | null = null
   private arabicFallbackFamilies: string[] = []
@@ -103,6 +147,7 @@ export class FontManager {
 
   attachProvider(_canvasKit: CanvasKit, provider: TypefaceFontProvider): void {
     this.fontProvider = provider
+    this.registeredRenderFamilies.clear()
     for (const [cacheKey, data] of this.loadedFamilies) {
       const family = cacheKey.slice(0, cacheKey.indexOf('|'))
       this.registerFontInCanvasKit(family, data)
@@ -167,8 +212,23 @@ export class FontManager {
   }
 
   async listFamilies(): Promise<string[]> {
+    const options = await this.listFamilyOptions()
+    return options.map((option) => option.family)
+  }
+
+  async listFamilyOptions(): Promise<FontFamilyOption[]> {
     const fonts = this.localFonts ?? (await this.requestLocalFontAccess())
-    return [...new Set(fonts.map((f) => f.family))].sort()
+    const googleFamilies = await this.listGoogleFamilies()
+    const byFamily = new Map<string, FontFamilyOption>()
+    byFamily.set(DEFAULT_FONT_FAMILY, { family: DEFAULT_FONT_FAMILY, source: 'bundled' })
+    for (const family of googleFamilies) byFamily.set(family, { family, source: 'google' })
+    for (const font of fonts) byFamily.set(font.family, { family: font.family, source: 'local' })
+    return [...byFamily.values()].sort((a, b) => a.family.localeCompare(b.family))
+  }
+
+  preloadGoogleFamilies(): void {
+    if (this.googleFamiliesCache || this.googleFamiliesPromise) return
+    this.googleFamiliesPromise = this.loadGoogleFamilies()
   }
 
   async fetchBundledFont(url: string): Promise<ArrayBuffer | null> {
@@ -178,9 +238,9 @@ export class FontManager {
     }
     const { readFile } = await import(/* @vite-ignore */ 'node:fs/promises')
     const { resolve, dirname } = await import(/* @vite-ignore */ 'node:path')
-    const { createRequire } = await import(/* @vite-ignore */ 'node:module')
-    const require = createRequire(import.meta.url)
-    const packageRoot = dirname(require.resolve('@open-pencil/core/package.json'))
+    const { fileURLToPath } = await import(/* @vite-ignore */ 'node:url')
+    const packageJsonUrl = import.meta.resolve('@open-pencil/core/package.json')
+    const packageRoot = dirname(fileURLToPath(packageJsonUrl))
     const assetPath = resolve(packageRoot, `assets${url}`)
     const buf = await readFile(assetPath)
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
@@ -201,6 +261,16 @@ export class FontManager {
     const localBuffer = await this.findLocalFont(family, style)
     if (localBuffer) return this.registerAndCache(family, style, localBuffer)
 
+    const bundledUrl = BUNDLED_FONTS[cacheKey]
+    if (bundledUrl) {
+      try {
+        const buffer = await this.fetchBundledFont(bundledUrl)
+        if (buffer && !isVariableFont(buffer)) return this.registerAndCache(family, style, buffer)
+      } catch (e) {
+        console.warn(`Bundled font load failed for "${family}" ${style}:`, e)
+      }
+    }
+
     if (typeof fetch !== 'undefined') {
       try {
         const buffer = await this.fetchGoogleFont(family, style)
@@ -210,16 +280,6 @@ export class FontManager {
         }
       } catch (e) {
         console.warn(`Google Fonts fetch failed for "${family}" ${style}:`, e)
-      }
-    }
-
-    const bundledUrl = BUNDLED_FONTS[cacheKey]
-    if (bundledUrl) {
-      try {
-        const buffer = await this.fetchBundledFont(bundledUrl)
-        if (buffer && !isVariableFont(buffer)) return this.registerAndCache(family, style, buffer)
-      } catch (e) {
-        console.warn(`Bundled font load failed for "${family}" ${style}:`, e)
       }
     }
 
@@ -239,8 +299,27 @@ export class FontManager {
     return [...this.loadedFamilies.keys()].some((k) => k.startsWith(`${family}|`))
   }
 
+  isStyleLoaded(family: string, style: string): boolean {
+    return this.loadedFamilies.has(`${family}|${style}`)
+  }
+
   loadedData(family: string, style: string): ArrayBuffer | null {
     return this.loadedFamilies.get(`${family}|${style}`) ?? null
+  }
+
+  renderFamily(family: string, style: string): string {
+    const data = this.loadedData(family, style)
+    if (!data) return family
+
+    const renderFamily = fontFaceRenderFamily(family, style)
+    if (!this.registeredRenderFamilies.has(renderFamily)) {
+      if (this.registerFontInCanvasKit(renderFamily, data)) {
+        this.registeredRenderFamilies.add(renderFamily)
+      } else {
+        return family
+      }
+    }
+    return renderFamily
   }
 
   collectFontKeys(graph: SceneGraph, nodeIds: string[]): Array<[string, string]> {
@@ -382,6 +461,29 @@ export class FontManager {
     return result
   }
 
+  private async listGoogleFamilies(): Promise<string[]> {
+    if (this.googleFamiliesCache) return this.googleFamiliesCache
+    this.googleFamiliesPromise ??= this.loadGoogleFamilies()
+    return this.googleFamiliesPromise
+  }
+
+  private async loadGoogleFamilies(): Promise<string[]> {
+    if (typeof fetch === 'undefined') return []
+
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/webfonts/v1/webfonts?key=${GOOGLE_FONTS_API_KEY}`
+      )
+      if (!response.ok) return []
+      const data = (await response.json()) as { items?: Array<{ family?: string }> }
+      const families = uniq(data.items?.flatMap((item) => (item.family ? [item.family] : [])) ?? [])
+      this.googleFamiliesCache = families.sort()
+      return this.googleFamiliesCache
+    } catch {
+      return []
+    }
+  }
+
   private async fetchGoogleFontFiles(family: string): Promise<Record<string, string> | null> {
     if (this.googleFontsCache.has(family)) return this.googleFontsCache.get(family) ?? null
     if (this.googleFontsFailed.has(family)) return null
@@ -428,17 +530,7 @@ export class FontManager {
     if (!IS_BROWSER || !window.queryLocalFonts) return null
     try {
       const fonts = await window.queryLocalFonts()
-      const families = [family]
-      const normalized = normalizeFontFamily(family)
-      if (normalized !== family) families.push(normalized)
-
-      let match: (typeof fonts)[number] | undefined
-      for (const f of families) {
-        match = style ? fonts.find((x) => x.family === f && x.style === style) : undefined
-        match ??= fonts.find((x) => x.family === f)
-        if (match) break
-      }
-
+      const match = chooseLocalFontMatch(fonts, family, style)
       if (!match) return null
       const blob: Blob = await match.blob()
       const buffer = await blob.arrayBuffer()

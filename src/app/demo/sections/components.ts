@@ -1,20 +1,4 @@
-import {
-  BLACK,
-  BLUE,
-  GRAY_100,
-  GRAY_200,
-  GRAY_500,
-  GREEN,
-  INDIGO,
-  ORANGE,
-  PURPLE,
-  RED,
-  TEAL,
-  WHITE,
-  gradient,
-  solid,
-  thinStroke
-} from '@/app/demo/colors'
+import { DEMO_COLORS, gradient, solid, thinStroke } from '@/app/demo/colors'
 import { makeComponent } from '@/app/demo/helpers'
 import type { EditorStore } from '@/app/editor/session'
 
@@ -24,11 +8,18 @@ export function createComponentsSection(store: EditorStore) {
   const compSectionId = store.createShape('SECTION', 60, 60, 920, 540)
   graph.updateNode(compSectionId, { name: 'Components' })
 
-  const btnId = store.createShape('FRAME', 32, 48, 120, 40, compSectionId)
+  const btnId = store.createShape('FRAME', 32, 76, 120, 40, compSectionId)
   graph.updateNode(btnId, {
     name: 'Button/Primary',
+    fills: [],
+    strokes: [],
+    clipsContent: false
+  })
+  const btnSurfaceId = store.createShape('FRAME', 0, 0, 120, 40, btnId)
+  graph.updateNode(btnSurfaceId, {
+    name: 'Surface',
     cornerRadius: 8,
-    fills: [solid(BLUE)],
+    fills: [solid(DEMO_COLORS.blue)],
     layoutMode: 'HORIZONTAL',
     primaryAxisSizing: 'HUG',
     counterAxisSizing: 'HUG',
@@ -39,22 +30,30 @@ export function createComponentsSection(store: EditorStore) {
     paddingLeft: 20,
     paddingRight: 20
   })
-  const btnTextId = store.createShape('TEXT', 0, 0, 80, 20, btnId)
+  const btnTextId = store.createShape('TEXT', 0, 0, 80, 20, btnSurfaceId)
   graph.updateNode(btnTextId, {
     name: 'Label',
     text: 'Get Started',
     fontSize: 14,
     fontWeight: 600,
-    fills: [solid(WHITE)]
+    textAutoResize: 'WIDTH_AND_HEIGHT',
+    fills: [solid(DEMO_COLORS.white)]
   })
   const btnCompId = makeComponent(store, [btnId])
 
-  const btn2Id = store.createShape('FRAME', 176, 48, 100, 40, compSectionId)
+  const btn2Id = store.createShape('FRAME', 216, 76, 100, 40, compSectionId)
   graph.updateNode(btn2Id, {
     name: 'Button/Secondary',
+    fills: [],
+    strokes: [],
+    clipsContent: false
+  })
+  const btn2SurfaceId = store.createShape('FRAME', 0, 0, 100, 40, btn2Id)
+  graph.updateNode(btn2SurfaceId, {
+    name: 'Surface',
     cornerRadius: 8,
-    fills: [solid(WHITE)],
-    strokes: thinStroke(GRAY_200),
+    fills: [solid(DEMO_COLORS.white)],
+    strokes: thinStroke(DEMO_COLORS.gray200),
     layoutMode: 'HORIZONTAL',
     primaryAxisSizing: 'HUG',
     counterAxisSizing: 'HUG',
@@ -65,17 +64,25 @@ export function createComponentsSection(store: EditorStore) {
     paddingLeft: 20,
     paddingRight: 20
   })
-  const btn2TextId = store.createShape('TEXT', 0, 0, 60, 20, btn2Id)
+  const btn2TextId = store.createShape('TEXT', 0, 0, 60, 20, btn2SurfaceId)
   graph.updateNode(btn2TextId, {
     name: 'Label',
     text: 'Cancel',
     fontSize: 14,
     fontWeight: 500,
-    fills: [solid(BLACK)]
+    textAutoResize: 'WIDTH_AND_HEIGHT',
+    fills: [solid(DEMO_COLORS.black)]
   })
-  makeComponent(store, [btn2Id])
+  const btn2CompId = makeComponent(store, [btn2Id])
 
-  const chipId = store.createShape('FRAME', 304, 52, 80, 28, compSectionId)
+  store.select([btnCompId, btn2CompId])
+  store.createComponentSetFromComponents()
+  const buttonSetId = [...store.state.selectedIds][0]
+  graph.updateNode(buttonSetId, { x: 32, y: 44, width: 400, height: 136, fills: [] })
+  graph.updateNode(btnCompId, { x: 40, y: 64 })
+  graph.updateNode(btn2CompId, { x: 224, y: 64 })
+
+  const chipId = store.createShape('FRAME', 500, 72, 80, 28, compSectionId)
   graph.updateNode(chipId, {
     name: 'Tag',
     cornerRadius: 14,
@@ -96,28 +103,30 @@ export function createComponentsSection(store: EditorStore) {
     text: 'Design',
     fontSize: 12,
     fontWeight: 500,
-    fills: [solid(INDIGO)]
+    textAutoResize: 'WIDTH_AND_HEIGHT',
+    fills: [solid(DEMO_COLORS.indigo)]
   })
   makeComponent(store, [chipId])
 
-  const avatarId = store.createShape('ELLIPSE', 416, 48, 40, 40, compSectionId)
+  const avatarId = store.createShape('ELLIPSE', 640, 68, 40, 40, compSectionId)
   graph.updateNode(avatarId, {
     name: 'Avatar',
     fills: [
       gradient([
-        { color: PURPLE, position: 0 },
-        { color: BLUE, position: 1 }
+        { color: DEMO_COLORS.purple, position: 0 },
+        { color: DEMO_COLORS.blue, position: 1 }
       ])
     ]
   })
-  makeComponent(store, [avatarId])
+  const avatarCompId = makeComponent(store, [avatarId])
+  graph.updateNode(avatarCompId, { name: 'Avatar' })
 
-  const cardId = store.createShape('FRAME', 32, 128, 280, 160, compSectionId)
+  const cardId = store.createShape('FRAME', 32, 216, 280, 160, compSectionId)
   graph.updateNode(cardId, {
     name: 'Card',
     cornerRadius: 12,
-    fills: [solid(WHITE)],
-    strokes: thinStroke(GRAY_200),
+    fills: [solid(DEMO_COLORS.white)],
+    strokes: thinStroke(DEMO_COLORS.gray200),
     layoutMode: 'VERTICAL',
     primaryAxisSizing: 'FIXED',
     counterAxisSizing: 'FIXED',
@@ -133,7 +142,9 @@ export function createComponentsSection(store: EditorStore) {
     text: 'Analytics Overview',
     fontSize: 16,
     fontWeight: 600,
-    fills: [solid(BLACK)]
+    textAutoResize: 'HEIGHT',
+    layoutAlignSelf: 'STRETCH',
+    fills: [solid(DEMO_COLORS.black)]
   })
   const cardDescId = store.createShape('TEXT', 0, 0, 240, 36, cardId)
   graph.updateNode(cardDescId, {
@@ -141,13 +152,15 @@ export function createComponentsSection(store: EditorStore) {
     text: 'Track your key metrics and performance indicators in real time.',
     fontSize: 13,
     fontWeight: 400,
-    fills: [solid(GRAY_500)]
+    textAutoResize: 'HEIGHT',
+    layoutAlignSelf: 'STRETCH',
+    fills: [solid(DEMO_COLORS.gray500)]
   })
   const cardBarBg = store.createShape('RECTANGLE', 0, 0, 240, 8, cardId)
   graph.updateNode(cardBarBg, {
     name: 'Progress BG',
     cornerRadius: 4,
-    fills: [solid(GRAY_100)]
+    fills: [solid(DEMO_COLORS.gray100)]
   })
   const cardBar = store.createShape('RECTANGLE', 0, 0, 168, 8, cardId)
   graph.updateNode(cardBar, {
@@ -155,19 +168,19 @@ export function createComponentsSection(store: EditorStore) {
     cornerRadius: 4,
     fills: [
       gradient([
-        { color: BLUE, position: 0 },
-        { color: TEAL, position: 1 }
+        { color: DEMO_COLORS.blue, position: 0 },
+        { color: DEMO_COLORS.teal, position: 1 }
       ])
     ]
   })
   makeComponent(store, [cardId])
 
-  const inputId = store.createShape('FRAME', 344, 128, 240, 40, compSectionId)
+  const inputId = store.createShape('FRAME', 344, 216, 240, 40, compSectionId)
   graph.updateNode(inputId, {
     name: 'Input',
     cornerRadius: 8,
-    fills: [solid(WHITE)],
-    strokes: thinStroke(GRAY_200),
+    fills: [solid(DEMO_COLORS.white)],
+    strokes: thinStroke(DEMO_COLORS.gray200),
     layoutMode: 'HORIZONTAL',
     primaryAxisSizing: 'FIXED',
     counterAxisSizing: 'HUG',
@@ -184,11 +197,13 @@ export function createComponentsSection(store: EditorStore) {
     text: 'Search...',
     fontSize: 14,
     fontWeight: 400,
-    fills: [solid(GRAY_500)]
+    textAutoResize: 'HEIGHT',
+    layoutAlignSelf: 'STRETCH',
+    fills: [solid(DEMO_COLORS.gray500)]
   })
   makeComponent(store, [inputId])
 
-  const badgeId = store.createShape('FRAME', 344, 196, 48, 24, compSectionId)
+  const badgeId = store.createShape('FRAME', 344, 284, 48, 24, compSectionId)
   graph.updateNode(badgeId, {
     name: 'Badge',
     cornerRadius: 12,
@@ -207,7 +222,7 @@ export function createComponentsSection(store: EditorStore) {
   const badgeDot = store.createShape('ELLIPSE', 0, 0, 6, 6, badgeId)
   graph.updateNode(badgeDot, {
     name: 'Dot',
-    fills: [solid(GREEN)]
+    fills: [solid(DEMO_COLORS.green)]
   })
   const badgeText = store.createShape('TEXT', 0, 0, 28, 14, badgeId)
   graph.updateNode(badgeText, {
@@ -215,18 +230,19 @@ export function createComponentsSection(store: EditorStore) {
     text: 'Live',
     fontSize: 11,
     fontWeight: 600,
-    fills: [solid(GREEN)]
+    textAutoResize: 'WIDTH_AND_HEIGHT',
+    fills: [solid(DEMO_COLORS.green)]
   })
   const badgeCompId = makeComponent(store, [badgeId])
 
   const swatches = [
-    { name: 'Blue', color: BLUE, x: 32 },
-    { name: 'Indigo', color: INDIGO, x: 88 },
-    { name: 'Purple', color: PURPLE, x: 144 },
-    { name: 'Green', color: GREEN, x: 200 },
-    { name: 'Teal', color: TEAL, x: 256 },
-    { name: 'Orange', color: ORANGE, x: 312 },
-    { name: 'Red', color: RED, x: 368 }
+    { name: 'Blue', color: DEMO_COLORS.blue, x: 32 },
+    { name: 'Indigo', color: DEMO_COLORS.indigo, x: 88 },
+    { name: 'Purple', color: DEMO_COLORS.purple, x: 144 },
+    { name: 'Green', color: DEMO_COLORS.green, x: 200 },
+    { name: 'Teal', color: DEMO_COLORS.teal, x: 256 },
+    { name: 'Orange', color: DEMO_COLORS.orange, x: 312 },
+    { name: 'Red', color: DEMO_COLORS.red, x: 368 }
   ]
   for (const swatch of swatches) {
     const id = store.createShape('ELLIPSE', swatch.x, 460, 44, 44, compSectionId)

@@ -32,10 +32,10 @@ const effectsPath = coreSourcePath('canvas/effects.ts')
 const scenePath = coreSourcePath('canvas/scene.ts')
 const rendererPath = coreSourcePath('canvas/renderer.ts')
 const sgTypesPath = coreSourcePath('scene-graph/types.ts')
-const nodeExportPath = coreSourcePath('kiwi/node-change/export-node.ts')
-const convertPath = coreSourcePath('kiwi/node-change/paint.ts')
-const schemaPath = coreSourcePath('kiwi/binary/schema.ts')
-const codecPath = coreSourcePath('kiwi/binary/codec.ts')
+const nodeExportPath = coreSourcePath('kiwi/fig/node-change/export-node.ts')
+const convertPath = coreSourcePath('kiwi/fig/node-change/paint.ts')
+const schemaPath = coreSourcePath('kiwi/fig/codec/schema/fig.kiwi')
+const codecPath = coreSourcePath('kiwi/fig/codec/index.ts')
 const lifecyclePath = coreSourcePath('canvas/renderer/lifecycle.ts')
 
 function readSource(path: string): string {
@@ -61,7 +61,7 @@ describe('Doc 01 — The Current Engine: Static Code Claims', () => {
     }
   })
 
-  test('C01-02: Kiwi EffectType enum has only 4 values, missing LAYER_BLUR (kiwi/binary/schema.ts:132-137)', () => {
+  test('C01-02: Kiwi EffectType enum has only 4 values, missing LAYER_BLUR (kiwi/fig/codec/schema.ts:132-137)', () => {
     const src = readSource(schemaPath)
     expect(src).toContain('INNER_SHADOW = 0')
     expect(src).toContain('DROP_SHADOW = 1')
@@ -70,7 +70,7 @@ describe('Doc 01 — The Current Engine: Static Code Claims', () => {
     expect(src).not.toContain('LAYER_BLUR =')
   })
 
-  test('C01-03: Kiwi codec Effect interface also has 5 types (kiwi/binary/codec.ts:212)', () => {
+  test('C01-03: Kiwi codec Effect interface also has 5 types (kiwi/fig/codec/index.ts:212)', () => {
     const src = readSource(codecPath)
     // The codec.ts file defines an Effect interface — verify all 5 types present
     // Use a targeted search near the Effect interface definition
@@ -251,10 +251,12 @@ describe('Doc 02 — Formula Deconstruction: Static Code Claims', () => {
     // 6 restore: one per save/saveLayer
     const saveLayers = (body.match(/canvas\.saveLayer/g) || []).length
     const saves = (body.match(/canvas\.save\(\)/g) || []).length
-    const restores = (body.match(/canvas\.restore\(\)/g) || []).length
+    const restoreInLoop = body.includes('while (restoreCount > 0)')
+    const restoreCountIncrements = (body.match(/restoreCount\+\+/g) || []).length
     expect(saveLayers).toBe(4)
     expect(saves).toBe(2)
-    expect(restores).toBe(6) // 4 saveLayer + 2 save = 6 restores
+    expect(restoreInLoop).toBe(true)
+    expect(restoreCountIncrements).toBe(6) // 4 saveLayer + 2 save = 6 restores
   })
 
   test('C02-03: DecalBlur is used (not Clamp) for inner shadow (shadows.ts:184)', () => {
@@ -291,8 +293,8 @@ describe('Doc 02 — Formula Deconstruction: Static Code Claims', () => {
 // ============================================================
 
 describe('Doc 03 — Artifact Analysis: Static + Runtime Verification', () => {
-  test('C03-01: visual-inner-shadow-counter.ts exists and checks for right-edge shadow', () => {
-    const visualTestPath = repoTestPath('engine/visual-inner-shadow-counter.ts')
+  test('C03-01: render visual inner-shadow counter script exists and checks for right-edge shadow', () => {
+    const visualTestPath = repoTestPath('engine/render/canvas/visual/inner-shadow-counter.ts')
     const src = readFileSync(visualTestPath, 'utf-8')
     expect(src).toContain('hasShadowOnRightInnerEdge')
     expect(src).toContain("t.color === 'black'")
@@ -471,44 +473,6 @@ describe('Doc 01/03 — Runtime Behavior Verification', () => {
     // The actual rendering is verified by the behavioral test
     const effectTypes = textNode.effects.map((e) => e.type)
     expect(effectTypes).toContain('INNER_SHADOW')
-  })
-
-  test('C-RT04: getShadowShapeChild returns null when node has visible fills', () => {
-    // This function is private in scene.ts, so we test indirectly
-    // by creating a node with fills and checking that its shadow
-    // uses its own rect, not a child's shape
-    const parentWithFill = graph.createNode('FRAME', pageId, {
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      fills: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0, a: 0.5 }, visible: true, opacity: 1 }],
-      effects: [
-        {
-          type: 'DROP_SHADOW',
-          visible: true,
-          color: { r: 0, g: 0, b: 0, a: 1 },
-          offset: { x: 5, y: 5 },
-          radius: 10,
-          spread: 0
-        }
-      ]
-    })
-
-    graph.createNode('RECTANGLE', parentWithFill.id, {
-      x: 25,
-      y: 25,
-      width: 50,
-      height: 50,
-      fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 1, a: 1 }, visible: true, opacity: 1 }]
-    })
-
-    // renderEffects should use the parent, not the child
-    // We verify this by checking that the canvas translation matches
-    // the node's own coordinates (shadowShapeChild would be null)
-    expect(parentWithFill.fills.some((f) => f.visible)).toBe(true)
-    // renderShapeUncached passes getShadowShapeChild result to renderEffects
-    // which returns null when fills are visible → confirms claim
   })
 
   test('C-RT05: GAP-01 fixed — ColorFilter MakeBlend is captured and .delete()d', () => {

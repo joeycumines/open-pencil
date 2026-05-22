@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 
+import { BLACK } from '@open-pencil/core/constants'
 import { colorToHexRaw, parseColor } from '@open-pencil/core/color'
 import type { Editor } from '@open-pencil/core/editor'
 import { randomHex } from '@open-pencil/core/random'
@@ -93,7 +94,7 @@ export function createVariableValueActions(
   getActiveCollection: () => VariableCollection | null
 ) {
   function defaultVariableValue(type: VariableType): VariableValue {
-    if (type === 'COLOR') return { r: 0, g: 0, b: 0, a: 1 }
+    if (type === 'COLOR') return { ...BLACK }
     if (type === 'FLOAT') return 0
     if (type === 'BOOLEAN') return false
     return ''
@@ -152,8 +153,8 @@ export function createVariableValueActions(
   function parseVariableValue(variable: Variable, raw: string): VariableValue | undefined {
     if (variable.type === 'COLOR') return parseColor(raw.startsWith('#') ? raw : `#${raw}`)
     if (variable.type === 'FLOAT') {
-      const num = parseFloat(raw)
-      return isNaN(num) ? undefined : num
+      const num = Number.parseFloat(raw)
+      return Number.isNaN(num) ? undefined : num
     }
     if (variable.type === 'BOOLEAN') return raw.toLowerCase() === 'true'
     return raw

@@ -1,8 +1,12 @@
+import type { SkiaRenderer } from '#core/canvas'
+import { canMakeBooleanSourceNode } from '#core/canvas/boolean'
+import { flattenNodesToVectorProps } from '#core/canvas/flatten'
 import { IS_BROWSER } from '#core/constants'
 import { computeBounds } from '#core/geometry'
 import type { RasterExportFormat } from '#core/io/formats/raster'
 import type {
   SceneGraph,
+  SceneNode as CoreSceneNode,
   NodeType,
   Variable,
   VariableCollection,
@@ -12,6 +16,20 @@ import type {
 import { copyFills, copyStrokes, copyEffects } from '#core/scene-graph/copy'
 import type { Rect, Vector } from '#core/types'
 
+import type {
+  FigmaBooleanOperationNode,
+  FigmaComponentNode,
+  FigmaEllipseNode,
+  FigmaFrameNode,
+  FigmaGroupNode,
+  FigmaLineNode,
+  FigmaPolygonNode,
+  FigmaRectangleNode,
+  FigmaSectionNode,
+  FigmaStarNode,
+  FigmaTextNode,
+  FigmaVectorNode
+} from './node-types'
 import {
   FigmaNodeProxy,
   INTERNAL_ID,
@@ -24,6 +42,20 @@ import {
 const noop = () => undefined
 
 export { FigmaNodeProxy } from './proxy'
+export type {
+  FigmaBooleanOperationNode,
+  FigmaComponentNode,
+  FigmaEllipseNode,
+  FigmaFrameNode,
+  FigmaGroupNode,
+  FigmaLineNode,
+  FigmaPolygonNode,
+  FigmaRectangleNode,
+  FigmaSectionNode,
+  FigmaStarNode,
+  FigmaTextNode,
+  FigmaVectorNode
+} from './node-types'
 export type { FigmaFont, FigmaFontName } from './proxy'
 
 export function computeImageHash(data: Uint8Array): string {
@@ -60,12 +92,15 @@ export function computeImageHash(data: Uint8Array): string {
   return [h1, h2, h3, h4, h5].map((h) => h.toString(16).padStart(8, '0')).join('')
 }
 
+// TODO(figma-api): Implement the full official PluginAPI interface once our compatibility
+// layer covers all required node-specific return types and unsupported APIs are modeled explicitly.
 export class FigmaAPI implements NodeProxyHost {
   readonly graph: SceneGraph
   private _currentPageId: string
   private _selection: FigmaNodeProxy[] = []
   private _nodeCache = new Map<string, FigmaNodeProxy>()
   private _pageProxies = new WeakSet<FigmaNodeProxy>()
+  private _renderer: SkiaRenderer | null = null
 
   readonly mixed = MIXED
 
@@ -73,6 +108,10 @@ export class FigmaAPI implements NodeProxyHost {
     this.graph = graph
     const pages = graph.getPages()
     this._currentPageId = pages[0]?.id ?? graph.rootId
+  }
+
+  setRenderer(renderer: SkiaRenderer | null): void {
+    this._renderer = renderer
   }
 
   get currentPageId(): string {
@@ -129,44 +168,44 @@ export class FigmaAPI implements NodeProxyHost {
     return this.wrapNode(node.id)
   }
 
-  createFrame(): FigmaNodeProxy {
-    return this._createNode('FRAME')
+  createFrame(): FigmaFrameNode {
+    return this._createNode('FRAME') as FigmaFrameNode
   }
 
-  createRectangle(): FigmaNodeProxy {
-    return this._createNode('RECTANGLE')
+  createRectangle(): FigmaRectangleNode {
+    return this._createNode('RECTANGLE') as FigmaRectangleNode
   }
 
-  createEllipse(): FigmaNodeProxy {
-    return this._createNode('ELLIPSE')
+  createEllipse(): FigmaEllipseNode {
+    return this._createNode('ELLIPSE') as FigmaEllipseNode
   }
 
-  createText(): FigmaNodeProxy {
-    return this._createNode('TEXT')
+  createText(): FigmaTextNode {
+    return this._createNode('TEXT') as FigmaTextNode
   }
 
-  createLine(): FigmaNodeProxy {
-    return this._createNode('LINE')
+  createLine(): FigmaLineNode {
+    return this._createNode('LINE') as FigmaLineNode
   }
 
-  createPolygon(): FigmaNodeProxy {
-    return this._createNode('POLYGON')
+  createPolygon(): FigmaPolygonNode {
+    return this._createNode('POLYGON') as FigmaPolygonNode
   }
 
-  createStar(): FigmaNodeProxy {
-    return this._createNode('STAR')
+  createStar(): FigmaStarNode {
+    return this._createNode('STAR') as FigmaStarNode
   }
 
-  createVector(): FigmaNodeProxy {
-    return this._createNode('VECTOR')
+  createVector(): FigmaVectorNode {
+    return this._createNode('VECTOR') as FigmaVectorNode
   }
 
-  createComponent(): FigmaNodeProxy {
-    return this._createNode('COMPONENT')
+  createComponent(): FigmaComponentNode {
+    return this._createNode('COMPONENT') as FigmaComponentNode
   }
 
-  createSection(): FigmaNodeProxy {
-    return this._createNode('SECTION')
+  createSection(): FigmaSectionNode {
+    return this._createNode('SECTION') as FigmaSectionNode
   }
 
   createPage(): FigmaNodeProxy {
@@ -176,22 +215,39 @@ export class FigmaAPI implements NodeProxyHost {
 
   // --- Grouping ---
 
-  group(nodes: FigmaNodeProxy[], parent: FigmaNodeProxy): FigmaNodeProxy {
-    const groupNode = this.graph.createNode('GROUP', parent[INTERNAL_ID])
-    for (const n of nodes) {
-      this.graph.reparentNode(n[INTERNAL_ID], groupNode.id)
-    }
-    return this.wrapNode(groupNode.id)
+  private _nodeId(node: BaseNode | FigmaNodeProxy): string {
+    return (node as BaseNode & { [INTERNAL_ID]: string })[INTERNAL_ID]
   }
 
-  ungroup(node: FigmaNodeProxy): void {
-    const raw = this.graph.getNode(node[INTERNAL_ID])
-    if (raw?.type !== 'GROUP') return
+  group(nodes: ReadonlyArray<FigmaNodeProxy>, parent: FigmaNodeProxy, index?: number): FigmaGroupNode
+  group(nodes: ReadonlyArray<BaseNode>, parent: BaseNode & ChildrenMixin, index?: number): GroupNode
+  group(
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaGroupNode {
+    const parentId = this._nodeId(parent)
+    const groupNode = this.graph.createNode('GROUP', parentId)
+    for (const n of nodes) {
+      this.graph.reparentNode(this._nodeId(n), groupNode.id)
+    }
+    if (index != null) this.graph.reorderChild(groupNode.id, parentId, index)
+    return this.wrapNode(groupNode.id) as FigmaGroupNode
+  }
+
+  ungroup(node: FigmaNodeProxy): FigmaNodeProxy[]
+  ungroup(node: SceneNode & ChildrenMixin): Array<SceneNode>
+  ungroup(node: (SceneNode & ChildrenMixin) | FigmaNodeProxy): Array<SceneNode> | FigmaNodeProxy[] {
+    const nodeId = this._nodeId(node)
+    const raw = this.graph.getNode(nodeId)
+    if (!raw || raw.childIds.length === 0) return []
     const parentId = raw.parentId ?? this._currentPageId
-    for (const childId of Array.from(raw.childIds)) {
+    const children = Array.from(raw.childIds)
+    for (const childId of children) {
       this.graph.reparentNode(childId, parentId)
     }
-    this.graph.deleteNode(node[INTERNAL_ID])
+    this.graph.deleteNode(nodeId)
+    return children.map((id) => this.wrapNode(id))
   }
 
   createComponentFromNode(node: FigmaNodeProxy): FigmaNodeProxy {
@@ -292,36 +348,110 @@ export class FigmaAPI implements NodeProxyHost {
 
   // --- Boolean Operations ---
 
-  booleanOperation(
+  private _booleanOperation(
     operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE',
-    nodeIds: string[]
-  ): FigmaNodeProxy {
-    if (nodeIds.length < 2) throw new Error('Need at least 2 nodes for boolean operation')
-    const nodes = nodeIds.map((id) => this.graph.getNode(id))
-    const first = nodes[0]
-    if (!first || nodes.some((n) => !n)) throw new Error('One or more nodes not found')
-    const parentId = first.parentId ?? this._currentPageId
-    const group = this.graph.createNode('GROUP', parentId, {
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode {
+    if (nodes.length < 2) throw new Error('Need at least 2 nodes for boolean operation')
+    const parentId = this._nodeId(parent)
+    const first = this.graph.getNode(this._nodeId(nodes[0]))
+    if (!first) throw new Error('Node not found')
+    const group = this.graph.createNode('BOOLEAN_OPERATION', parentId, {
       name: `Boolean ${operation.toLowerCase()}`,
       x: first.x,
       y: first.y,
       width: first.width,
-      height: first.height
+      height: first.height,
+      booleanOperation: operation
     })
-    for (const id of nodeIds) {
-      this.graph.reparentNode(id, group.id)
+    for (const node of nodes) {
+      this.graph.reparentNode(this._nodeId(node), group.id)
     }
-    return this.wrapNode(group.id)
+    if (index != null) this.graph.reorderChild(group.id, parentId, index)
+    return this.wrapNode(group.id) as FigmaBooleanOperationNode
+  }
+
+  private _nodesById(nodeIds: string[]) {
+    return nodeIds.map((id) => {
+      const node = this.getNodeById(id)
+      if (!node) throw new Error(`Node ${id} not found`)
+      return node
+    })
+  }
+
+  booleanOperation(
+    operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE',
+    nodeIds: string[]
+  ): FigmaBooleanOperationNode {
+    const first = this.graph.getNode(nodeIds[0])
+    const parent = this.wrapNode(first?.parentId ?? this._currentPageId)
+    return this._booleanOperation(operation, this._nodesById(nodeIds), parent)
+  }
+
+  union(
+    nodes: ReadonlyArray<BaseNode>,
+    parent: BaseNode & ChildrenMixin,
+    index?: number
+  ): BooleanOperationNode {
+    return this._booleanOperation('UNION', nodes, parent, index)
+  }
+
+  subtract(
+    nodes: ReadonlyArray<BaseNode>,
+    parent: BaseNode & ChildrenMixin,
+    index?: number
+  ): BooleanOperationNode {
+    return this._booleanOperation('SUBTRACT', nodes, parent, index)
+  }
+
+  intersect(
+    nodes: ReadonlyArray<BaseNode>,
+    parent: BaseNode & ChildrenMixin,
+    index?: number
+  ): BooleanOperationNode {
+    return this._booleanOperation('INTERSECT', nodes, parent, index)
+  }
+
+  exclude(
+    nodes: ReadonlyArray<BaseNode>,
+    parent: BaseNode & ChildrenMixin,
+    index?: number
+  ): BooleanOperationNode {
+    return this._booleanOperation('EXCLUDE', nodes, parent, index)
   }
 
   // --- Flatten ---
 
-  flattenNode(nodeIds: string[]): FigmaNodeProxy {
-    if (nodeIds.length === 0) throw new Error('Need at least 1 node to flatten')
-    const first = this.graph.getNode(nodeIds[0])
-    if (!first) throw new Error('Node not found')
-    const parentId = first.parentId ?? this._currentPageId
-    const vector = this.graph.createNode('VECTOR', parentId, {
+  flatten(nodes: ReadonlyArray<FigmaNodeProxy>, parent?: FigmaNodeProxy, index?: number): FigmaVectorNode
+  flatten(nodes: ReadonlyArray<BaseNode>, parent?: BaseNode & ChildrenMixin, index?: number): VectorNode
+  flatten(
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent?: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaVectorNode {
+    if (nodes.length === 0) throw new Error('Need at least 1 node to flatten')
+    const parentId = this._nodeId(parent ?? this.currentPage)
+    const sourceNodes: CoreSceneNode[] = []
+    for (const node of nodes) {
+      const raw = this.graph.getNode(this._nodeId(node))
+      if (!raw) throw new Error('Node not found')
+      sourceNodes.push(raw)
+    }
+    const vector = this._renderer
+      ? this._flattenWithRenderer(sourceNodes, parentId)
+      : this._flattenPlaceholder(sourceNodes, parentId)
+    if (index != null) this.graph.reorderChild(vector.id, parentId, index)
+    for (const node of nodes) {
+      this.graph.deleteNode(this._nodeId(node))
+    }
+    return this.wrapNode(vector.id) as FigmaVectorNode
+  }
+
+  private _flattenPlaceholder(nodes: CoreSceneNode[], parentId: string): CoreSceneNode {
+    const first = nodes[0]
+    return this.graph.createNode('VECTOR', parentId, {
       name: 'Flatten',
       x: first.x,
       y: first.y,
@@ -329,10 +459,24 @@ export class FigmaAPI implements NodeProxyHost {
       height: first.height,
       fills: copyFills(first.fills)
     })
-    for (const id of nodeIds) {
-      this.graph.deleteNode(id)
+  }
+
+  private _flattenWithRenderer(nodes: CoreSceneNode[], parentId: string): CoreSceneNode {
+    const renderer = this._renderer
+    if (!renderer) return this._flattenPlaceholder(nodes, parentId)
+    if (nodes.some((node) => !canMakeBooleanSourceNode(node, this.graph))) {
+      throw new Error('Cannot flatten unsupported node type')
     }
-    return this.wrapNode(vector.id)
+
+    const vectorProps = flattenNodesToVectorProps(renderer, this.graph, nodes)
+    if (!vectorProps) throw new Error('Cannot flatten empty node path')
+    return this.graph.createNode('VECTOR', parentId, vectorProps)
+  }
+
+  flattenNode(nodeIds: string[]): FigmaVectorNode {
+    const first = this.graph.getNode(nodeIds[0])
+    const parent = this.wrapNode(first?.parentId ?? this._currentPageId)
+    return this.flatten(this._nodesById(nodeIds), parent)
   }
 
   // --- Viewport ---
@@ -382,6 +526,14 @@ export class FigmaAPI implements NodeProxyHost {
     // Default: pure browser / test contexts have no enumeration surface.
     // Desktop hosts override this to return system + bundled fonts.
     return []
+  }
+
+  base64Encode(data: Uint8Array): string {
+    return data.toBase64()
+  }
+
+  base64Decode(data: string): Uint8Array {
+    return Uint8Array.fromBase64(data)
   }
 
   notify(message: string): { cancel: () => void } {

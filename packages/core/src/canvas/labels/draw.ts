@@ -13,6 +13,8 @@ import {
 } from '#core/constants'
 import type { SceneNode, SceneGraph } from '#core/scene-graph'
 
+import { ellipsizeLabelText } from './text'
+
 export function drawSectionTitles(r: SkiaRenderer, canvas: Canvas, graph: SceneGraph): void {
   if (!r.sectionTitleFont) return
 
@@ -120,6 +122,10 @@ export function drawComponentLabels(r: SkiaRenderer, canvas: Canvas, graph: Scen
       labelY = screenY - COMPONENT_LABEL_GAP
     }
 
+    const maxTextWidth = node.width * r.zoom - iconS - COMPONENT_LABEL_ICON_GAP
+    const displayText = ellipsizeLabelText(font, node.name, maxTextWidth)
+    if (!displayText) continue
+
     const iconX = labelX
     const iconY = labelY - COMPONENT_LABEL_FONT_SIZE * 0.75
     const iconCx = iconX + iconS / 2
@@ -159,6 +165,6 @@ export function drawComponentLabels(r: SkiaRenderer, canvas: Canvas, graph: Scen
       path.delete()
     }
 
-    canvas.drawText(node.name, labelX + iconS + COMPONENT_LABEL_ICON_GAP, labelY, r.auxFill, font)
+    canvas.drawText(displayText, labelX + iconS + COMPONENT_LABEL_ICON_GAP, labelY, r.auxFill, font)
   }
 }

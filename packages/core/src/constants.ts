@@ -83,6 +83,24 @@ export const DROP_HIGHLIGHT_ALPHA = 0.8
 export const DROP_HIGHLIGHT_STROKE = 2
 
 export const LAYOUT_INDICATOR_STROKE = 2
+export const AUTO_LAYOUT_HOVER_TICK_LENGTH = 12
+export const AUTO_LAYOUT_HOVER_STRIPE_GAP = 8
+export const AUTO_LAYOUT_HOVER_STRIPE_WIDTH = 1
+export const AUTO_LAYOUT_HOVER_STROKE_WIDTH = 1.5
+export const AUTO_LAYOUT_HOVER_CHILD_DASH = 4
+export const AUTO_LAYOUT_HOVER_VALUE_OFFSET = 18
+export const AUTO_LAYOUT_HOVER_VALUE_PILL_HEIGHT = 22
+export const AUTO_LAYOUT_HOVER_VALUE_PILL_RADIUS = 5
+export const AUTO_LAYOUT_HOVER_VALUE_PILL_PADDING_X = 5
+export const AUTO_LAYOUT_HOVER_GAP_REGION_TOLERANCE = 12
+export const AUTO_LAYOUT_HOVER_TICK_HIT_TOLERANCE = 8
+export const AUTO_LAYOUT_HOVER_PADDING_REGION_TOLERANCE = 20
+export const AUTO_LAYOUT_PADDING_EDITOR_OFFSET_X = 18
+export const AUTO_LAYOUT_PADDING_EDITOR_OFFSET_Y = 36
+export const AUTO_LAYOUT_HOVER_BLUE = { r: 0.28, g: 0.64, b: 1, a: 0.82 } satisfies Color
+export const AUTO_LAYOUT_HOVER_BLUE_FILL = { r: 0.28, g: 0.64, b: 1, a: 0.1 } satisfies Color
+export const AUTO_LAYOUT_HOVER_MAGENTA = { r: 1, g: 0.32, b: 0.68, a: 0.78 } satisfies Color
+export const AUTO_LAYOUT_HOVER_MAGENTA_FILL = { r: 1, g: 0.32, b: 0.68, a: 0.1 } satisfies Color
 
 export const SECTION_CORNER_RADIUS = 5
 export const SECTION_TITLE_HEIGHT = 24
@@ -190,6 +208,7 @@ export const AI_PROVIDERS: AIProviderDef[] = [
     keyPlaceholder: 'sk-or-…',
     keyURL: 'https://openrouter.ai/keys',
     defaultModel: 'anthropic/claude-sonnet-4.6',
+    supportsCustomModel: true,
     models: [
       { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', tag: 'Best for design' },
       { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', tag: 'Smartest' },
@@ -247,10 +266,10 @@ export const AI_PROVIDERS: AIProviderDef[] = [
     name: 'DeepSeek',
     keyPlaceholder: 'sk-…',
     keyURL: 'https://platform.deepseek.com/api_keys',
-    defaultModel: 'deepseek-chat',
+    defaultModel: 'deepseek-v4-flash',
     models: [
-      { id: 'deepseek-chat', name: 'DeepSeek V3', tag: 'Fast' },
-      { id: 'deepseek-reasoner', name: 'DeepSeek R1', tag: 'Reasoning' }
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', tag: 'Fast' },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', tag: 'Reasoning' }
     ]
   },
   {

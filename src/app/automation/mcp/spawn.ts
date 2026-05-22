@@ -8,6 +8,8 @@ import { isTauri } from '@/app/tauri/env'
 
 interface AutomationHealth {
   status: 'ok' | 'no_app'
+  version?: string
+  installCommand?: string
   authRequired?: boolean
   token?: string
 }
@@ -17,7 +19,12 @@ export interface AutomationServerHandle {
   authToken: string | null
 }
 
-const DEV_AUTOMATION_AUTH_TOKEN = import.meta.env.DEV ? __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__ : null
+const DEV_AUTOMATION_AUTH_TOKEN =
+  import.meta.env.DEV && typeof __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__ === 'string'
+    ? __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__
+    : null
+const APP_VERSION =
+  typeof __OPENPENCIL_APP_VERSION__ === 'string' ? __OPENPENCIL_APP_VERSION__ : '0.0.0-test'
 const noop = () => undefined
 
 let runtimeAutomationAuthToken: string | null = DEV_AUTOMATION_AUTH_TOKEN
@@ -35,6 +42,18 @@ async function readHealth(): Promise<AutomationHealth | null> {
   }
 }
 
+function assertCompatibleMcpVersion(health: AutomationHealth): void {
+  if (health.version === APP_VERSION) return
+  const runningVersion = health.version ? `v${health.version}` : 'an older version'
+  const updateHint = health.installCommand
+    ? `Run: ${health.installCommand}, then restart OpenPencil.`
+    : `Update the global @open-pencil/mcp package to v${APP_VERSION} with your package manager, then restart OpenPencil.`
+  throw new Error(
+    `OpenPencil desktop v${APP_VERSION} requires @open-pencil/mcp v${APP_VERSION}, ` +
+      `but the running MCP server is ${runningVersion}. ${updateHint}`
+  )
+}
+
 async function pollHealth(retries: number, delayMs: number): Promise<AutomationHealth | null> {
   for (let i = 0; i < retries; i++) {
     await promiseTimeout(delayMs)
@@ -47,6 +66,7 @@ async function pollHealth(retries: number, delayMs: number): Promise<AutomationH
 export async function getAutomationAuthToken(): Promise<string | null> {
   if (runtimeAutomationAuthToken) return runtimeAutomationAuthToken
   const health = await readHealth()
+  if (health) assertCompatibleMcpVersion(health)
   runtimeAutomationAuthToken = health?.token ?? null
   return runtimeAutomationAuthToken
 }
@@ -60,6 +80,7 @@ export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null>
 
   const existing = await readHealth()
   if (existing) {
+    assertCompatibleMcpVersion(existing)
     runtimeAutomationAuthToken = existing.token ?? null
     return {
       disconnect: noop,
@@ -98,6 +119,7 @@ export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null>
   const health = await pollHealth(5, 1000)
 
   if (health) {
+    assertCompatibleMcpVersion(health)
     runtimeAutomationAuthToken = health.token ?? authToken
     return {
       disconnect: () => {
@@ -109,6 +131,6 @@ export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null>
 
   await child.kill()
   throw new Error(
-    'Failed to start MCP server. Is openpencil-mcp-http installed? Run: npm i -g @open-pencil/mcp'
+    `Failed to start MCP server. Install @open-pencil/mcp@${APP_VERSION} globally with your package manager, then restart OpenPencil.`
   )
 }

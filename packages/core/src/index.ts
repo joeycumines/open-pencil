@@ -165,8 +165,10 @@ export {
 export {
   FONT_WEIGHT_NAMES,
   FontManager,
+  chooseLocalFontMatch,
   fontManager,
   styleToWeight,
+  weightToFigmaStyle,
   weightToStyle,
   normalizeFontFamily,
   isVariableFont,
@@ -175,6 +177,14 @@ export {
   type FontInfo,
   type LocalFontAccessState
 } from './text/fonts'
+export {
+  fontFaceFromFigmaFontName,
+  fontFaceRenderFamily,
+  normalizeFontStyleName,
+  parseFontStyle,
+  type FontFaceRef,
+  type ParsedFontStyle
+} from './text/face'
 export {
   ARABIC_LOCAL_FALLBACK_FAMILIES,
   ARABIC_REMOTE_FALLBACK_FAMILIES,
@@ -214,8 +224,7 @@ export {
   geometryBlobToPath,
   decodeVectorNetworkBlob,
   encodeVectorNetworkBlob,
-  buildStyleOverrideTable,
-  computeVectorBounds
+  buildStyleOverrideTable
 } from './vector'
 export {
   evalCubic,
@@ -292,8 +301,8 @@ export {
   sceneNodeToKiwi,
   fractionalPosition,
   mapToFigmaType
-} from './kiwi/node-change/serialize'
-export { buildDerivedTextDataV4 } from './text/clipboard-derived-text'
+} from './kiwi/fig/node-change/serialize'
+export { buildDerivedTextDataV4 } from './text/derived-text/clipboard'
 
 export {
   createElement,

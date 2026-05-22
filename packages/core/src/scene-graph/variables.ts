@@ -1,3 +1,5 @@
+import { omit, omitBy } from 'es-toolkit/object'
+
 import { BLACK } from '#core/constants'
 import type { Color } from '#core/types'
 
@@ -21,9 +23,10 @@ export function removeVariable(graph: SceneGraph, id: string): void {
     collection.variableIds = collection.variableIds.filter((vid) => vid !== id)
   }
   for (const node of graph.nodes.values()) {
-    for (const [field, varId] of Object.entries(node.boundVariables)) {
-      if (varId === id) delete node.boundVariables[field]
-    }
+    node.boundVariables = omitBy(node.boundVariables, (varId) => varId === id) as Record<
+      string,
+      string
+    >
   }
 }
 
@@ -140,7 +143,7 @@ export function removeMode(graph: SceneGraph, collectionId: string, modeId: stri
   }
   for (const varId of collection.variableIds) {
     const variable = graph.variables.get(varId)
-    if (variable) delete variable.valuesByMode[modeId]
+    if (variable) variable.valuesByMode = omit(variable.valuesByMode, [modeId])
   }
   if (graph.activeMode.get(collectionId) === modeId) {
     graph.activeMode.set(collectionId, collection.defaultModeId)
@@ -232,5 +235,5 @@ export function bindVariable(
 
 export function unbindVariable(graph: SceneGraph, nodeId: string, field: string): void {
   const node = graph.nodes.get(nodeId)
-  if (node) delete node.boundVariables[field]
+  if (node) node.boundVariables = omit(node.boundVariables, [field])
 }

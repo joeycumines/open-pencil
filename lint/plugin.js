@@ -95,10 +95,7 @@ const noInlineNamedTypes = {
         )
         if (!props || props.length < 2) return
 
-        const required = props.filter((m) => !m.optional)
-        if (required.length < 2) return
-
-        const shape = required
+        const shape = props
           .map((m) => {
             const typeNode = m.typeAnnotation?.typeAnnotation
             let typeName = 'unknown'
@@ -175,6 +172,388 @@ const noStructuredCloneSceneArrays = {
   }
 }
 
+const noVueStyleBlocks = {
+  meta: {
+    docs: {
+      description: 'Disallow Vue component <style> blocks — use Tailwind utilities or global tokens'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+    if (!file.includes('/src/') && !file.includes('/packages/vue/src/')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        if (/<style\b/i.test(source)) {
+          context.report({
+            node,
+            message:
+              'Vue components must not use <style> blocks. Use Tailwind utilities or global app.css tokens.'
+          })
+        }
+      }
+    }
+  }
+}
+
+const noNativeTitleAttributesInVue = {
+  meta: {
+    docs: {
+      description: 'Disallow native title attributes in Vue components — use Tip/Reka tooltip'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+    if (!file.includes('/src/') && !file.includes('/packages/vue/src/')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        if (/\s:?title=/.test(source)) {
+          context.report({
+            node,
+            message: 'Use the shared tooltip UI instead of native title attributes.'
+          })
+        }
+      }
+    }
+  }
+}
+
+const noHardcodedTipLabelsInVue = {
+  meta: {
+    docs: {
+      description: 'Disallow hardcoded Tip labels — use localized i18n messages'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+    if (!file.includes('/src/') && !file.includes('/packages/vue/src/')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        if (/<Tip\b[^>]*\slabel=["']/.test(source)) {
+          context.report({
+            node,
+            message: 'Use a localized binding for Tip labels, not a hardcoded string.'
+          })
+        }
+      }
+    }
+  }
+}
+
+const TEST_ID_FORMAT = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+
+const noRawTestIdStringProps = {
+  meta: {
+    docs: {
+      description: 'Disallow raw testId string props — use TestIdProps or RequiredTestIdProps'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (file.endsWith('/packages/vue/src/testing/test-id.ts')) return {}
+
+    function isTestIdKey(key) {
+      return key?.type === 'Identifier' && key.name === 'testId'
+    }
+
+    function isStringType(member) {
+      return member.typeAnnotation?.typeAnnotation?.type === 'TSStringKeyword'
+    }
+
+    function report(node, optional) {
+      context.report({
+        node,
+        message: optional
+          ? 'Use TestIdProps instead of declaring testId?: string directly.'
+          : 'Use RequiredTestIdProps or TestId instead of declaring testId: string directly.'
+      })
+    }
+
+    return {
+      TSPropertySignature(node) {
+        if (!isTestIdKey(node.key) || !isStringType(node)) return
+        report(node, !!node.optional)
+      }
+    }
+  }
+}
+
+const noDynamicDataTestIdInVue = {
+  meta: {
+    docs: {
+      description: 'Disallow dynamic :data-test-id in Vue components — use v-test-id'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        if (/\B:data-test-id\s*=|\bv-bind:data-test-id\s*=/.test(source)) {
+          context.report({
+            node,
+            message: 'Use v-test-id for dynamic/configurable test ids instead of :data-test-id.'
+          })
+        }
+      }
+    }
+  }
+}
+
+const noTestIdHelperBindInVue = {
+  meta: {
+    docs: {
+      description: 'Prefer v-test-id over v-bind="testId(...)" in Vue templates'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        if (/\bv-bind\s*=\s*"testId(?:Attr)?\(/.test(source)) {
+          context.report({
+            node,
+            message: 'Use v-test-id instead of v-bind="testId(...)" in Vue templates.'
+          })
+        }
+      }
+    }
+  }
+}
+
+const noInvalidTestIdAttributes = {
+  meta: {
+    docs: {
+      description: 'Enforce data-test-id spelling and kebab-case static test ids in Vue components'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        const invalidAttr = source.match(/\bdata-testid\s*=/)
+        if (invalidAttr) {
+          context.report({
+            node,
+            message: 'Use data-test-id instead of data-testid.'
+          })
+          return
+        }
+
+        const attrPattern = /\bdata-test-id\s*=\s*"([^"]+)"/g
+        for (const match of source.matchAll(attrPattern)) {
+          const id = match[1]
+          if (TEST_ID_FORMAT.test(id)) continue
+          context.report({
+            node,
+            message: `Static data-test-id values must be kebab-case. Invalid id: "${id}".`
+          })
+          return
+        }
+      }
+    }
+  }
+}
+
+const noRawTestIdSelectorsInTests = {
+  meta: {
+    docs: {
+      description: 'Disallow raw data-test-id CSS selectors in Playwright tests — use getByTestId()'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.includes('/tests/')) return {}
+
+    return {
+      CallExpression(node) {
+        const callee = node.callee
+        if (callee?.type !== 'MemberExpression') return
+        if (callee.property?.type !== 'Identifier' || callee.property.name !== 'locator') return
+        const firstArg = node.arguments?.[0]
+        if (!firstArg) return
+
+        const isRawTestIdSelector =
+          (firstArg.type === 'Literal' &&
+            typeof firstArg.value === 'string' &&
+            firstArg.value.includes('[data-test-id')) ||
+          (firstArg.type === 'TemplateLiteral' &&
+            firstArg.quasis?.some((part) => part.value.raw.includes('[data-test-id')))
+
+        if (!isRawTestIdSelector) return
+        context.report({
+          node,
+          message: 'Use getByTestId() instead of raw [data-test-id] CSS selectors in tests.'
+        })
+      }
+    }
+  }
+}
+
+const noGeneratedTestIdLiterals = {
+  meta: {
+    docs: {
+      description: 'Disallow hand-written generated test-id literals — use shared helper functions'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (file.endsWith('/packages/vue/src/testing/test-id.ts')) return {}
+    if (file.endsWith('/tests/helpers/test-ids.ts')) return {}
+    if (!file.includes('/src/') && !file.includes('/tests/')) return {}
+
+    return {
+      Program(node) {
+        const source = context.sourceCode.getText()
+        const match = source.match(
+          /["'`](?:mobile-)?toolbar-(?:tool|flyout|flyout-item)-|["'`]variables-add-(?:float|string|boolean)["'`]|["'`]acp-permission-option-/
+        )
+        if (!match) return
+        context.report({
+          node,
+          message:
+            'Use shared generated test-id helpers instead of hand-written toolbar/variable/permission id literals.'
+        })
+      }
+    }
+  }
+}
+
+const noBrowserSideEffectsInVue = {
+  meta: {
+    docs: {
+      description:
+        'Disallow direct browser side effects in Vue components — use VueUse, refs, or app services'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+
+    function propertyName(property) {
+      if (property?.type === 'Identifier') return property.name
+      if (property?.type === 'Literal' && typeof property.value === 'string') return property.value
+      return null
+    }
+
+    function objectName(object) {
+      return object?.type === 'Identifier' ? object.name : null
+    }
+
+    return {
+      CallExpression(node) {
+        const callee = node.callee
+        if (callee?.type !== 'MemberExpression') return
+        const object = objectName(callee.object)
+        const property = propertyName(callee.property)
+
+        if (
+          (object === 'window' || object === 'document') &&
+          (property === 'addEventListener' || property === 'removeEventListener')
+        ) {
+          context.report({
+            node,
+            message: 'Use VueUse useEventListener() instead of direct browser event listeners in Vue components.'
+          })
+          return
+        }
+
+        if (object === 'document' && property === 'createElement') {
+          context.report({
+            node,
+            message:
+              'Do not create DOM elements directly in Vue components. Use template refs, components, or an app service.'
+          })
+        }
+      },
+      MemberExpression(node) {
+        const object = objectName(node.object)
+        if (object !== 'localStorage' && object !== 'sessionStorage') return
+        context.report({
+          node,
+          message:
+            'Do not access localStorage/sessionStorage directly in Vue components. Use VueUse storage helpers or an app service.'
+        })
+      }
+    }
+  }
+}
+
+const noDocumentQuerySelectorInVue = {
+  meta: {
+    docs: {
+      description: 'Disallow document.querySelector in Vue components — use template refs or composables'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (!file.endsWith('.vue')) return {}
+
+    return {
+      CallExpression(node) {
+        const callee = node.callee
+        if (callee?.type !== 'MemberExpression') return
+        if (callee.object?.type !== 'Identifier' || callee.object.name !== 'document') return
+        if (callee.property?.type !== 'Identifier') return
+        if (callee.property.name !== 'querySelector' && callee.property.name !== 'querySelectorAll') {
+          return
+        }
+        context.report({
+          node,
+          message:
+            'Do not query the document from Vue components. Use template refs, component APIs, or a composable.'
+        })
+      }
+    }
+  }
+}
+
+const noDirectSelectionToolStateMutation = {
+  meta: {
+    docs: {
+      description: 'Disallow direct editor selection/tool state assignment outside core editor internals'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (file.includes('/packages/core/src/editor/')) return {}
+
+    return {
+      AssignmentExpression(node) {
+        if (node.operator !== '=') return
+        const left = node.left
+        if (left?.type !== 'MemberExpression') return
+        if (left.property?.type !== 'Identifier') return
+        if (left.property.name !== 'selectedIds' && left.property.name !== 'activeTool') return
+        const stateExpr = left.object
+        if (stateExpr?.type !== 'MemberExpression') return
+        if (stateExpr.property?.type !== 'Identifier' || stateExpr.property.name !== 'state') return
+        context.report({
+          node,
+          message:
+            'Do not assign editor.state.selectedIds or editor.state.activeTool directly. Use editor selection/tool actions.'
+        })
+      }
+    }
+  }
+}
+
 const noMathRandom = {
   meta: {
     docs: {
@@ -195,6 +574,44 @@ const noMathRandom = {
             node,
             message: 'Use crypto.getRandomValues() instead of Math.random().'
           })
+        }
+      }
+    }
+  }
+}
+
+function isNumericLiteral(node, value) {
+  return node?.type === 'Literal' && node.value === value
+}
+
+function colorObjectLiteral(node, color) {
+  if (node?.type !== 'ObjectExpression') return false
+  const props = new Map()
+  for (const prop of node.properties ?? []) {
+    if (prop.type !== 'Property') return false
+    const key = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value
+    props.set(key, prop.value)
+  }
+  return Object.entries(color).every(([key, value]) => isNumericLiteral(props.get(key), value))
+}
+
+const noHardcodedColorConstants = {
+  meta: {
+    docs: {
+      description: 'Use named color constants instead of inline Color object literals for shared colors'
+    }
+  },
+  create(context) {
+    const file = normalizedFilename(context)
+    if (file.includes('/tests/') || file.endsWith('/packages/core/src/constants.ts')) return {}
+
+    return {
+      ObjectExpression(node) {
+        if (colorObjectLiteral(node, { r: 0, g: 0, b: 0, a: 1 })) {
+          context.report({ node, message: 'Use BLACK from constants instead of an inline black Color literal.' })
+        }
+        if (colorObjectLiteral(node, { r: 0, g: 0, b: 0, a: 0 })) {
+          context.report({ node, message: 'Use TRANSPARENT from constants instead of an inline transparent Color literal.' })
         }
       }
     }
@@ -504,6 +921,7 @@ const noDirectStorageAccess = {
     const file = normalizedFilename(context)
     const allowedFiles = [
       '/src/app/ai/chat/storage.ts',
+      '/src/app/cache/index.ts',
       '/src/app/shell/layout-storage.ts',
       '/packages/vue/src/i18n/locale.ts'
     ]
@@ -1168,16 +1586,26 @@ const noTopLevelPrefixedTestFiles = createProgramFilenameRule({
 })
 
 const noSiblingDomainPrefixedFiles = createProgramFilenameRule({
-  description: 'Disallow files that repeat an existing sibling domain folder as a filename prefix',
+  description: 'Disallow files that repeat an existing sibling domain folder in the filename',
   check(file) {
-    const match = file.match(/^(.*\/)([^/]+)-[^/]+\.(?:test\.)?(?:spec\.)?(?:ts|tsx|vue)$/)
+    const match = file.match(/^(.*\/)([^/]+)\.(?:test\.)?(?:spec\.)?(?:ts|tsx|vue)$/)
     if (!match) return false
 
-    const [, dir, prefix] = match
-    if (!existsSync(`${dir}${prefix}`)) return false
+    const [, dir, name] = match
+    const parts = name.split('-')
+    if (parts.length < 2) return false
+
+    const prefix = parts[0]
+    const suffix = parts.at(-1)
+    const domain = existsSync(`${dir}${prefix}`)
+      ? prefix
+      : suffix && existsSync(`${dir}${suffix}`)
+        ? suffix
+        : null
+    if (!domain) return false
 
     const filename = file.slice(dir.length)
-    return `Move '${filename}' under the existing '${prefix}/' folder instead of repeating the domain as a filename prefix.`
+    return `Move '${filename}' under the existing '${domain}/' folder instead of repeating the domain in the filename.`
   }
 })
 
@@ -1200,7 +1628,20 @@ const plugin = {
   rules: {
     'no-inline-named-types': noInlineNamedTypes,
     'no-structuredclone-scene-arrays': noStructuredCloneSceneArrays,
+    'no-vue-style-blocks': noVueStyleBlocks,
+    'no-native-title-attributes-in-vue': noNativeTitleAttributesInVue,
+    'no-hardcoded-tip-labels-in-vue': noHardcodedTipLabelsInVue,
+    'no-raw-test-id-string-props': noRawTestIdStringProps,
+    'no-dynamic-data-test-id-in-vue': noDynamicDataTestIdInVue,
+    'no-test-id-helper-bind-in-vue': noTestIdHelperBindInVue,
+    'no-invalid-test-id-attributes': noInvalidTestIdAttributes,
+    'no-raw-test-id-selectors-in-tests': noRawTestIdSelectorsInTests,
+    'no-generated-test-id-literals': noGeneratedTestIdLiterals,
+    'no-browser-side-effects-in-vue': noBrowserSideEffectsInVue,
+    'no-document-query-selector-in-vue': noDocumentQuerySelectorInVue,
+    'no-direct-selection-tool-state-mutation': noDirectSelectionToolStateMutation,
     'no-math-random': noMathRandom,
+    'no-hardcoded-color-constants': noHardcodedColorConstants,
     'no-hand-rolled-color': noHandRolledColor,
     'no-raw-console-format': noRawConsoleFormat,
     'no-silent-catch': noSilentCatch,

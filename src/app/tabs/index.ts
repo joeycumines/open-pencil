@@ -2,6 +2,7 @@ import { shallowRef, computed, triggerRef } from 'vue'
 
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
+import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/core/scene-graph'
 
 import { setOpenPencilStore } from '@/app/browser-bridge'
@@ -85,7 +86,9 @@ export function closeTab(tabId: string) {
 }
 
 function yieldToUI(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
 }
 
 export async function openFileInNewTab(
@@ -113,6 +116,8 @@ export async function openFileInNewTab(
           data: new Uint8Array(await file.arrayBuffer())
         })
 
+    const firstPageId = imported.getPages()[0]?.id
+    if (firstPageId) computeAllLayouts(imported, firstPageId)
     store.replaceGraph(imported)
     store.undo.clear()
     store.setDocumentSource(file.name, sourceFormat, handle, path)

@@ -123,7 +123,7 @@ function chatInput() {
 }
 
 function apiKeyInput() {
-  return page.locator('[data-test-id="api-key-input"]')
+  return page.getByTestId('api-key-input')
 }
 
 test('⌘J switches to AI tab', async () => {
@@ -141,6 +141,7 @@ test('clicking AI tab shows provider setup when no key set', async () => {
   await chatTab().click()
   await expect(apiKeyInput()).toBeVisible()
   await expect(page.getByText('Connect an AI provider to start chatting.')).toBeVisible()
+  await expect(page.getByTestId('provider-custom-model')).toBeHidden()
 })
 
 test('saving API key shows chat interface', async () => {
@@ -182,7 +183,7 @@ test('assistant responds', async () => {
 })
 
 test('model selector is visible and clickable', async () => {
-  const trigger = page.locator('[data-test-id="chat-model-selector"]')
+  const trigger = page.getByTestId('chat-model-selector')
   await expect(trigger).toBeVisible()
   await trigger.click()
 
@@ -190,7 +191,8 @@ test('model selector is visible and clickable', async () => {
   await expect(page.getByText('Best for design')).toBeVisible()
   await expect(page.getByText('Free').first()).toBeVisible()
 
-  await page.keyboard.press('Escape')
+  await page.getByRole('option', { name: /Claude Sonnet 4\.6/ }).click()
+  await expect(page.getByRole('option', { name: /Claude Sonnet 4\.6/ })).toBeHidden()
 })
 
 test('tool calls render in assistant message', async () => {
@@ -208,8 +210,7 @@ test('tool calls render in assistant message', async () => {
   }
 })
 
-// TODO: Chat state (API key + messages) is lost when switching tabs — underlying state persistence bug
-test.skip('switching tabs preserves chat', async () => {
+test('switching tabs preserves chat', async () => {
   const selectedModel = page.getByRole('option', { name: /Claude Sonnet 4\.6/ })
   if (await selectedModel.isVisible().catch(() => false)) {
     await selectedModel.click()
@@ -221,12 +222,32 @@ test.skip('switching tabs preserves chat', async () => {
   await expect(page.getByText('Hello there', { exact: true })).toBeVisible({ timeout: 10000 })
 })
 
+test('OpenRouter accepts a custom model ID from provider settings', async () => {
+  const customModel = 'meta-llama/llama-3.3-70b-instruct'
+
+  await page.keyboard.press('Escape')
+  await page.getByTestId('provider-settings-trigger').click()
+  const customModelInput = page.getByTestId('provider-settings-custom-model')
+  await expect(customModelInput).toBeVisible()
+  await customModelInput.fill(customModel)
+  await page.getByTestId('provider-settings-done').click()
+
+  await expect(page.getByTestId('chat-custom-model-label')).toContainText(customModel)
+  await expect(page.getByTestId('chat-model-selector')).toBeHidden()
+
+  await page.getByTestId('provider-settings-trigger').click()
+  await page.getByTestId('provider-settings-custom-model').fill('')
+  await page.getByTestId('provider-settings-done').click()
+
+  await expect(page.getByTestId('chat-model-selector')).toBeVisible()
+})
+
 test('transport errors show an actionable toast', async () => {
   await chatInput().fill('Trigger missing agent error')
   await chatInput().press('Enter')
 
   await expect(
-    page.locator('[data-test-id="toast-item"]').filter({
+    page.getByTestId('toast-item').filter({
       hasText: 'Install it with: npm i -g @agentclientprotocol/claude-agent-acp'
     })
   ).toBeVisible({ timeout: 5000 })
@@ -238,14 +259,7 @@ test('"Get API key" link opens external URL via window.open', async () => {
   await canvas.waitForInit()
   await chatTab().click()
 
-  const link = page.locator('[data-test-id="api-key-get-link"]')
-  if (!(await link.isVisible().catch(() => false))) {
-    await page.reload()
-    await canvas.waitForInit()
-    await chatTab().click()
-    await page.waitForTimeout(500)
-  }
-
+  const link = page.getByTestId('api-key-get-link')
   await expect(link).toBeVisible()
 
   // Intercept window.open to verify it's called with the right URL

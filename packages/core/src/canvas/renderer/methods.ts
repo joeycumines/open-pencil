@@ -1,6 +1,6 @@
 import type { ImageFilter, MaskFilter, Canvas, Paint, Path } from 'canvaskit-wasm'
 
-import * as AiOverlays from '#core/canvas/ai-overlays'
+import * as AiOverlays from '#core/canvas/overlays/ai'
 import * as Effects from '#core/canvas/effects'
 import * as Fills from '#core/canvas/fills'
 import * as Labels from '#core/canvas/labels/draw'
@@ -95,6 +95,10 @@ const rendererMethods: ThisType<SkiaRenderer> = {
     Overlays.drawLayoutInsertIndicator(this, canvas, indicator)
   },
 
+  drawAutoLayoutHover(canvas: Canvas, graph: SceneGraph, hover?: RenderOverlays['autoLayoutHover']) {
+    Overlays.drawAutoLayoutHover(this, canvas, graph, hover)
+  },
+
   drawTextEditOverlay(canvas: Canvas, node: SceneNode, editor: TextEditor): void {
     Overlays.drawTextEditOverlay(this, canvas, node, editor)
   },
@@ -136,8 +140,15 @@ const rendererMethods: ThisType<SkiaRenderer> = {
     Labels.drawComponentLabels(this, canvas, graph)
   },
 
-  renderNode(canvas: Canvas, graph: SceneGraph, nodeId: string, overlays: RenderOverlays): void {
-    SceneRender.renderNode(this, canvas, graph, nodeId, overlays)
+  renderNode(
+    canvas: Canvas,
+    graph: SceneGraph,
+    nodeId: string,
+    overlays: RenderOverlays,
+    parentAbsX?: number,
+    parentAbsY?: number
+  ): void {
+    SceneRender.renderNode(this, canvas, graph, nodeId, overlays, parentAbsX, parentAbsY)
   },
 
   renderSection(canvas: Canvas, node: SceneNode, graph: SceneGraph): void {

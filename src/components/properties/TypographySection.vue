@@ -10,8 +10,9 @@ import AppSelect from '@/components/ui/AppSelect.vue'
 import Tip from '@/components/ui/Tip.vue'
 import { useSectionUI } from '@/components/ui/section'
 import { loadFont } from '@/app/editor/fonts'
+import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 
-const { panels } = useI18n()
+const { panels, menu } = useI18n()
 const sectionCls = useSectionUI()
 const fontLoader = { load: loadFont }
 </script>
@@ -125,7 +126,7 @@ const fontLoader = { load: loadFont }
           </ToggleGroupItem>
         </ToggleGroupRoot>
         <div class="flex gap-0.5">
-          <Tip label="Bold (⌘B)">
+          <Tip :label="`${menu.bold} (${appMenuShortcutLabel('text.bold')})`">
             <button
               data-test-id="typography-bold-button"
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 font-bold text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
@@ -135,7 +136,7 @@ const fontLoader = { load: loadFont }
               <icon-lucide-bold class="size-3.5" />
             </button>
           </Tip>
-          <Tip label="Italic (⌘I)">
+          <Tip :label="`${menu.italic} (${appMenuShortcutLabel('text.italic')})`">
             <button
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('italic') ? 'on' : 'off'"
@@ -144,7 +145,7 @@ const fontLoader = { load: loadFont }
               <icon-lucide-italic class="size-3.5" />
             </button>
           </Tip>
-          <Tip label="Underline (⌘U)">
+          <Tip :label="`${menu.underline} (${appMenuShortcutLabel('text.underline')})`">
             <button
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('underline') ? 'on' : 'off'"
@@ -153,7 +154,7 @@ const fontLoader = { load: loadFont }
               <icon-lucide-underline class="size-3.5" />
             </button>
           </Tip>
-          <Tip label="Strikethrough">
+          <Tip :label="menu.strikethrough">
             <button
               class="flex cursor-pointer items-center justify-center rounded border border-border bg-input px-2 py-1 text-muted hover:bg-hover hover:text-surface data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-white"
               :data-state="ctx.activeFormatting.value.includes('strikethrough') ? 'on' : 'off'"

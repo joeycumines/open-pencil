@@ -1,4 +1,12 @@
-import { fontManager, styleToWeight, type LocalFontAccessState } from '@open-pencil/core/text'
+import { useLocalStorage } from '@vueuse/core'
+
+import type { SceneGraph } from '@open-pencil/core/scene-graph'
+import {
+  fontManager,
+  styleToWeight,
+  type FontFamilyOption,
+  type LocalFontAccessState
+} from '@open-pencil/core/text'
 
 import {
   clearDownloadedFontCache as clearTauriDownloadedFontCache,
@@ -10,6 +18,8 @@ import { isTauri } from '@/app/tauri/env'
 if (typeof navigator !== 'undefined') {
   fontManager.setFallbackUserAgent(navigator.userAgent)
 }
+
+export const googleFontsEnabled = useLocalStorage('op-google-fonts-enabled', true)
 
 let tauriFontCacheConfigured = false
 
@@ -47,17 +57,19 @@ export function preloadFonts(): void {
   configureTauriFontCache()
   if (isTauri()) {
     void getTauriFonts().then(registerFontFaces)
+    return
   }
+  if (googleFontsEnabled.value) fontManager.preloadGoogleFamilies()
 }
 
 export function localFontAccessState(): LocalFontAccessState {
   return isTauri() ? 'granted' : fontManager.localAccessState()
 }
 
-export async function requestLocalFontAccess(): Promise<string[]> {
+export async function requestLocalFontAccess(): Promise<FontFamilyOption[]> {
   if (isTauri()) return listFamilies()
   await fontManager.requestLocalFontAccess()
-  return fontManager.listFamilies()
+  return listFamilies()
 }
 
 export async function downloadedFontCacheSummary() {
@@ -84,13 +96,14 @@ function registerFontFaces(fonts: TauriFontFamily[]): void {
   }
 }
 
-export async function listFamilies(): Promise<string[]> {
+export async function listFamilies(): Promise<FontFamilyOption[]> {
   configureTauriFontCache()
   if (isTauri()) {
     const fonts = await getTauriFonts()
-    return fonts.map((f) => f.family)
+    return fonts.map((f) => ({ family: f.family, source: 'local' }))
   }
-  return fontManager.listFamilies()
+  const fonts = await fontManager.listFamilyOptions()
+  return googleFontsEnabled.value ? fonts : fonts.filter((font) => font.source !== 'google')
 }
 
 export async function listFonts(): Promise<TauriFontFamily[]> {
@@ -99,6 +112,23 @@ export async function listFonts(): Promise<TauriFontFamily[]> {
     return getTauriFonts()
   }
   return []
+}
+
+export async function ensureGraphFonts(graph: SceneGraph, nodeIds: string[]): Promise<boolean> {
+  const fontKeys = fontManager.collectFontKeys(graph, nodeIds)
+  const missing = fontKeys.filter(([family, style]) => !fontManager.isStyleLoaded(family, style))
+  if (missing.length === 0) return false
+
+  const results = await Promise.all(missing.map(([family, style]) => loadFont(family, style)))
+  const loaded = results.some((result) => result !== null)
+  if (loaded) clearTextPictures(graph)
+  return loaded
+}
+
+function clearTextPictures(graph: SceneGraph): void {
+  for (const [, node] of graph.nodes) {
+    if (node.type === 'TEXT') node.textPicture = null
+  }
 }
 
 export async function loadFont(family: string, style = 'Regular'): Promise<ArrayBuffer | null> {

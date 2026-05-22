@@ -11,8 +11,8 @@ import { loadDocument } from '#cli/headless'
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
 const RASTER_FORMATS = ['PNG', 'JPG', 'WEBP']
-const ALL_FORMATS = [...RASTER_FORMATS, 'SVG', 'PDF', 'JSX', 'FIG']
-const JSX_STYLES = ['openpencil', 'tailwind']
+const ALL_FORMATS = new Set([...RASTER_FORMATS, 'SVG', 'PDF', 'JSX', 'FIG'])
+const JSX_STYLES = new Set(['openpencil', 'tailwind'])
 
 interface ExportArgs {
   file?: string
@@ -119,9 +119,11 @@ async function exportFromFile(format: string, args: ExportArgs) {
   }
 
   const formatId = format.toLowerCase()
-  let options: { format?: string; scale?: number; quality?: number } | undefined
+  let options: { format?: string; scale?: number; quality?: number; renderThumbnail?: boolean } | undefined
   if (format === 'JSX') {
     options = { format: args.style }
+  } else if (format === 'FIG') {
+    options = { renderThumbnail: true }
   } else if (format === 'PNG' || format === 'JPG' || format === 'WEBP') {
     options = {
       format,
@@ -191,12 +193,12 @@ export default defineCommand({
   },
   async run({ args }) {
     const format = args.format.toUpperCase() as RasterExportFormat | 'SVG' | 'JSX' | 'FIG'
-    if (!ALL_FORMATS.includes(format)) {
+    if (!ALL_FORMATS.has(format)) {
       printError(`Invalid format "${args.format}". Use png, jpg, webp, svg, pdf, jsx, or fig.`)
       process.exit(1)
     }
 
-    if (format === 'JSX' && !JSX_STYLES.includes(args.style)) {
+    if (format === 'JSX' && !JSX_STYLES.has(args.style)) {
       printError(`Invalid JSX style "${args.style}". Use openpencil or tailwind.`)
       process.exit(1)
     }

@@ -1,25 +1,38 @@
 {
   "name": "@open-pencil/mcp",
-  "version": "0.11.8",
+  "version": "0.12.2",
   "license": "MIT",
   "type": "module",
   "imports": {
     "#mcp/*": {
       "types": "./src/*.ts",
       "bun": "./src/*.ts",
-      "default": "./dist/*.js"
+      "default": "./dist/*.mjs"
     }
   },
-  "main": "./dist/server.js",
+  "main": "./dist/server.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.mts",
+      "import": "./dist/server.mjs",
+      "default": "./dist/server.mjs"
+    },
+    "./stdio": {
+      "types": "./dist/stdio.d.mts",
+      "import": "./dist/stdio.mjs",
+      "default": "./dist/stdio.mjs"
+    }
+  },
   "bin": {
-    "openpencil-mcp": "./dist/stdio.js",
-    "openpencil-mcp-http": "./dist/index.js"
+    "openpencil-mcp": "./bin/openpencil-mcp.js",
+    "openpencil-mcp-http": "./bin/openpencil-mcp-http.js"
   },
   "files": [
+    "bin",
     "dist"
   ],
   "scripts": {
-    "build": "bunx tsgo && bunx fix-esm-import-path dist",
+    "build": "bunx tsdown --config tsdown.config.ts",
     "prepublishOnly": "bun run build"
   },
   "repository": {
@@ -36,6 +49,7 @@
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@open-pencil/core": "workspace:*",
     "hono": "^4.11.4",
+    "package-manager-detector": "^1.6.0",
     "zod": "^4.3.6",
     "ws": "^8.19.0"
   },

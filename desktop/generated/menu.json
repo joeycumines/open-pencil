@@ -67,13 +67,11 @@
     "items": [
       {
         "id": "edit.undo",
-        "label": "Undo",
-        "accelerator": "CmdOrCtrl+Z"
+        "label": "Undo"
       },
       {
         "id": "edit.redo",
-        "label": "Redo",
-        "accelerator": "CmdOrCtrl+Shift+Z"
+        "label": "Redo"
       },
       {
         "type": "separator"
@@ -84,27 +82,33 @@
         "accelerator": "CmdOrCtrl+C"
       },
       {
+        "id": "cut",
+        "label": "Cut",
+        "accelerator": "CmdOrCtrl+X"
+      },
+      {
         "id": "paste",
         "label": "Paste",
         "accelerator": "CmdOrCtrl+V"
       },
       {
+        "id": "paste-to-replace",
+        "label": "Paste to replace"
+      },
+      {
         "id": "selection.duplicate",
-        "label": "Duplicate",
-        "accelerator": "CmdOrCtrl+D"
+        "label": "Duplicate"
       },
       {
         "id": "selection.delete",
-        "label": "Delete",
-        "accelerator": "Backspace"
+        "label": "Delete"
       },
       {
         "type": "separator"
       },
       {
         "id": "selection.selectAll",
-        "label": "Select All",
-        "accelerator": "CmdOrCtrl+A"
+        "label": "Select All"
       }
     ]
   },
@@ -113,18 +117,15 @@
     "items": [
       {
         "id": "view.zoom100",
-        "label": "Zoom to 100%",
-        "accelerator": "CmdOrCtrl+0"
+        "label": "Zoom to 100%"
       },
       {
         "id": "view.zoomFit",
-        "label": "Zoom to Fit",
-        "accelerator": "CmdOrCtrl+1"
+        "label": "Zoom to Fit"
       },
       {
         "id": "view.zoomSelection",
-        "label": "Zoom to Selection",
-        "accelerator": "CmdOrCtrl+2"
+        "label": "Zoom to Selection"
       },
       {
         "id": "zoom-in",
@@ -180,21 +181,53 @@
     "items": [
       {
         "id": "selection.group",
-        "label": "Group Selection",
-        "accelerator": "CmdOrCtrl+G"
+        "label": "Group Selection"
+      },
+      {
+        "id": "selection.frameSelection",
+        "label": "Frame Selection"
       },
       {
         "id": "selection.ungroup",
-        "label": "Ungroup Selection",
-        "accelerator": "CmdOrCtrl+Shift+G"
+        "label": "Ungroup Selection"
+      },
+      {
+        "type": "separator"
+      },
+      {
+        "id": "selection.booleanUnion",
+        "label": "Union selection"
+      },
+      {
+        "id": "selection.booleanSubtract",
+        "label": "Subtract selection"
+      },
+      {
+        "id": "selection.booleanIntersect",
+        "label": "Intersect selection"
+      },
+      {
+        "id": "selection.booleanExclude",
+        "label": "Exclude selection"
+      },
+      {
+        "id": "selection.flatten",
+        "label": "Flatten"
+      },
+      {
+        "id": "selection.outlineText",
+        "label": "Outline text"
+      },
+      {
+        "id": "selection.outlineStroke",
+        "label": "Outline stroke"
       },
       {
         "type": "separator"
       },
       {
         "id": "selection.createComponent",
-        "label": "Create Component",
-        "accelerator": "CmdOrCtrl+Alt+K"
+        "label": "Create Component"
       },
       {
         "id": "selection.createComponentSet",
@@ -209,13 +242,11 @@
       },
       {
         "id": "selection.bringToFront",
-        "label": "Bring to Front",
-        "accelerator": "]"
+        "label": "Bring to Front"
       },
       {
         "id": "selection.sendToBack",
-        "label": "Send to Back",
-        "accelerator": "["
+        "label": "Send to Back"
       }
     ]
   },
@@ -244,8 +275,7 @@
     "items": [
       {
         "id": "selection.wrapInAutoLayout",
-        "label": "Wrap in Auto Layout",
-        "accelerator": "Shift+A"
+        "label": "Wrap in Auto Layout"
       },
       {
         "type": "separator"

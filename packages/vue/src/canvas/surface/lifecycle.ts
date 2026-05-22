@@ -32,6 +32,13 @@ export function createCanvasSurfaceManager({
   shouldShowRulers: () => boolean
 }) {
   const state: SurfaceManagerState = { renderer: null, glContext: null }
+  let sceneBackingRenderTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearSceneBackingRenderTimer() {
+    if (sceneBackingRenderTimer === null) return
+    clearTimeout(sceneBackingRenderTimer)
+    sceneBackingRenderTimer = null
+  }
 
   function createSurface(
     canvas: HTMLCanvasElement,
@@ -65,7 +72,7 @@ export function createCanvasSurfaceManager({
     // has cleared the module-level fontProvider — the new renderer must reload.
     // On initial mount, kit-loader.init() handles loadFonts, so skip here.
     if (reloadFonts && !isDestroyed()) {
-      void state.renderer.loadFonts().then(() => {
+      void state.renderer.loadFonts(renderNow).then(() => {
         if (!isDestroyed()) renderNow()
       })
     }
@@ -83,9 +90,14 @@ export function createCanvasSurfaceManager({
       options?.layer ?? 'full'
     )
     renderLoop.markRendered()
+    clearSceneBackingRenderTimer()
+    if (options?.layer === 'scene' && state.renderer.sceneBackingNeedsCrispRender) {
+      const delay = Math.max(0, state.renderer.sceneBackingPreviewUntil - performance.now())
+      sceneBackingRenderTimer = setTimeout(() => renderLoop.markDirty(), delay)
+    }
   }
 
-  const renderLoop = createCanvasRenderLoop(editor, renderNow)
+  const renderLoop = createCanvasRenderLoop(editor, renderNow, { layer: options?.layer })
 
   function resizeCanvas(canvas: HTMLCanvasElement) {
     const ck = getCanvasKit()
@@ -109,6 +121,7 @@ export function createCanvasSurfaceManager({
   }
 
   function destroy() {
+    clearSceneBackingRenderTimer()
     renderLoop.pause()
     if (state.renderer) editor.removeCanvasRenderer(state.renderer)
     state.renderer?.destroy()
@@ -145,7 +158,7 @@ export function useCanvasSurfaceLifecycle({
     lifecycle,
     setCanvasKit,
     createSurface: surface.createSurface,
-    loadFonts: () => surface.getRenderer()?.loadFonts(),
+    loadFonts: () => surface.getRenderer()?.loadFonts(surface.renderNow),
     renderNow: surface.renderNow,
     onReady
   })

@@ -327,9 +327,12 @@ export function nodeVisualBounds(
     maxY: base.y + base.height
   }
 
+  const hasNonInsideStroke = node.strokes?.some(
+    (stroke) => stroke.visible && stroke.align !== 'INSIDE'
+  )
   const localGeometry = geometryBlobBounds([
     ...(node.fillGeometry ?? []),
-    ...(node.strokeGeometry ?? [])
+    ...(hasNonInsideStroke ? (node.strokeGeometry ?? []) : [])
   ])
   if (localGeometry) {
     bounds = unionVisualBounds(bounds, transformedLocalBounds(node, localGeometry, abs)) ?? bounds
@@ -362,6 +365,7 @@ function collectDescendantVisualBounds(
       maxY: abs.y + node.height
     }
     childClip = childClip ? intersectVisualBounds(childClip, nodeClip) : nodeClip
+    if (!childClip) return bounds
   }
 
   for (const childId of node.childIds ?? []) {

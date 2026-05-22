@@ -9,9 +9,16 @@ import {
 
 import IconChevronDown from '~icons/lucide/chevron-down'
 
+import AppShortcutText from '@/components/ui/AppShortcutText.vue'
 import { menu } from '@/components/ui/menu'
 import ToolButton from '@/components/Toolbar/ToolButton.vue'
-import { ToolbarItem } from '@open-pencil/vue'
+import {
+  toolbarFlyoutItemTestId,
+  toolbarFlyoutTestId,
+  toolbarToolTestId,
+  vTestId,
+  ToolbarItem
+} from '@open-pencil/vue'
 
 import type { Tool } from '@open-pencil/vue'
 import type { EditorToolDef } from '@open-pencil/core/editor'
@@ -58,7 +65,7 @@ function activeKeyForTool() {
   <div class="flex items-center">
     <slot :label="`${toolLabels[activeKeyForTool()]} (${tool.shortcut})`">
       <ToolButton
-        :test-id="`${mobile ? 'mobile-' : ''}toolbar-tool-${activeKeyForTool().toLowerCase()}`"
+        :test-id="toolbarToolTestId(activeKeyForTool(), mobile)"
         :icon="toolIcons[activeKeyForTool()]"
         :active="isActiveTool(activeKeyForTool())"
         :mobile="mobile"
@@ -69,7 +76,7 @@ function activeKeyForTool() {
     <DropdownMenuRoot>
       <DropdownMenuTrigger as-child>
         <button
-          :data-test-id="`${mobile ? 'mobile-' : ''}toolbar-flyout-${tool.key.toLowerCase()}`"
+          v-test-id="toolbarFlyoutTestId(tool.key, mobile)"
           class="flex h-8 w-3 cursor-pointer items-center justify-center border-none transition-colors"
           :class="[
             mobile ? 'rounded-[6px] select-none' : 'rounded-lg',
@@ -93,15 +100,15 @@ function activeKeyForTool() {
             :tool="sub"
           >
             <DropdownMenuItem
-              :data-test-id="`${mobile ? 'mobile-' : ''}toolbar-flyout-item-${sub.toLowerCase()}`"
+              v-test-id="toolbarFlyoutItemTestId(sub, mobile)"
               :class="menu().item({ class: subActive ? 'bg-accent text-white' : undefined })"
               @select="actions.select"
             >
               <component :is="toolIcons[sub]" class="size-3.5" />
               <span class="flex-1">{{ toolLabels[sub] }}</span>
-              <span v-if="!mobile && toolShortcuts[sub]" class="text-[11px] text-muted">
+              <AppShortcutText v-if="!mobile && toolShortcuts[sub]">
                 {{ toolShortcuts[sub] }}
-              </span>
+              </AppShortcutText>
             </DropdownMenuItem>
           </ToolbarItem>
         </DropdownMenuContent>

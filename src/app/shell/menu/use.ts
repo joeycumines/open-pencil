@@ -4,6 +4,8 @@ import { useEditorCommands, useI18n } from '@open-pencil/vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { pasteClipboardToReplace } from '@/app/editor/clipboard/paste-to-replace'
+import { createSharedEditorMenuActions } from '@/app/shell/menu/editor-actions'
 import { importFileDialog, openFileDialog } from '@/app/shell/menu/files'
 import { useAppTheme } from '@/app/shell/theme'
 import { checkForAppUpdate } from '@/app/shell/updater'
@@ -23,6 +25,13 @@ const COMMAND_MENU_IDS = new Set<string>([
   'selection.createComponentSet',
   'selection.detachInstance',
   'selection.wrapInAutoLayout',
+  'selection.booleanUnion',
+  'selection.booleanSubtract',
+  'selection.booleanIntersect',
+  'selection.booleanExclude',
+  'selection.flatten',
+  'selection.outlineText',
+  'selection.outlineStroke',
   'selection.bringToFront',
   'selection.sendToBack',
   'view.zoom100',
@@ -33,22 +42,8 @@ const COMMAND_MENU_IDS = new Set<string>([
 export { importFileDialog, openFileDialog }
 export { openFileFromPath } from '@/app/shell/menu/files'
 
-function execBrowserCommand(command: 'copy' | 'paste'): void {
+function execBrowserCommand(command: 'copy' | 'cut' | 'paste'): void {
   document.execCommand(command)
-}
-
-function alignSelected(axis: 'horizontal' | 'vertical', align: 'min' | 'center' | 'max'): void {
-  store.alignNodes([...store.state.selectedIds], axis, align)
-}
-
-function updateSelectedText(updates: {
-  fontWeight?: number
-  italic?: boolean
-  textDecoration?: 'NONE' | 'UNDERLINE'
-}): void {
-  for (const node of store.selectedNodes.value) {
-    if (node.type === 'TEXT') store.updateNodeWithUndo(node.id, updates, 'Format text')
-  }
 }
 
 export function useMenu() {
@@ -83,36 +78,11 @@ export function useMenu() {
       store.state.autosaveEnabled = !store.state.autosaveEnabled
     },
     copy: () => execBrowserCommand('copy'),
+    cut: () => execBrowserCommand('cut'),
     paste: () => execBrowserCommand('paste'),
-    'zoom-in': () => store.applyZoom(-100, window.innerWidth / 2, window.innerHeight / 2),
-    'zoom-out': () => store.applyZoom(100, window.innerWidth / 2, window.innerHeight / 2),
-    'theme-light': () => setTheme('light'),
-    'theme-dark': () => setTheme('dark'),
-    'theme-auto': () => setTheme('auto'),
-    'toggle-ui': () => {
-      store.state.showUI = !store.state.showUI
-    },
+    'paste-to-replace': () => void pasteClipboardToReplace(store),
     'check-updates': () => void checkForAppUpdate({ messages: dialogs }),
-    'text.bold': () => {
-      const node = store.selectedNodes.value.find((item) => item.type === 'TEXT')
-      updateSelectedText({ fontWeight: node && node.fontWeight >= 700 ? 400 : 700 })
-    },
-    'text.italic': () => {
-      const node = store.selectedNodes.value.find((item) => item.type === 'TEXT')
-      updateSelectedText({ italic: node ? !node.italic : true })
-    },
-    'text.underline': () => {
-      const node = store.selectedNodes.value.find((item) => item.type === 'TEXT')
-      updateSelectedText({
-        textDecoration: node?.textDecoration === 'UNDERLINE' ? 'NONE' : 'UNDERLINE'
-      })
-    },
-    'align-left': () => alignSelected('horizontal', 'min'),
-    'align-center': () => alignSelected('horizontal', 'center'),
-    'align-right': () => alignSelected('horizontal', 'max'),
-    'align-top': () => alignSelected('vertical', 'min'),
-    'align-middle': () => alignSelected('vertical', 'center'),
-    'align-bottom': () => alignSelected('vertical', 'max')
+    ...createSharedEditorMenuActions(setTheme)
   }
 
   void import('@tauri-apps/api/event').then(({ listen }) => {

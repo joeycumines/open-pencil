@@ -22,6 +22,7 @@ interface Viewport {
 }
 
 const LABEL_TYPES = new Set(['COMPONENT', 'COMPONENT_SET'])
+const COMPONENT_LABEL_PARENT_TYPES = new Set(['CANVAS', 'SECTION'])
 
 function isInViewport(absX: number, absY: number, w: number, h: number, vp: Viewport): boolean {
   return absX + w >= vp.x && absY + h >= vp.y && absX <= vp.x + vp.w && absY <= vp.y + vp.h
@@ -50,17 +51,31 @@ export class LabelCache {
   private sections: CachedSection[] = []
   private components: CachedComponent[] = []
   private cachedSceneVersion = -1
+  private cachedPositionPreviewVersion = -1
   private cachedPageId: string | null = null
 
-  update(graph: SceneGraph, pageId: string | null, sceneVersion: number): void {
-    if (sceneVersion === this.cachedSceneVersion && pageId === this.cachedPageId) return
+  update(
+    graph: SceneGraph,
+    pageId: string | null,
+    sceneVersion: number,
+    positionPreviewVersion = graph.positionPreviewVersion
+  ): void {
+    if (
+      sceneVersion === this.cachedSceneVersion &&
+      positionPreviewVersion === this.cachedPositionPreviewVersion &&
+      pageId === this.cachedPageId
+    ) {
+      return
+    }
     this.rebuild(graph, pageId)
     this.cachedSceneVersion = sceneVersion
+    this.cachedPositionPreviewVersion = positionPreviewVersion
     this.cachedPageId = pageId
   }
 
   invalidate(): void {
     this.cachedSceneVersion = -1
+    this.cachedPositionPreviewVersion = -1
     this.cachedPageId = null
     this.sections = []
     this.components = []
@@ -79,9 +94,17 @@ export class LabelCache {
     graph: SceneGraph,
     viewport: Viewport
   ): Array<{ node: SceneNode; absX: number; absY: number; inside: boolean }> {
-    return collectVisibleLabels(graph, viewport, this.components, (cached) => ({
-      inside: cached.parentType === 'COMPONENT_SET'
+    return collectVisibleLabels(graph, viewport, this.components, () => ({
+      inside: false
     }))
+  }
+
+  getAllSections(): readonly CachedSection[] {
+    return this.sections
+  }
+
+  getAllComponents(): readonly CachedComponent[] {
+    return this.components
   }
 
   private rebuild(graph: SceneGraph, pageId: string | null): void {
@@ -115,7 +138,9 @@ export class LabelCache {
         this.sections.push({ nodeId: childId, absX: ax, absY: ay, nested: insideSection })
         this.walkChildren(graph, childId, ax, ay, true)
       } else if (LABEL_TYPES.has(child.type)) {
-        this.components.push({ nodeId: childId, absX: ax, absY: ay, parentType })
+        if (COMPONENT_LABEL_PARENT_TYPES.has(parentType)) {
+          this.components.push({ nodeId: childId, absX: ax, absY: ay, parentType })
+        }
         if (child.childIds.length > 0) {
           this.walkChildren(graph, childId, ax, ay, insideSection)
         }

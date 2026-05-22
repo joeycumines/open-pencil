@@ -1,4 +1,4 @@
-import { DEFAULT_FONT_FAMILY, DEFAULT_STROKE_MITER_LIMIT } from '#core/constants'
+import { BLACK, DEFAULT_FONT_FAMILY, DEFAULT_STROKE_MITER_LIMIT } from '#core/constants'
 
 import type { NodeType, SceneNode } from './types'
 
@@ -18,10 +18,26 @@ export function createDefaultNode(
     width: 100,
     height: 100,
     rotation: 0,
+    source: {
+      format: null,
+      id: null,
+      orderKey: null,
+      fig: {
+        rawSize: null,
+        rawTransform: null,
+        rawNodeFields: {},
+        layout: null,
+        symbolOverrides: [],
+        componentPropAssignments: [],
+        derivedSymbolData: [],
+        derivedSymbolDataLayoutVersion: null,
+        uniformScaleFactor: null
+      }
+    },
     figmaDerivedLayout: null,
     fills:
       type === 'TEXT'
-        ? [{ type: 'SOLID' as const, color: { r: 0, g: 0, b: 0, a: 1 }, opacity: 1, visible: true }]
+        ? [{ type: 'SOLID' as const, color: BLACK, opacity: 1, visible: true }]
         : [],
     strokes: [],
     effects: [],
@@ -106,6 +122,17 @@ export function createDefaultNode(
     overrides: {},
     componentPropertyDefinitions: [],
     componentPropertyValues: {},
+    componentKey: null,
+    sourceLibraryKey: null,
+    publishId: null,
+    overrideKey: null,
+    sharedSymbolVersion: null,
+    publishedVersion: null,
+    isPublishable: false,
+    isSymbolPublishable: false,
+    symbolDescription: '',
+    symbolLinks: [],
+    variantPropSpecs: [],
     boundVariables: {},
     pluginData: [],
     pluginRelaunchData: [],
@@ -113,6 +140,7 @@ export function createDefaultNode(
     flipX: false,
     flipY: false,
     textPicture: null,
+    figmaDerivedTextGlyphs: null,
     ...overrides
   }
 }
@@ -121,6 +149,7 @@ export const CONTAINER_TYPES = new Set<NodeType>([
   'CANVAS',
   'FRAME',
   'GROUP',
+  'BOOLEAN_OPERATION',
   'SECTION',
   'COMPONENT',
   'COMPONENT_SET',

@@ -19,11 +19,13 @@ import {
 
 import IconChevronRight from '~icons/lucide/chevron-right'
 
-import { useI18n } from '@open-pencil/vue'
+import { vTestId, useI18n } from '@open-pencil/vue'
+import AppShortcutText from '@/components/ui/AppShortcutText.vue'
 import { useMenuUI } from '@/components/ui/menu'
 import { IS_TAURI } from '@/constants'
 import { useAppMenu } from '@/app/shell/menu/app-menu'
 import { useDocumentNameRename } from '@/app/shell/menu/document-name'
+import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import {
   hasMenuSubItems,
   isMenuCheckbox,
@@ -47,11 +49,9 @@ watch(nameInput, (input) => {
   if (input) void rename.focusInput(input)
 })
 
-const isMac = navigator.platform.includes('Mac')
-const mod = isMac ? '⌘' : 'Ctrl+'
 const { menu: t } = useI18n()
 
-const { topMenus } = useAppMenu(mod)
+const { topMenus } = useAppMenu()
 const menuCls = useMenuUI()
 const mainMenuCls = useMenuUI({ content: 'min-w-52' })
 const subMenuCls = useMenuUI({ content: 'min-w-44' })
@@ -77,7 +77,7 @@ const subMenuCls = useMenuUI({ content: 'min-w-44' })
         @dblclick="startRename"
         >{{ store.state.documentName }}</span
       >
-      <Tip :label="`${t.toggleUI} (${mod}\\)`">
+      <Tip :label="`${t.toggleUI} (${appMenuShortcutLabel('toggle-ui')})`">
         <button
           data-test-id="app-toggle-ui"
           class="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-hover hover:text-surface"
@@ -91,7 +91,7 @@ const subMenuCls = useMenuUI({ content: 'min-w-44' })
       <MenubarRoot class="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
         <MenubarMenu v-for="menu in topMenus" :key="menu.label">
           <MenubarTrigger
-            :data-test-id="`menubar-${menu.label.toLowerCase()}`"
+            v-test-id="`menubar-${menu.label.toLowerCase()}`"
             class="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-muted transition-colors select-none hover:bg-hover hover:text-surface data-[state=open]:bg-hover data-[state=open]:text-surface"
           >
             {{ menu.label }}
@@ -128,9 +128,9 @@ const subMenuCls = useMenuUI({ content: 'min-w-44' })
                           @select="runMenuAction(sub)"
                         >
                           <span class="flex-1">{{ menuLabel(sub) }}</span>
-                          <span v-if="menuShortcut(sub)" class="text-[11px] text-muted">{{
+                          <AppShortcutText v-if="menuShortcut(sub)">{{
                             menuShortcut(sub)
-                          }}</span>
+                          }}</AppShortcutText>
                         </MenubarItem>
                       </template>
                     </MenubarSubContent>
@@ -154,9 +154,9 @@ const subMenuCls = useMenuUI({ content: 'min-w-44' })
                   @select="runMenuAction(item)"
                 >
                   <span class="flex-1">{{ menuLabel(item) }}</span>
-                  <span v-if="menuShortcut(item)" class="text-[11px] text-muted">{{
+                  <AppShortcutText v-if="menuShortcut(item)">{{
                     menuShortcut(item)
-                  }}</span>
+                  }}</AppShortcutText>
                 </MenubarItem>
               </template>
             </MenubarContent>

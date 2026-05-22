@@ -14,6 +14,7 @@ interface RenderOptions {
   format: ExportFormat
   quality?: number
   colorSpace?: RenderColorSpace
+  trimTransparent?: boolean
 }
 
 function ensureSinglePageSelection(graph: SceneGraph, pageId: string, nodeIds: string[]): boolean {
@@ -49,6 +50,53 @@ function ckImageFormat(ck: CanvasKit, format: ExportFormat) {
   }
 }
 
+function findAlphaBounds(ck: CanvasKit, canvas: Canvas, width: number, height: number) {
+  const pixels = canvas.readPixels(0, 0, {
+    alphaType: ck.AlphaType.Unpremul,
+    colorType: ck.ColorType.RGBA_8888,
+    colorSpace: ck.ColorSpace.SRGB,
+    width,
+    height
+  })
+  if (!pixels) return null
+
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4
+    for (let x = 0; x < width; x++) {
+      if (pixels[row + x * 4 + 3] === 0) continue
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x + 1)
+      maxY = Math.max(maxY, y + 1)
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return null
+  return { minX, minY, maxX, maxY }
+}
+
+const MIN_TRANSPARENT_TRIM_INSET = 2
+
+function shouldTrimAlphaBounds(
+  alphaBounds: NonNullable<ReturnType<typeof findAlphaBounds>>,
+  width: number,
+  height: number
+): boolean {
+  return (
+    Math.max(
+      alphaBounds.minX,
+      alphaBounds.minY,
+      width - alphaBounds.maxX,
+      height - alphaBounds.maxY
+    ) >= MIN_TRANSPARENT_TRIM_INSET
+  )
+}
+
 function renderToSurface(
   ck: CanvasKit,
   renderer: SkiaRenderer,
@@ -58,22 +106,90 @@ function renderToSurface(
   height: number,
   format: ExportFormat,
   quality: number,
-  setup: (canvas: Canvas) => void
+  setup: (canvas: Canvas) => void,
+  trimTransparent = false
 ): Uint8Array | null {
-  const surface = ck.MakeSurface(width, height)
-  if (!surface) return null
+  const renderScale = 2
+  const renderWidth = width * renderScale
+  const renderHeight = height * renderScale
+  const pixels = ck.Malloc(Uint8Array, renderWidth * renderHeight * 4)
+  const surface = ck.MakeRasterDirectSurface(
+    {
+      alphaType: ck.AlphaType.Premul,
+      colorType: ck.ColorType.RGBA_8888,
+      colorSpace: ck.ColorSpace.SRGB,
+      width: renderWidth,
+      height: renderHeight
+    },
+    pixels,
+    renderWidth * 4
+  )
+  if (!surface) {
+    ck.Free(pixels)
+    return null
+  }
 
   try {
     const canvas = surface.getCanvas()
+    canvas.scale(renderScale, renderScale)
     setup(canvas)
     renderer.renderSceneToCanvas(canvas, renderGraph, pageId)
     surface.flush()
-    const image = surface.makeImageSnapshot()
+
+    const highResImage = surface.makeImageSnapshot()
+    const downsamplePixels = ck.Malloc(Uint8Array, width * height * 4)
+    const downsampleSurface = ck.MakeRasterDirectSurface(
+      {
+        alphaType: ck.AlphaType.Premul,
+        colorType: ck.ColorType.RGBA_8888,
+        colorSpace: ck.ColorSpace.SRGB,
+        width,
+        height
+      },
+      downsamplePixels,
+      width * 4
+    )
+    if (!downsampleSurface) {
+      ck.Free(downsamplePixels)
+      highResImage.delete()
+      return null
+    }
+    const downsampleCanvas = downsampleSurface.getCanvas()
+    downsampleCanvas.clear(ck.TRANSPARENT)
+    downsampleCanvas.drawImageRectOptions(
+      highResImage,
+      ck.LTRBRect(0, 0, renderWidth, renderHeight),
+      ck.LTRBRect(0, 0, width, height),
+      ck.FilterMode.Linear,
+      ck.MipmapMode.None,
+      null
+    )
+    downsampleSurface.flush()
+    highResImage.delete()
+
+    const foundAlphaBounds = trimTransparent
+      ? findAlphaBounds(ck, downsampleCanvas, width, height)
+      : null
+    const alphaBounds =
+      foundAlphaBounds && shouldTrimAlphaBounds(foundAlphaBounds, width, height)
+        ? foundAlphaBounds
+        : null
+    const image = alphaBounds
+      ? downsampleSurface.makeImageSnapshot([
+          alphaBounds.minX,
+          alphaBounds.minY,
+          alphaBounds.maxX,
+          alphaBounds.maxY
+        ])
+      : downsampleSurface.makeImageSnapshot()
     const encoded = image.encodeToBytes(ckImageFormat(ck, format), quality)
     image.delete()
+    downsampleSurface.delete()
+    ck.Free(downsamplePixels)
     return encoded ? new Uint8Array(encoded) : null
   } finally {
     surface.delete()
+    ck.Free(pixels)
   }
 }
 
@@ -122,7 +238,8 @@ export function renderNodesToImage(
       canvas.clear(ck.TRANSPARENT)
       canvas.scale(options.scale, options.scale)
       canvas.translate(-bounds.minX, -bounds.minY)
-    }
+    },
+    options.trimTransparent
   )
 }
 

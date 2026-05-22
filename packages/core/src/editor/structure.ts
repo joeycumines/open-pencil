@@ -1,7 +1,16 @@
+import { DEFAULT_FRAME_FILL } from '#core/constants'
 import type { NodeType, SceneNode } from '#core/scene-graph'
 
 import { wrapInAutoLayout as wrapInAutoLayoutImpl } from './structure/auto-layout-wrap'
+import {
+  booleanOperationSelected as booleanOperationSelectedImpl,
+  type BooleanOperation
+} from './structure/boolean'
 import { wrapSelectionInContainer as wrapSelectionInContainerImpl } from './structure/container-wrap'
+import {
+  flattenSelected as flattenSelectedImpl,
+  outlineStrokeSelected as outlineStrokeSelectedImpl
+} from './structure/flatten'
 import { ungroupSelected as ungroupImpl } from './structure/group'
 import { createStructureReorderActions } from './structure/reorder'
 import { createStructureStateActions } from './structure/state'
@@ -49,8 +58,32 @@ export function createStructureActions(ctx: EditorContext) {
     return wrapSelectionInContainer('GROUP', selectedNodes)
   }
 
+  function frameSelection(selectedNodes: SceneNode[]) {
+    return wrapSelectionInContainer('FRAME', selectedNodes, {
+      fills: [structuredClone(DEFAULT_FRAME_FILL)]
+    })
+  }
+
+  function booleanOperationSelected(selectedNodes: SceneNode[], operation: BooleanOperation) {
+    return booleanOperationSelectedImpl(ctx, isTopLevel, selectedNodes, operation)
+  }
+
   function ungroupSelected(selectedNode: SceneNode | undefined) {
     ungroupImpl(ctx, selectedNode)
+  }
+
+  function flattenSelected(selectedNodes: SceneNode[]) {
+    return flattenSelectedImpl(ctx, selectedNodes)
+  }
+
+  function outlineTextSelected(selectedNodes: SceneNode[]) {
+    if (selectedNodes.length === 0 || selectedNodes.some((node) => node.type !== 'TEXT'))
+      return null
+    return flattenSelectedImpl(ctx, selectedNodes, { label: 'Outline text' })
+  }
+
+  function outlineStrokeSelected(selectedNodes: SceneNode[]) {
+    return outlineStrokeSelectedImpl(ctx, selectedNodes)
   }
 
   function moveToPage(pageId: string) {
@@ -77,7 +110,12 @@ export function createStructureActions(ctx: EditorContext) {
     wrapSelectionInContainer,
     wrapInAutoLayout,
     groupSelected,
+    frameSelection,
+    booleanOperationSelected,
     ungroupSelected,
+    flattenSelected,
+    outlineTextSelected,
+    outlineStrokeSelected,
     ...stateActions,
     moveToPage,
     renameNode

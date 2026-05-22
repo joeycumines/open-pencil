@@ -5,6 +5,8 @@ import type { EditorState } from '#core/editor/types'
 import { computeDescendantVisualBounds } from '#core/geometry'
 import type { SceneGraph } from '#core/scene-graph'
 
+import { renderSceneBacking, updateSceneBackingPreviewState } from './retained-backing'
+
 export function renderSceneToCanvas(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -23,9 +25,6 @@ export function renderSceneToCanvas(
 }
 
 export type RenderLayer = 'full' | 'scene' | 'overlays'
-
-const LIVE_SCENE_CHANGE_MS = 120
-const now = typeof performance !== 'undefined' ? () => performance.now() : () => Date.now()
 
 export function renderFromEditorState(
   r: SkiaRenderer,
@@ -70,7 +69,8 @@ export function renderFromEditorState(
           } as RenderOverlays['penState'])
         : null,
       nodeEditState: state.nodeEditState ?? null,
-      remoteCursors: state.remoteCursors
+      remoteCursors: state.remoteCursors,
+      autoLayoutHover: state.autoLayoutHover
     },
     state.sceneVersion,
     layer
@@ -86,17 +86,44 @@ function hasVolatileOverlay(overlays: RenderOverlays): boolean {
   )
 }
 
-function hasLiveSceneChange(r: SkiaRenderer, sceneVersion: number, layer: RenderLayer): boolean {
-  if (layer === 'overlays' || sceneVersion < 0 || sceneVersion === r.lastObservedSceneVersion) {
-    return false
-  }
+function scenePictureMissReason(
+  r: SkiaRenderer,
+  graph: SceneGraph,
+  overlays: RenderOverlays,
+  sceneVersion: number,
+  hasPositionPreview: boolean
+): string {
+  if (hasPositionPreview) return 'position-preview'
+  if (hasVolatileOverlay(overlays)) return 'volatile-overlay'
+  if (!r.scenePicture) return 'missing-picture'
+  if (graph.positionPreviewVersion !== r.scenePicturePositionPreviewVersion)
+    return 'position-preview-version'
+  if (sceneVersion !== r.scenePictureVersion) return 'scene-version'
+  if (r.pageId !== r.scenePicturePageId) return 'page'
+  return 'unknown'
+}
 
-  const timestamp = now()
-  const live =
-    r.lastSceneVersionChangeAt > 0 && timestamp - r.lastSceneVersionChangeAt < LIVE_SCENE_CHANGE_MS
-  r.lastObservedSceneVersion = sceneVersion
-  r.lastSceneVersionChangeAt = timestamp
-  return live
+function canUseScenePicture(
+  r: SkiaRenderer,
+  graph: SceneGraph,
+  sceneVersion: number,
+  hasVolatileOverlays: boolean
+): boolean {
+  return (
+    !hasVolatileOverlays &&
+    !!r.scenePicture &&
+    graph.positionPreviewVersion === r.scenePicturePositionPreviewVersion &&
+    sceneVersion === r.scenePictureVersion &&
+    r.pageId === r.scenePicturePageId
+  )
+}
+
+const now = typeof performance !== 'undefined' ? () => performance.now() : () => 0
+
+function measure<T>(fn: () => T): { value: T; duration: number } {
+  const start = now()
+  const value = fn()
+  return { value, duration: now() - start }
 }
 
 export function render(
@@ -109,6 +136,9 @@ export function render(
 ): void {
   const p = r.profiler
   p.beginFrame()
+  p.setScenePictureDrawTime(0)
+  p.setScenePictureRecordTime(0)
+  p.setFlushTime(0)
 
   graph.clearAbsPosCache()
 
@@ -125,42 +155,42 @@ export function render(
     w: r.viewportWidth / r.zoom,
     h: r.viewportHeight / r.zoom
   }
+  updateSceneBackingPreviewState(r, layer)
 
-  const hasVolatileOverlays =
-    hasVolatileOverlay(overlays) || hasLiveSceneChange(r, sceneVersion, layer)
+  const hasPositionPreview =
+    graph.positionPreviewVersion !== r.scenePicturePositionPreviewVersion &&
+    sceneVersion === r.scenePictureVersion
+  const hasVolatileOverlays = hasPositionPreview || hasVolatileOverlay(overlays)
 
-  const canUsePicture =
-    !hasVolatileOverlays &&
-    r.scenePicture &&
-    sceneVersion === r.scenePictureVersion &&
-    r.pageId === r.scenePicturePageId
-
-  p.setCacheHit(!!canUsePicture)
+  const canUsePicture = canUseScenePicture(r, graph, sceneVersion, hasVolatileOverlays)
+  const cacheMissReason = scenePictureMissReason(
+    r,
+    graph,
+    overlays,
+    sceneVersion,
+    hasPositionPreview
+  )
 
   if (layer !== 'overlays') {
     canvas.save()
     canvas.scale(r.dpr, r.dpr)
-    canvas.translate(r.panX, r.panY)
-    canvas.scale(r.zoom, r.zoom)
 
     p.beginPhase('render:scene')
-    if (canUsePicture) {
-      p.beginPhase('render:drawPicture')
-      if (r.scenePicture) canvas.drawPicture(r.scenePicture)
-      p.endPhase('render:drawPicture')
-    } else if (hasVolatileOverlays) {
-      r._nodeCount = 0
-      r._culledCount = 0
-      p.beginPhase('render:volatile')
-      renderPageChildren(r, canvas, graph, overlays)
-      p.endPhase('render:volatile')
+    if (layer === 'scene' && !hasVolatileOverlays && renderSceneBacking(r, canvas, graph, sceneVersion)) {
+      p.setScenePictureMode('hit', 'backing')
     } else {
-      r._nodeCount = 0
-      r._culledCount = 0
-      p.beginPhase('render:recordPicture')
-      recordScenePicture(r, canvas, graph, sceneVersion)
-      if (r.scenePicture) canvas.drawPicture(r.scenePicture)
-      p.endPhase('render:recordPicture')
+      canvas.translate(r.panX, r.panY)
+      canvas.scale(r.zoom, r.zoom)
+      renderSceneContent(
+        r,
+        canvas,
+        graph,
+        overlays,
+        sceneVersion,
+        canUsePicture,
+        cacheMissReason,
+        hasVolatileOverlays
+      )
     }
     p.endPhase('render:scene')
 
@@ -170,7 +200,7 @@ export function render(
   if (layer !== 'scene') {
     canvas.save()
     canvas.scale(r.dpr, r.dpr)
-    r.labelCache.update(graph, r.pageId, sceneVersion)
+    r.labelCache.update(graph, r.pageId, sceneVersion, graph.positionPreviewVersion)
     p.beginPhase('render:sectionTitles')
     r.drawSectionTitles(canvas, graph)
     p.endPhase('render:sectionTitles')
@@ -195,6 +225,7 @@ export function render(
     r.drawSnapGuides(canvas, overlays.snapGuides)
     r.drawMarquee(canvas, overlays.marquee)
     r.drawLayoutInsertIndicator(canvas, overlays.layoutInsertIndicator)
+    r.drawAutoLayoutHover(canvas, graph, overlays.autoLayoutHover)
     r.drawNodeEditOverlay(canvas, graph, overlays.nodeEditState)
     r.drawPenOverlay(canvas, overlays.penState)
     r.drawRemoteCursors(canvas, graph, overlays.remoteCursors)
@@ -208,11 +239,50 @@ export function render(
   }
 
   p.beginPhase('render:flush')
-  r.surface.flush()
+  const { duration: flushDuration } = measure(() => r.surface.flush())
+  p.setFlushTime(flushDuration)
   p.endPhase('render:flush')
 
   p.setNodeCounts(r._nodeCount, r._culledCount)
   p.endFrame()
+}
+
+function renderSceneContent(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  graph: SceneGraph,
+  overlays: RenderOverlays,
+  sceneVersion: number,
+  canUsePicture: boolean,
+  cacheMissReason: string,
+  hasVolatileOverlays: boolean
+): void {
+  const p = r.profiler
+  if (canUsePicture) {
+    p.setScenePictureMode('hit')
+    p.beginPhase('render:drawPicture')
+    if (r.scenePicture) {
+      const picture = r.scenePicture
+      const { duration } = measure(() => canvas.drawPicture(picture))
+      p.setScenePictureDrawTime(duration)
+    }
+    p.endPhase('render:drawPicture')
+  } else if (hasVolatileOverlays) {
+    p.setScenePictureMode('volatile', cacheMissReason)
+    r._nodeCount = 0
+    r._culledCount = 0
+    p.beginPhase('render:volatile')
+    renderPageChildren(r, canvas, graph, overlays)
+    p.endPhase('render:volatile')
+  } else {
+    p.setScenePictureMode('record', cacheMissReason)
+    r._nodeCount = 0
+    r._culledCount = 0
+    p.beginPhase('render:recordPicture')
+    const { duration } = measure(() => recordScenePicture(r, canvas, graph, sceneVersion))
+    p.setScenePictureRecordTime(duration)
+    p.endPhase('render:recordPicture')
+  }
 }
 
 function renderPageChildren(
@@ -271,6 +341,7 @@ function recordScenePicture(
   recorder.delete()
   r.worldViewport = prevViewport
   r.scenePictureVersion = sceneVersion
+  r.scenePicturePositionPreviewVersion = graph.positionPreviewVersion
   r.scenePicturePageId = r.pageId
   canvas.drawPicture(r.scenePicture)
 }

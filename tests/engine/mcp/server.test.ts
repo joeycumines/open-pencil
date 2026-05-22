@@ -1,5 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 import { serve } from '@hono/node-server'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -16,15 +18,24 @@ import {
 
 import { startServer, paramToZod } from '#mcp/server'
 
+interface MockBrowserRequest {
+  command: string
+  args?: unknown
+}
+
 interface MockBrowser {
   ws: WebSocket
   graph: SceneGraph
+  requests: MockBrowserRequest[]
   close: () => void
 }
+
+const TEST_MCP_ROOT = path.join(tmpdir(), 'open-pencil-mcp-root')
 
 function connectMockBrowser(port: number, graph: SceneGraph): Promise<MockBrowser> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`)
+    const requests: MockBrowserRequest[] = []
     const token = 'test-token-' + Date.now()
 
     ws.on('open', () => {
@@ -41,6 +52,7 @@ function connectMockBrowser(port: number, graph: SceneGraph): Promise<MockBrowse
 
         try {
           const command = msg.command
+          requests.push({ command, args: msg.args })
           const args = msg.args as { name?: string; args?: Record<string, unknown> } | undefined
 
           let result: unknown
@@ -51,6 +63,12 @@ function connectMockBrowser(port: number, graph: SceneGraph): Promise<MockBrowse
             api.currentPage = api.wrapNode(graph.getPages()[0].id)
             result = await def.execute(api, args.args ?? {})
             if (def.mutates) computeAllLayouts(graph)
+          } else if (
+            command === 'save_file' ||
+            command === 'new_document' ||
+            command === 'open_file'
+          ) {
+            result = {}
           } else {
             result = executeRpcCommand(graph, command, args ?? {})
           }
@@ -68,10 +86,39 @@ function connectMockBrowser(port: number, graph: SceneGraph): Promise<MockBrowse
         }
       })
 
-      resolve({ ws, graph, close: () => ws.close() })
+      resolve({ ws, graph, requests, close: () => ws.close() })
     })
 
     ws.on('error', reject)
+  })
+}
+
+function readWsJson<T>(ws: WebSocket): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Timed out waiting for WebSocket message')),
+      1000
+    )
+    ws.once('message', (raw) => {
+      clearTimeout(timer)
+      try {
+        resolve(JSON.parse(raw.toString()) as T)
+      } catch (error) {
+        reject(error)
+      }
+    })
+    ws.once('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+  })
+}
+
+function openWs(url: string): Promise<WebSocket> {
+  const ws = new WebSocket(url)
+  return new Promise((resolve, reject) => {
+    ws.once('open', () => resolve(ws))
+    ws.once('error', reject)
   })
 }
 
@@ -232,13 +279,133 @@ describe('MCP server', () => {
   })
 })
 
+describe('MCP WebSocket stdio bridge routing', () => {
+  test('forwards stdio client requests to the registered desktop app', async () => {
+    const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+    const wsPort = await waitForWsListening(wss)
+    const graph = new SceneGraph()
+    const browser = await connectMockBrowser(wsPort, graph)
+    const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+
+    try {
+      const register = await readWsJson<{ type: string; token?: string }>(clientWs)
+      expect(register.type).toBe('register')
+      expect(register.token).toBeTruthy()
+
+      clientWs.send(
+        JSON.stringify({
+          type: 'request',
+          id: 'stdio-1',
+          command: 'tool',
+          args: { name: 'get_current_page', args: {} }
+        })
+      )
+      const response = await readWsJson<{
+        type: string
+        id: string
+        ok?: boolean
+        result?: { name: string }
+      }>(clientWs)
+
+      expect(response.type).toBe('response')
+      expect(response.id).toBe('stdio-1')
+      expect(response.ok).toBe(true)
+      expect(response.result?.name).toBe('Page 1')
+      expect(browser.requests.at(-1)?.command).toBe('tool')
+    } finally {
+      clientWs.close()
+      browser.close()
+      closeServer()
+    }
+  })
+
+  test('returns a disconnected response instead of timing out when no app is registered', async () => {
+    const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+    const wsPort = await waitForWsListening(wss)
+    const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+
+    try {
+      clientWs.send(
+        JSON.stringify({
+          type: 'request',
+          id: 'stdio-no-app',
+          command: 'tool',
+          args: { name: 'get_current_page', args: {} }
+        })
+      )
+      const response = await readWsJson<{ type: string; id: string; ok?: boolean; error?: string }>(
+        clientWs
+      )
+
+      expect(response.type).toBe('response')
+      expect(response.id).toBe('stdio-no-app')
+      expect(response.ok).toBe(false)
+      expect(response.error).toContain('OpenPencil app is not connected')
+    } finally {
+      clientWs.close()
+      closeServer()
+    }
+  })
+
+  test('notifies already-connected stdio clients when the desktop app registers later', async () => {
+    const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+    const wsPort = await waitForWsListening(wss)
+    const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+    const graph = new SceneGraph()
+    let browser: MockBrowser | null = null
+
+    try {
+      browser = await connectMockBrowser(wsPort, graph)
+      const register = await readWsJson<{ type: string; token?: string }>(clientWs)
+      expect(register.type).toBe('register')
+      expect(register.token).toBeTruthy()
+    } finally {
+      clientWs.close()
+      browser?.close()
+      closeServer()
+    }
+  })
+
+  test('routes new requests to the latest registered desktop app after reconnect', async () => {
+    const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+    const wsPort = await waitForWsListening(wss)
+    const firstBrowser = await connectMockBrowser(wsPort, new SceneGraph())
+    const secondBrowser = await connectMockBrowser(wsPort, new SceneGraph())
+    const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+
+    try {
+      await readWsJson<{ type: string; token?: string }>(clientWs)
+      clientWs.send(
+        JSON.stringify({
+          type: 'request',
+          id: 'stdio-after-reconnect',
+          command: 'tool',
+          args: { name: 'get_current_page', args: {} }
+        })
+      )
+      const response = await readWsJson<{ type: string; id: string; ok?: boolean }>(clientWs)
+
+      expect(response.type).toBe('response')
+      expect(response.id).toBe('stdio-after-reconnect')
+      expect(response.ok).toBe(true)
+      expect(firstBrowser.requests).toHaveLength(0)
+      expect(secondBrowser.requests.at(-1)?.command).toBe('tool')
+    } finally {
+      clientWs.close()
+      firstBrowser.close()
+      secondBrowser.close()
+      closeServer()
+    }
+  })
+})
+
 describe('MCP server with mcpRoot', () => {
   test('registers open_file and new_document tools when mcpRoot is set', async () => {
     const {
       app,
       wss,
       close: closeServer
-    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: '/tmp' })
+    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: TEST_MCP_ROOT })
     const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
     const actualWsPort = await waitForWsListening(wss)
 
@@ -255,6 +422,72 @@ describe('MCP server with mcpRoot', () => {
     const names = tools.map((t) => t.name)
     expect(names).toContain('open_file')
     expect(names).toContain('new_document')
+
+    await client.close()
+    browser.close()
+    closeServer()
+    httpServer.close()
+  })
+
+  test('save_file accepts an explicit path inside mcpRoot', async () => {
+    const {
+      app,
+      wss,
+      close: closeServer
+    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: TEST_MCP_ROOT })
+    const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
+    const actualWsPort = await waitForWsListening(wss)
+
+    const graph = new SceneGraph()
+    const browser = await connectMockBrowser(actualWsPort, graph)
+
+    const client = new Client({ name: 'test-root-save', version: '0.0.0' })
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)
+    )
+    await client.connect(transport)
+
+    const savePath = path.join(TEST_MCP_ROOT, 'unicode', 'пример.fig')
+    const result = await client.callTool({
+      name: 'save_file',
+      arguments: { path: savePath }
+    })
+
+    expect(result.isError).not.toBe(true)
+    const request = browser.requests.find((item) => item.command === 'save_file')
+    expect(request?.args).toEqual({ path: savePath })
+
+    await client.close()
+    browser.close()
+    closeServer()
+    httpServer.close()
+  })
+
+  test('save_file rejects paths outside mcpRoot', async () => {
+    const {
+      app,
+      wss,
+      close: closeServer
+    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: TEST_MCP_ROOT })
+    const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
+    const actualWsPort = await waitForWsListening(wss)
+
+    const graph = new SceneGraph()
+    const browser = await connectMockBrowser(actualWsPort, graph)
+
+    const client = new Client({ name: 'test-root-save-outside', version: '0.0.0' })
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)
+    )
+    await client.connect(transport)
+
+    const result = await client.callTool({
+      name: 'save_file',
+      arguments: { path: path.join(path.dirname(TEST_MCP_ROOT), 'outside.fig') }
+    })
+
+    expect(result.isError).toBe(true)
+    expect(browser.requests.some((item) => item.command === 'save_file')).toBe(false)
 
     await client.close()
     browser.close()

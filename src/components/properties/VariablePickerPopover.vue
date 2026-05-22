@@ -12,6 +12,10 @@ import {
 
 import { computed, nextTick, ref, watch } from 'vue'
 
+import { vTestId } from '@open-pencil/vue'
+
+import { useTooltipUI } from '@/components/ui/tooltip'
+
 import type { Variable } from '@open-pencil/core/scene-graph'
 
 const searchTerm = defineModel<string>('searchTerm', { default: '' })
@@ -48,10 +52,12 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
+const tooltipOpen = ref(false)
 const creating = ref(false)
 const createName = ref('')
 const createInput = ref<HTMLInputElement | null>(null)
 const canCreate = computed(() => createName.value.trim().length > 0)
+const tooltipCls = useTooltipUI({ content: 'animate-in zoom-in-95 fade-in' })
 
 watch(open, (value) => {
   if (!value) creating.value = false
@@ -76,15 +82,28 @@ function submitCreate() {
 
 <template>
   <PopoverRoot v-model:open="open">
-    <PopoverTrigger
-      :data-test-id="triggerTestId"
-      :aria-label="triggerLabel"
-      :title="triggerLabel"
-      class="shrink-0 cursor-pointer border-none bg-transparent p-0 text-muted hover:text-surface"
-      @pointerdown.stop
-    >
-      <icon-lucide-diamond-plus class="size-3.5" />
-    </PopoverTrigger>
+    <div class="relative shrink-0">
+      <PopoverTrigger
+        v-test-id="triggerTestId"
+        :aria-label="triggerLabel"
+        class="shrink-0 cursor-pointer border-none bg-transparent p-0 text-muted hover:text-surface"
+        @pointerdown.prevent.stop
+        @mouseenter="tooltipOpen = true"
+        @mouseleave="tooltipOpen = false"
+        @focus="tooltipOpen = true"
+        @blur="tooltipOpen = false"
+      >
+        <icon-lucide-diamond-plus class="size-3.5" />
+      </PopoverTrigger>
+      <div
+        v-if="tooltipOpen && !open"
+        role="tooltip"
+        :class="tooltipCls.content"
+        class="pointer-events-none absolute right-0 bottom-full z-50 mb-1 whitespace-nowrap"
+      >
+        {{ triggerLabel }}
+      </div>
+    </div>
     <PopoverPortal>
       <PopoverContent
         side="left"
@@ -144,7 +163,7 @@ function submitCreate() {
                 class="min-w-0 flex-1 rounded border border-border bg-transparent px-1.5 py-1 text-[11px] text-surface outline-none placeholder:text-muted focus:border-accent"
               />
               <button
-                :data-test-id="createTestId"
+                v-test-id="createTestId"
                 :disabled="!canCreate"
                 class="rounded border border-border bg-panel px-1.5 py-1 text-[11px] text-surface hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
                 type="submit"
@@ -154,7 +173,7 @@ function submitCreate() {
             </form>
             <button
               v-else
-              :data-test-id="createTestId"
+              v-test-id="createTestId"
               class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-2 py-1.5 text-left text-[11px] text-muted hover:bg-hover hover:text-surface"
               @click="startCreate"
             >

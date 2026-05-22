@@ -1,5 +1,14 @@
 import type { SkiaRenderer } from '#core/canvas/renderer'
+import { clearSubtreePictureCache } from '#core/canvas/renderer/state'
 import { fontManager } from '#core/text/fonts'
+
+function clearRetainedSceneState(r: SkiaRenderer): void {
+  r.scenePicture?.delete()
+  r.sceneBacking?.image.delete()
+  r.sceneBacking = null
+  r.sceneBackingBuild?.surface.delete()
+  r.sceneBackingBuild = null
+}
 
 export function destroyRenderer(r: SkiaRenderer): void {
   if (r.destroyed) return
@@ -7,7 +16,13 @@ export function destroyRenderer(r: SkiaRenderer): void {
 
   for (const img of r.imageCache.values()) img.delete()
   r.imageCache.clear()
-  for (const cache of [r.vectorPathCache, r.fillGeometryCache, r.strokeGeometryCache]) {
+  for (const cache of [
+    r.vectorPathCache,
+    r.vectorStrokePathCache,
+    r.vectorStrokeOutlineCache,
+    r.fillGeometryCache,
+    r.strokeGeometryCache
+  ]) {
     for (const paths of cache.values()) {
       for (const p of paths) p.delete()
     }
@@ -16,6 +31,7 @@ export function destroyRenderer(r: SkiaRenderer): void {
   r.fillPaint.delete()
   r.strokePaint.delete()
   r.selectionPaint.delete()
+  r.parentOutlinePaint.delete()
   r.snapPaint.delete()
   r.auxFill.delete()
   r.auxStroke.delete()
@@ -23,6 +39,8 @@ export function destroyRenderer(r: SkiaRenderer): void {
   r.textFont?.delete()
   r.labelFont?.delete()
   r.sizeFont?.delete()
+  r.sectionTitleFont?.delete()
+  r.componentLabelFont?.delete()
   r.fontMgr?.delete()
   r.fontProvider?.delete()
   r.fontProvider = null
@@ -46,7 +64,8 @@ export function destroyRenderer(r: SkiaRenderer): void {
   r.maskFilterCache.clear()
   for (const pic of r.nodePictureCache.values()) pic?.delete()
   r.nodePictureCache.clear()
-  r.scenePicture?.delete()
+  clearSubtreePictureCache(r)
+  clearRetainedSceneState(r)
   r._flashPaint?.delete()
   r.profiler.destroy()
   r.surface.delete()

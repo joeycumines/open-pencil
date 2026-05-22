@@ -11,10 +11,16 @@ import { createClipboardCopyActions } from './clipboard/copy'
 import { createClipboardExportActions } from './clipboard/export'
 import { createClipboardFontActions } from './clipboard/fonts'
 import { createClipboardImageActions } from './clipboard/images'
+import { deleteIds, recreateSnapshots, restoreDeletedEntries } from './clipboard/history'
 import { resolvePasteTarget } from './clipboard/paste-target'
 import { createClipboardPlacementActions } from './clipboard/placement'
+import { replaceTargetsWithCreated, selectedReplacementTargets } from './clipboard/paste-replace'
 import { collectSubtrees, restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
 import type { EditorContext } from './types'
+
+type PasteOptions = {
+  replaceSelection?: boolean
+}
 
 export function createClipboardActions(ctx: EditorContext) {
   function duplicateSelected(selectedNodes: SceneNode[]) {
@@ -59,19 +65,51 @@ export function createClipboardActions(ctx: EditorContext) {
     }
   }
 
-  async function pasteFromHTML(html: string, cursorPos?: Vector) {
+  function pushPasteUndo(created: string[], prevSelection: Set<string>) {
+    const allNodes = collectSubtrees(ctx.graph, created)
+    const pageId = ctx.state.currentPageId
+    ctx.undo.push({
+      label: 'Paste',
+      forward: () => {
+        recreateSnapshots(ctx, allNodes, pageId)
+        computeAllLayouts(ctx.graph, pageId)
+        ctx.setSelectedIds(new Set(created))
+      },
+      inverse: () => {
+        deleteIds(ctx, created)
+        computeAllLayouts(ctx.graph, pageId)
+        ctx.setSelectedIds(prevSelection)
+      }
+    })
+  }
+
+  async function pasteFromHTML(html: string, cursorPos?: Vector, options: PasteOptions = {}) {
     const openPencil = parseOpenPencilClipboard(html)
     if (openPencil) {
-      pasteOpenPencilNodes(openPencil.nodes, openPencil.images, cursorPos)
+      pasteOpenPencilNodes(openPencil.nodes, openPencil.images, cursorPos, options)
       return
     }
 
     const figma = await parseFigmaClipboard(html)
     if (figma) {
       const prevSelection = new Set(ctx.state.selectedIds)
-      const pasteTarget = resolvePasteTarget(ctx)
+      const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
+      const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
       const created = importClipboardNodes(figma.nodes, ctx.graph, pasteTarget, 0, 0, figma.blobs)
       if (created.length > 0) {
+        if (replacementTargets.length > 0) {
+          replaceTargetsWithCreated(
+            ctx,
+            placementActions.centerNodesAt,
+            created,
+            replacementTargets,
+            prevSelection
+          )
+          void fontActions.loadFontsForNodes(created)
+          warnMissingImages(created)
+          ctx.requestRender()
+          return
+        }
         const { width: viewW, height: viewH } = ctx.getViewportSize()
         const cx = cursorPos?.x ?? (-ctx.state.panX + viewW / 2) / ctx.state.zoom
         const cy = cursorPos?.y ?? (-ctx.state.panY + viewH / 2) / ctx.state.zoom
@@ -79,26 +117,7 @@ export function createClipboardActions(ctx: EditorContext) {
         computeAllLayouts(ctx.graph, ctx.state.currentPageId)
         ctx.setSelectedIds(new Set(created))
 
-        const allNodes = collectSubtrees(ctx.graph, created)
-        const pageId = ctx.state.currentPageId
-        ctx.undo.push({
-          label: 'Paste',
-          forward: () => {
-            for (const snapshot of allNodes) {
-              ctx.graph.createNode(snapshot.type, snapshot.parentId ?? pageId, {
-                ...snapshot,
-                childIds: []
-              })
-            }
-            computeAllLayouts(ctx.graph, pageId)
-            ctx.setSelectedIds(new Set(created))
-          },
-          inverse: () => {
-            for (const id of [...created].reverse()) ctx.graph.deleteNode(id)
-            computeAllLayouts(ctx.graph, pageId)
-            ctx.setSelectedIds(prevSelection)
-          }
-        })
+        pushPasteUndo(created, prevSelection)
         void fontActions.loadFontsForNodes(created)
         warnMissingImages(created)
         ctx.requestRender()
@@ -109,9 +128,11 @@ export function createClipboardActions(ctx: EditorContext) {
   function pasteOpenPencilNodes(
     nodes: Array<SceneNode & { children?: SceneNode[] }>,
     images: Map<string, Uint8Array>,
-    cursorPos?: Vector
+    cursorPos?: Vector,
+    options: PasteOptions = {}
   ) {
     const prevSelection = new Set(ctx.state.selectedIds)
+    const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
     for (const [hash, bytes] of images) ctx.graph.images.set(hash, bytes)
 
     const created: string[] = []
@@ -127,34 +148,26 @@ export function createClipboardActions(ctx: EditorContext) {
       return node.id
     }
 
-    const pasteTarget = resolvePasteTarget(ctx)
+    const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
     for (const node of nodes) created.push(createNodeTree(node, pasteTarget))
     if (created.length === 0) return
+
+    if (replacementTargets.length > 0) {
+      replaceTargetsWithCreated(
+        ctx,
+        placementActions.centerNodesAt,
+        created,
+        replacementTargets,
+        prevSelection
+      )
+      return
+    }
 
     if (cursorPos) placementActions.centerNodesAt(created, cursorPos.x, cursorPos.y)
     computeAllLayouts(ctx.graph, ctx.state.currentPageId)
     ctx.setSelectedIds(new Set(created))
 
-    const allNodes = collectSubtrees(ctx.graph, created)
-    const pageId = ctx.state.currentPageId
-    ctx.undo.push({
-      label: 'Paste',
-      forward: () => {
-        for (const snapshot of allNodes) {
-          ctx.graph.createNode(snapshot.type, snapshot.parentId ?? pageId, {
-            ...snapshot,
-            childIds: []
-          })
-        }
-        computeAllLayouts(ctx.graph, pageId)
-        ctx.setSelectedIds(new Set(created))
-      },
-      inverse: () => {
-        for (const id of [...created].reverse()) ctx.graph.deleteNode(id)
-        computeAllLayouts(ctx.graph, pageId)
-        ctx.setSelectedIds(prevSelection)
-      }
-    })
+    pushPasteUndo(created, prevSelection)
   }
 
   function warnMissingImages(nodeIds: string[]) {
@@ -191,11 +204,7 @@ export function createClipboardActions(ctx: EditorContext) {
         ctx.setSelectedIds(new Set())
       },
       inverse: () => {
-        for (const { id, parentId, index, subtree } of [...entries].reverse()) {
-          const rootSnap = subtree.get(id)
-          if (rootSnap) restoreSubtree(ctx.graph, rootSnap, parentId, subtree)
-          if (index >= 0) ctx.graph.reorderChild(id, parentId, index)
-        }
+        restoreDeletedEntries(ctx, entries)
         ctx.setSelectedIds(prevSelection)
       }
     })

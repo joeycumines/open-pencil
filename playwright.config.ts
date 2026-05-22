@@ -16,6 +16,7 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://localhost:1420',
+    testIdAttribute: 'data-test-id',
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 2,
     colorScheme: 'dark',
@@ -28,6 +29,14 @@ export default defineConfig({
       name: 'openpencil',
       testDir: './tests/e2e',
       fullyParallel: false
+    },
+    {
+      name: 'openpencil-webkit',
+      testDir: './tests/e2e',
+      testMatch: '**/*.webkit.spec.ts',
+      use: {
+        browserName: 'webkit'
+      }
     },
     {
       name: 'figma',

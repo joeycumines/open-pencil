@@ -1,18 +1,40 @@
-import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '#core/kiwi/binary/codec'
-import { populateAndApplyOverrides } from '#core/kiwi/instance-overrides'
-import type { InstanceNodeChange } from '#core/kiwi/instance-overrides'
+import { isNotNil } from 'es-toolkit/predicate'
+
+import { BLACK } from '#core/constants'
+import { setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
+import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '#core/kiwi/fig/codec'
+import { populateAndApplyOverrides } from '#core/kiwi/fig/instance-overrides'
+import type { InstanceNodeChange } from '#core/kiwi/fig/instance-overrides'
 import {
   guidToString,
   nodeChangeToProps,
   sortChildren,
   setVariableColorResolver,
   VARIABLE_BINDING_FIELDS_INVERSE
-} from '#core/kiwi/node-change/convert'
+} from '#core/kiwi/fig/node-change/convert'
+import { applyStyleRefsToFields } from '#core/kiwi/fig/node-change/style-refs'
 import { SceneGraph } from '#core/scene-graph'
 import type { VariableType, VariableValue } from '#core/scene-graph'
 
 type AssetRef = { key: string; version?: string }
 type AliasRef = { guid?: GUID; assetRef?: AssetRef }
+
+function applyImportedCanvasMetadata(page: ReturnType<SceneGraph['addPage']>, canvasNc: NodeChange) {
+  page.source.format = 'fig'
+  page.source.orderKey = canvasNc.parentIndex?.position ?? null
+  if (canvasNc.backgroundColor) page.source.fig.rawNodeFields.backgroundColor = structuredClone(canvasNc.backgroundColor)
+  page.source.fig.rawNodeFields.strokeJoin = canvasNc.strokeJoin
+  page.source.fig.rawNodeFields.strokeWeight = canvasNc.strokeWeight
+  if (canvasNc.pageType) page.source.fig.rawNodeFields.pageType = canvasNc.pageType
+}
+
+function applyImportedDocumentMetadata(graph: SceneGraph, docNc: NodeChange | undefined) {
+  const rootNode = graph.getNode(graph.rootId)
+  if (!docNc || !rootNode) return
+  rootNode.source.format = 'fig'
+  rootNode.source.fig.rawNodeFields.strokeJoin = docNc.strokeJoin
+  rootNode.source.fig.rawNodeFields.strokeWeight = docNc.strokeWeight
+}
 
 function assetRefKey(assetRef: AssetRef): string {
   return assetRef.version ? `${assetRef.key}@${assetRef.version}` : assetRef.key
@@ -164,7 +186,7 @@ function resolveVariableValue(
 function resolveDefaultValue(type: VariableType): VariableValue {
   if (type === 'BOOLEAN') return false
   if (type === 'STRING') return ''
-  if (type === 'COLOR') return { r: 0, g: 0, b: 0, a: 1 }
+  if (type === 'COLOR') return { ...BLACK }
   return 0
 }
 
@@ -276,11 +298,15 @@ function importPages(
   }
 
   if (docId) {
+    applyImportedDocumentMetadata(graph, changeMap.get(docId))
+
     for (const canvasId of childrenMap.get(docId) ?? []) {
       const canvasNc = changeMap.get(canvasId)
       if (!canvasNc) continue
       if (canvasNc.type === 'CANVAS') {
         const page = graph.addPage(canvasNc.name ?? 'Page')
+        page.source.id = canvasId
+        applyImportedCanvasMetadata(page, canvasNc)
         canvasIdToPageId.set(canvasId, page.id)
         if (canvasNc.internalOnly) page.internalOnly = true
         created.add(canvasId)
@@ -330,13 +356,45 @@ function remapComponentIds(graph: SceneGraph, guidToNodeId: Map<string, string>)
   }
 }
 
+function applyVariantPropSpecs(graph: SceneGraph): void {
+  for (const node of graph.getAllNodes()) {
+    if (node.type !== 'COMPONENT' || node.variantPropSpecs.length === 0 || !node.parentId) continue
+    const parent = graph.getNode(node.parentId)
+    if (parent?.type !== 'COMPONENT_SET') continue
+    const defs = new Map(parent.componentPropertyDefinitions.map((def) => [def.id, def.name]))
+    const values: Record<string, string> = {}
+    for (const spec of node.variantPropSpecs)
+      values[defs.get(spec.propDefId) ?? spec.propDefId] = spec.value
+    graph.updateNode(node.id, { componentPropertyValues: values })
+  }
+}
+
 function parseDocumentColorSpace(nodeChanges: NodeChange[]): 'srgb' | 'display-p3' {
   const documentNode = nodeChanges.find((nc) => nc.type === 'DOCUMENT')
   return documentNode?.documentColorProfile === 'DISPLAY_P3' ? 'display-p3' : 'srgb'
 }
 
+function applyStyleRefs(changeMap: Map<string, NodeChange>): void {
+  for (const nc of changeMap.values()) applyStyleRefsToFields(changeMap, nc)
+}
+
 export interface FigImportOptions {
   populate?: 'all' | 'first-page'
+}
+
+function rememberLazyFigImportContext(
+  graph: SceneGraph,
+  changeMap: Map<string, NodeChange>,
+  guidToNodeId: Map<string, string>,
+  blobs: Uint8Array[],
+  populatedRootIds: string[]
+): void {
+  setLazyFigImportContext(graph, {
+    changeMap: changeMap as Map<string, InstanceNodeChange>,
+    guidToNodeId,
+    blobs,
+    populatedRootIds: new Set(populatedRootIds)
+  })
 }
 
 export function importNodeChanges(
@@ -359,6 +417,7 @@ export function importNodeChanges(
   }
 
   const { changeMap, parentMap, childrenMap } = buildChangeMaps(nodeChanges)
+  applyStyleRefs(changeMap)
   const assetRefs = buildAssetRefMap(changeMap)
   setVariableColorResolver(buildVariableColorResolver(changeMap, assetRefs))
 
@@ -392,6 +451,7 @@ export function importNodeChanges(
   importVariableEntries(changeMap, parentMap, graph, assetRefs)
   importVariableBindings(changeMap, guidToNodeId, graph)
   remapComponentIds(graph, guidToNodeId)
+  applyVariantPropSpecs(graph)
 
   const firstPageId = graph.getPages()[0]?.id
   const componentPageIds = new Set<string>()
@@ -403,16 +463,20 @@ export function importNodeChanges(
   }
   const activeRootIds =
     options.populate === 'first-page'
-      ? [firstPageId, ...componentPageIds].filter(Boolean)
+      ? [firstPageId, ...componentPageIds].filter(isNotNil)
       : undefined
 
-  populateAndApplyOverrides(
-    graph,
-    changeMap as Map<string, InstanceNodeChange>,
-    guidToNodeId,
-    blobs,
-    activeRootIds
-  )
+  graph.preserveSourceMetadataDuring(() => {
+    populateAndApplyOverrides(
+      graph,
+      changeMap as Map<string, InstanceNodeChange>,
+      guidToNodeId,
+      blobs,
+      activeRootIds
+    )
+  })
+
+  if (activeRootIds) rememberLazyFigImportContext(graph, changeMap, guidToNodeId, blobs, activeRootIds)
 
   setVariableColorResolver(null)
 

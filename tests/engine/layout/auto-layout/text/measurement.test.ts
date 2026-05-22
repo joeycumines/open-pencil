@@ -8,6 +8,83 @@ import { getNodeOrThrow } from '#tests/helpers/assert'
 import { autoFrame, loadFixtureGraph, pageId, rect } from '#tests/helpers/layout'
 
 describe('text measurement', () => {
+  test('derived text layout preserves imported auto-layout text bounds during measurement', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const tabs = autoFrame(graph, page, {
+      width: 180,
+      height: 42,
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'HUG',
+      paddingTop: 5,
+      paddingBottom: 5,
+      paddingLeft: 5,
+      paddingRight: 5
+    })
+    const tab = autoFrame(graph, tabs.id, {
+      width: 80,
+      height: 32,
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'HUG',
+      paddingTop: 6,
+      paddingBottom: 6,
+      paddingLeft: 12,
+      paddingRight: 12
+    })
+    graph.createNode('TEXT', tab.id, {
+      text: 'Account',
+      width: 56,
+      height: 20,
+      textAutoResize: 'WIDTH_AND_HEIGHT',
+      figmaDerivedLayout: { width: 56, height: 20 }
+    })
+
+    setTextMeasurer(() => ({ width: 56, height: 40 }))
+    computeAllLayouts(graph, page)
+    setTextMeasurer(null)
+
+    expect(graph.getNode(tab.id)?.height).toBe(32)
+    expect(graph.getNode(tabs.id)?.height).toBe(42)
+  })
+
+  test('live text without derived glyphs still uses CanvasKit measurement', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const tabs = autoFrame(graph, page, {
+      width: 180,
+      height: 42,
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'HUG',
+      paddingTop: 5,
+      paddingBottom: 5,
+      paddingLeft: 5,
+      paddingRight: 5
+    })
+    const tab = autoFrame(graph, tabs.id, {
+      width: 80,
+      height: 32,
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'HUG',
+      paddingTop: 6,
+      paddingBottom: 6,
+      paddingLeft: 12,
+      paddingRight: 12
+    })
+    graph.createNode('TEXT', tab.id, {
+      text: 'Account',
+      width: 56,
+      height: 20,
+      textAutoResize: 'WIDTH_AND_HEIGHT'
+    })
+
+    setTextMeasurer(() => ({ width: 56, height: 40 }))
+    computeAllLayouts(graph, page)
+    setTextMeasurer(null)
+
+    expect(graph.getNode(tab.id)?.height).toBe(52)
+    expect(graph.getNode(tabs.id)?.height).toBe(62)
+  })
+
   test('opening imported fig keeps stored text bounds before CanvasKit measurement', async () => {
     const graph = await loadFixtureGraph('gold-preview.fig')
     const store = createEditorStore(graph)
@@ -76,6 +153,7 @@ describe('text measurement', () => {
     // an older layout implementation. Post-layout, left-aligned HUG content retains x=8.
     expect(visibleToolbar.x).toBe(8)
 
+    setTextMeasurer(null)
     computeAllLayouts(graph, graph.getPages()[0].id)
 
     expect(graph.getNode(visibleToolbar.id)?.x).toBe(8)
@@ -251,6 +329,47 @@ describe('text measurement', () => {
     const children = graph.getChildren(frame.id)
     const updatedText = children[0]
     expect(updatedText.height).toBeGreaterThan(22)
+  })
+
+  test('resizing vertical typography frames reflows fill-width auto-height text', () => {
+    const graph = new SceneGraph()
+    const pid = pageId(graph)
+
+    const frame = autoFrame(graph, pid, {
+      width: 300,
+      height: 200,
+      layoutMode: 'VERTICAL',
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'FIXED',
+      paddingLeft: 20,
+      paddingRight: 20
+    })
+
+    const text = graph.createNode('TEXT', frame.id, {
+      width: 260,
+      height: 20,
+      text: 'Body text — The quick brown fox jumps and wraps.',
+      fontSize: 14,
+      textAutoResize: 'HEIGHT' as const,
+      layoutAlignSelf: 'STRETCH' as const
+    })
+
+    setTextMeasurer((_node, maxWidth) => {
+      const w = maxWidth ?? 260
+      return { width: w, height: w <= 160 ? 60 : 20 }
+    })
+
+    computeAllLayouts(graph)
+    expect(getNodeOrThrow(graph, text.id).width).toBe(260)
+    expect(getNodeOrThrow(graph, text.id).height).toBe(20)
+
+    graph.updateNode(frame.id, { width: 200 })
+    computeAllLayouts(graph)
+    setTextMeasurer(null)
+
+    const updatedText = getNodeOrThrow(graph, text.id)
+    expect(updatedText.width).toBe(160)
+    expect(updatedText.height).toBe(60)
   })
 
   test('text with w="fill" in flex="col" stretches to parent width', () => {

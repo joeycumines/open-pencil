@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from 'bun:test'
 
 import type { Canvas } from 'canvaskit-wasm'
 
+import { applyClippedBlur } from '#core/canvas/effects'
 import { renderNode } from '#core/canvas/scene'
 import { renderEffects } from '#core/canvas/shadows'
 import type { SceneGraph, SceneNode } from '#core/scene-graph'
@@ -32,6 +33,43 @@ describe('Renderer handles all effect types (Behavioral)', () => {
     }
     renderEffects(r, canvas as Canvas, node as SceneNode, new Float32Array(4), false, 'behind')
     expect(canvas.drawRect).toHaveBeenCalled()
+  })
+
+  test('drop shadow follows stroke geometry and hides shadow behind unfilled nodes', () => {
+    const strokePath = { kind: 'stroke' }
+    const fillPath = { kind: 'fill' }
+    const r = createMockRenderer({
+      getFillGeometry: mock(() => [fillPath]),
+      getStrokeGeometry: mock(() => [strokePath])
+    })
+    const canvas = createMockCanvas()
+    const node: Partial<SceneNode> = {
+      type: 'RECTANGLE',
+      width: 100,
+      height: 100,
+      fills: [],
+      childIds: [],
+      strokeGeometry: [{ commandsBlob: new Uint8Array([0]) }],
+      effects: [
+        {
+          type: 'DROP_SHADOW',
+          visible: true,
+          color: { r: 0, g: 0, b: 0, a: 0.5 },
+          offset: { x: 0, y: 3 },
+          radius: 3,
+          spread: 0,
+          showShadowBehindNode: false
+        }
+      ]
+    }
+
+    renderEffects(r, canvas as Canvas, node as SceneNode, new Float32Array(4), false, 'behind')
+
+    expect(r.getStrokeGeometry).toHaveBeenCalledWith(node)
+    expect(r.getFillGeometry).toHaveBeenCalledWith(node)
+    expect(canvas.drawPath).toHaveBeenCalledWith(strokePath, r.auxFill)
+    expect(canvas.drawPath).toHaveBeenCalledWith(fillPath, r.auxFill)
+    expect(r.auxFill.setBlendMode).toHaveBeenCalledWith(r.ck.BlendMode.DstOut)
   })
 
   test('handles INNER_SHADOW', () => {
@@ -75,6 +113,35 @@ describe('Renderer handles all effect types (Behavioral)', () => {
     }
     renderEffects(r, canvas as Canvas, node as SceneNode, new Float32Array(4), false, 'behind')
     expect(r.applyClippedBlur).toHaveBeenCalled()
+  })
+
+  test('background blur uses a backdrop filter instead of a layer content filter', () => {
+    const blurFilter = { kind: 'blur' }
+    const r = createMockRenderer({
+      clipNodeShape: mock(() => undefined),
+      getCachedBlur: mock(() => blurFilter)
+    })
+    const canvas = createMockCanvas()
+    const rect = new Float32Array([0, 0, 100, 100])
+    const node: Partial<SceneNode> = {
+      type: 'RECTANGLE',
+      width: 100,
+      height: 100,
+      fills: [],
+      childIds: [],
+      effects: []
+    }
+
+    applyClippedBlur(r, canvas as Canvas, node as SceneNode, rect, false, 5)
+
+    expect(r.effectLayerPaint.setImageFilter).toHaveBeenCalledWith(null)
+    expect(canvas.saveLayer).toHaveBeenCalledWith(
+      undefined,
+      rect,
+      blurFilter,
+      undefined,
+      r.ck.TileMode.Clamp
+    )
   })
 
   test('handles LAYER_BLUR in renderNode', () => {

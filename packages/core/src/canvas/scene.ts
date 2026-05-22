@@ -1,12 +1,20 @@
-import type { Canvas, EmbindEnumEntity, Path } from 'canvaskit-wasm'
+import type { Canvas, Path } from 'canvaskit-wasm'
 
 import { DROP_HIGHLIGHT_ALPHA, DROP_HIGHLIGHT_STROKE, SECTION_CORNER_RADIUS } from '#core/constants'
 import type { SceneNode, SceneGraph, Fill } from '#core/scene-graph'
 import type { Color } from '#core/types'
 import { vectorNetworkToCenterlinePath } from '#core/vector'
 
-import { nodeHasRadius } from './effects'
+import { renderBooleanOperation } from './boolean'
 import type { SkiaRenderer, RenderOverlays } from './renderer'
+import { nodeHasRadius } from './shapes'
+import {
+  drawDashedRRectWithSolidCorners,
+  drawStyledRRectStroke,
+  getStrokeCapEntity,
+  getStrokeJoinEntity
+} from './strokes'
+import { drawFigmaDerivedText } from './text-derived'
 
 function drawVisibleFills(
   r: SkiaRenderer,
@@ -35,7 +43,7 @@ function isCulled(r: SkiaRenderer, node: SceneNode, absX: number, absY: number):
   const bw = node.width
   const bh = node.height
   if (node.rotation !== 0) {
-    const diag = Math.sqrt(bw * bw + bh * bh)
+    const diag = Math.hypot(bw, bh)
     const cx = absX + bw / 2
     const cy = absY + bh / 2
     return (
@@ -58,7 +66,8 @@ function applyNodeTransforms(
   const rotation =
     overlays.rotationPreview?.nodeId === nodeId ? overlays.rotationPreview.angle : node.rotation
   if (rotation !== 0) {
-    canvas.rotate(rotation, node.width / 2, node.height / 2)
+    if (node.type === 'LINE') canvas.rotate(rotation, 0, 0)
+    else canvas.rotate(rotation, node.width / 2, node.height / 2)
   }
 
   if (node.flipX || node.flipY) {
@@ -79,6 +88,8 @@ function renderNodeContent(
     r.renderSection(canvas, node, graph)
   } else if (node.type === 'COMPONENT_SET') {
     r.renderComponentSet(canvas, node, graph)
+  } else if (node.type === 'BOOLEAN_OPERATION') {
+    renderBooleanOperation(r, canvas, node, graph)
   } else {
     r.renderShape(canvas, node, graph)
   }
@@ -99,8 +110,11 @@ function renderChildren(
   canvas: Canvas,
   graph: SceneGraph,
   node: SceneNode,
-  overlays: RenderOverlays
+  overlays: RenderOverlays,
+  absX: number,
+  absY: number
 ): void {
+  if (node.type === 'BOOLEAN_OPERATION') return
   const isClippableContainer =
     node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE'
   if (isClippableContainer && node.clipsContent && node.childIds.length > 0) {
@@ -111,12 +125,12 @@ function renderChildren(
       canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, true)
     }
     for (const childId of node.childIds) {
-      r.renderNode(canvas, graph, childId, overlays)
+      r.renderNode(canvas, graph, childId, overlays, absX, absY)
     }
     canvas.restore()
   } else {
     for (const childId of node.childIds) {
-      r.renderNode(canvas, graph, childId, overlays)
+      r.renderNode(canvas, graph, childId, overlays, absX, absY)
     }
   }
 }
@@ -169,7 +183,7 @@ export function renderNode(
 
   applyNodeTransforms(r, canvas, node, nodeId, overlays)
   renderNodeContent(r, canvas, graph, node, nodeId, overlays)
-  renderChildren(r, canvas, graph, node, overlays)
+  renderChildren(r, canvas, graph, node, overlays, absX, absY)
 
   if (layerBlur) {
     canvas.restore()
@@ -232,6 +246,19 @@ export function renderComponentSet(
 
   drawVisibleFills(r, node, graph, () => canvas.drawRRect(rrect, r.fillPaint))
 
+  const visibleStrokes = node.strokes.filter((stroke) => stroke.visible)
+  if (visibleStrokes.length > 0) {
+    forVisibleStrokes(r, node, graph, (stroke, color) => {
+      const dashPhase = stroke.dashPattern?.[1] ?? 0
+      if (stroke.dashPattern && stroke.dashPattern.length > 0) {
+        drawDashedRRectWithSolidCorners(r, canvas, node, stroke, color, 5, dashPhase)
+      } else {
+        drawStyledRRectStroke(r, canvas, rrect, node, stroke, color, dashPhase)
+      }
+    })
+    return
+  }
+
   r.auxStroke.setStrokeWidth(r.COMPONENT_SET_BORDER_WIDTH / r.zoom)
   r.auxStroke.setColor(r.compColor())
   r.auxStroke.setPathEffect(
@@ -270,39 +297,13 @@ export function renderShape(
   }
 }
 
-/**
- * When a container has no visible fills, Figma renders drop shadows
- * using the shape of its children rather than its own rectangle.
- * Returns the child to use for shadow shape, or null to use the node itself.
- */
 function getShadowShapeChild(node: SceneNode, graph: SceneGraph): SceneNode | null {
   if (node.fills.some((f) => f.visible)) return null
+  if (node.strokes.some((stroke) => stroke.visible)) return null
   if (node.childIds.length === 0) return null
   const child = graph.getNode(node.childIds[0])
   if (!child?.visible) return null
   return child
-}
-
-function getCapEntity(r: SkiaRenderer, cap: string | undefined): EmbindEnumEntity {
-  switch (cap) {
-    case 'ROUND':
-      return r.ck.StrokeCap.Round
-    case 'SQUARE':
-      return r.ck.StrokeCap.Square
-    default:
-      return r.ck.StrokeCap.Butt
-  }
-}
-
-function getJoinEntity(r: SkiaRenderer, join: string | undefined): EmbindEnumEntity {
-  switch (join) {
-    case 'ROUND':
-      return r.ck.StrokeJoin.Round
-    case 'BEVEL':
-      return r.ck.StrokeJoin.Bevel
-    default:
-      return r.ck.StrokeJoin.Miter
-  }
 }
 
 function drawVectorStrokeGeometry(
@@ -320,6 +321,8 @@ function drawVectorStrokeGeometry(
 
 function vectorStrokePaths(r: SkiaRenderer, node: SceneNode): Path[] | null {
   if (!node.vectorNetwork) return null
+  const cached = r.vectorStrokePathCache.get(node.id)
+  if (cached) return cached
 
   const paths: Path[] = []
   for (const segment of node.vectorNetwork.segments) {
@@ -348,7 +351,9 @@ function vectorStrokePaths(r: SkiaRenderer, node: SceneNode): Path[] | null {
     paths.push(path)
   }
 
-  return paths.length > 0 ? paths : null
+  if (paths.length === 0) return null
+  r.vectorStrokePathCache.set(node.id, paths)
+  return paths
 }
 
 function drawVectorPathStrokes(
@@ -356,15 +361,16 @@ function drawVectorPathStrokes(
   canvas: Canvas,
   vectorPaths: Path[],
   stroke: SceneNode['strokes'][0],
-  sc: Color
+  sc: Color,
+  outlineCacheKey?: string
 ): void {
   const dash = stroke.dashPattern
   if (dash && dash.length > 0) {
     r.strokePaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
     r.strokePaint.setAlphaf(stroke.opacity)
     r.strokePaint.setStrokeWidth(stroke.weight)
-    r.strokePaint.setStrokeCap(getCapEntity(r, stroke.cap ?? 'NONE'))
-    r.strokePaint.setStrokeJoin(getJoinEntity(r, stroke.join ?? 'MITER'))
+    r.strokePaint.setStrokeCap(getStrokeCapEntity(r, stroke.cap ?? 'NONE'))
+    r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join ?? 'MITER'))
     r.strokePaint.setShader(null)
     const effect = r.ck.PathEffect.MakeDash(dash, 0)
     r.strokePaint.setPathEffect(effect)
@@ -376,19 +382,23 @@ function drawVectorPathStrokes(
   const strokeOpts = {
     width: stroke.weight,
     miter_limit: 4,
-    cap: getCapEntity(r, stroke.cap ?? 'NONE'),
-    join: getJoinEntity(r, stroke.join ?? 'MITER')
+    cap: getStrokeCapEntity(r, stroke.cap ?? 'NONE'),
+    join: getStrokeJoinEntity(r, stroke.join ?? 'MITER')
   }
   r.fillPaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
   r.fillPaint.setAlphaf(stroke.opacity)
   r.fillPaint.setShader(null)
-  for (const vp of vectorPaths) {
-    const outline = vp.copy().stroke(strokeOpts)
-    if (outline) {
-      canvas.drawPath(outline, r.fillPaint)
-      outline.delete()
+
+  let outlines = outlineCacheKey ? r.vectorStrokeOutlineCache.get(outlineCacheKey) : undefined
+  if (!outlines) {
+    outlines = []
+    for (const vp of vectorPaths) {
+      const outline = vp.copy().stroke(strokeOpts)
+      if (outline) outlines.push(outline)
     }
+    if (outlineCacheKey) r.vectorStrokeOutlineCache.set(outlineCacheKey, outlines)
   }
+  for (const outline of outlines) canvas.drawPath(outline, r.fillPaint)
 }
 
 function drawRegularStroke(
@@ -405,10 +415,10 @@ function drawRegularStroke(
   r.strokePaint.setAlphaf(stroke.opacity)
 
   if (stroke.cap) {
-    r.strokePaint.setStrokeCap(getCapEntity(r, stroke.cap))
+    r.strokePaint.setStrokeCap(getStrokeCapEntity(r, stroke.cap))
   }
   if (stroke.join) {
-    r.strokePaint.setStrokeJoin(getJoinEntity(r, stroke.join))
+    r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join))
   }
   if (stroke.dashPattern && stroke.dashPattern.length > 0) {
     r.strokePaint.setPathEffect(r.ck.PathEffect.MakeDash(stroke.dashPattern, 0))
@@ -435,8 +445,15 @@ function drawNodeStroke(
   vectorPaths: Path[] | null,
   vectorStroke: Path[] | null
 ): void {
-  if (vectorStroke && stroke.align === 'CENTER' && node.cornerRadius === 0) {
-    drawVectorPathStrokes(r, canvas, vectorStroke, stroke, sc)
+  const shouldStrokeVectorCenterline =
+    vectorStroke &&
+    stroke.align === 'CENTER' &&
+    node.cornerRadius === 0 &&
+    node.type === 'VECTOR' &&
+    !node.fills.some((fill) => fill.visible)
+  if (shouldStrokeVectorCenterline) {
+    const outlineKey = `${node.id}|${stroke.weight}|${stroke.cap ?? 'NONE'}|${stroke.join ?? 'MITER'}`
+    drawVectorPathStrokes(r, canvas, vectorStroke, stroke, sc, outlineKey)
     return
   }
   if (!sg) {
@@ -445,7 +462,8 @@ function drawNodeStroke(
     return
   }
   if (stroke.align !== 'INSIDE') {
-    drawVectorStrokeGeometry(r, canvas, sg, sc, stroke.opacity)
+    if (node.type === 'VECTOR') drawVectorStrokeGeometry(r, canvas, sg, sc, stroke.opacity)
+    else drawRegularStroke(r, canvas, node, rect, hasRadius, stroke, sc)
     return
   }
 
@@ -496,10 +514,6 @@ export function renderShapeUncached(
     }
     drawNodeStroke(r, canvas, node, rect, hasRadius, stroke, color, sg, vectorPaths, vectorStroke)
   })
-  if (vectorStroke) {
-    for (const path of vectorStroke) path.delete()
-  }
-
   r.renderEffects(canvas, node, rect, hasRadius, 'front', shadowChild)
 }
 
@@ -516,22 +530,25 @@ function drawGradientText(
   if (!r.fontsLoaded || !r.fontProvider) return false
 
   const paragraph = r.buildParagraph(node, r.ck.Color4f(0, 0, 0, 1))
-  r.effectLayerPaint.setImageFilter(null)
-  r.effectLayerPaint.setColorFilter(null)
-  r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
-  canvas.saveLayer(r.effectLayerPaint)
-  canvas.drawParagraph(paragraph, 0, paragraphY)
-  paragraph.delete()
+  try {
+    r.effectLayerPaint.setImageFilter(null)
+    r.effectLayerPaint.setColorFilter(null)
+    r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+    canvas.saveLayer(r.effectLayerPaint)
+    canvas.drawParagraph(paragraph, 0, paragraphY)
 
-  r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcIn)
-  canvas.saveLayer(r.effectLayerPaint)
-  canvas.drawRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.fillPaint)
-  canvas.restore()
-  canvas.restore()
-  r.effectLayerPaint.setImageFilter(null)
-  r.effectLayerPaint.setColorFilter(null)
-  r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
-  return true
+    r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcIn)
+    canvas.saveLayer(r.effectLayerPaint)
+    canvas.drawRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.fillPaint)
+    canvas.restore()
+    canvas.restore()
+    return true
+  } finally {
+    paragraph.delete()
+    r.effectLayerPaint.setImageFilter(null)
+    r.effectLayerPaint.setColorFilter(null)
+    r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+  }
 }
 
 export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fill?: Fill): void {
@@ -544,12 +561,7 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
     canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, false)
   }
 
-  const paragraphY = -1
-  if (isGradientFill(fill) && drawGradientText(r, canvas, node, paragraphY)) {
-    canvas.restore()
-    return
-  }
-
+  const paragraphY = 0
   if (node.textPicture) {
     const pic = r.ck.MakePicture(node.textPicture)
     if (pic) {
@@ -558,6 +570,19 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
       canvas.restore()
       return
     }
+  }
+  if (drawFigmaDerivedText(r, canvas, node)) {
+    canvas.restore()
+    return
+  }
+
+  if (!r.isNodeFontLoaded(node)) {
+    canvas.restore()
+    return
+  }
+  if (isGradientFill(fill) && drawGradientText(r, canvas, node, paragraphY)) {
+    canvas.restore()
+    return
   }
   if (r.fontsLoaded && r.fontProvider) {
     const paragraph = r.buildParagraph(node, r.fillPaint.getColor())
