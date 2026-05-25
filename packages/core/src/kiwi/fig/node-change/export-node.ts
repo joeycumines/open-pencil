@@ -141,11 +141,36 @@ const SUPPORTED_VARIABLE_DATA_TYPES = new Set([
   'PROP_REF'
 ])
 
-function isSupportedVariableMapEntry(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false
-  const entry = value as {
-    variableData?: { dataType?: string; value?: { propRefValue?: unknown } }
+interface FigmaPayloadVariableMap {
+  entries?: unknown[]
+}
+
+interface FigmaPayloadVariableMapEntry {
+  variableData?: { dataType?: string; value?: { propRefValue?: unknown } }
+}
+
+interface ColorVarCarrier {
+  colorVar?: {
+    value?: {
+      alias?: {
+        guid?: GUID
+        assetRef?: { key: string; version?: string }
+      }
+    }
   }
+}
+
+function isFigmaPayloadVariableMap(value: unknown): value is FigmaPayloadVariableMap {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && 'entries' in value
+}
+
+function isFigmaPayloadVariableMapEntry(value: unknown): value is FigmaPayloadVariableMapEntry {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isSupportedVariableMapEntry(value: unknown): boolean {
+  if (!isFigmaPayloadVariableMapEntry(value)) return false
+  const entry = value
   const dataType = entry.variableData?.dataType
   return (
     (typeof dataType === 'string' && SUPPORTED_VARIABLE_DATA_TYPES.has(dataType)) ||
@@ -154,10 +179,8 @@ function isSupportedVariableMapEntry(value: unknown): boolean {
 }
 
 function isPropRefVariableMapEntry(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false
-  const entry = value as {
-    variableData?: { dataType?: string; value?: { propRefValue?: unknown } }
-  }
+  if (!isFigmaPayloadVariableMapEntry(value)) return false
+  const entry = value
   return entry.variableData?.dataType === 'PROP_REF' || !!entry.variableData?.value?.propRefValue
 }
 
@@ -167,8 +190,8 @@ function materializeSafeVariableMap(
   options: MaterializeFigmaPayloadOptions,
   predicate: (value: unknown) => boolean
 ): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const entries = (value as { entries?: unknown[] }).entries?.filter(predicate) ?? []
+  if (!isFigmaPayloadVariableMap(value)) return undefined
+  const entries = value.entries?.filter(predicate) ?? []
   if (entries.length === 0) return undefined
   return { entries: entries.map((entry) => materializeFigmaPayload(entry, blobs, options)) }
 }
@@ -309,9 +332,9 @@ function applyRawFigmaNodeFields(
     blobIndexByHex: context.blobIndexByHex,
     includePaintVariables: true,
     includeVariableMaps: true
-  }) as Record<string, unknown>
-  for (const key of Object.keys(materialized)) {
-    if (RAW_FIELDS_OVERRIDE_BLOCKLIST.has(key)) continue
+  }) as Partial<KiwiNodeChange>
+  for (const key of Object.keys(materialized) as (keyof KiwiNodeChange)[]) {
+    if (RAW_FIELDS_OVERRIDE_BLOCKLIST.has(String(key))) continue
     // For paint arrays on imported nodes, the raw NC data preserves the
     // original opacity/color.a split (e.g. opacity=0 for invisible strokes).
     // The scene model may lose this distinction for instance children whose
@@ -328,18 +351,27 @@ function applyRawFigmaNodeFields(
       if (context.assetRefToVarGuid && context.assetRefToVarGuid.size > 0) {
         paints = convertColorVarAssetRefs(paints, context.assetRefToVarGuid)
       }
-      ;(nc as Record<string, unknown>)[key] = paints
+      nc[key] = paints
       continue
     }
     // Also convert colorVar.assetRef in raw effects (e.g. shadow color variables)
-    if (key === 'effects' && node.source.id && context.assetRefToVarGuid && context.assetRefToVarGuid.size > 0) {
+    if (
+      key === 'effects' &&
+      node.source.id &&
+      context.assetRefToVarGuid &&
+      context.assetRefToVarGuid.size > 0
+    ) {
       const converted = convertColorVarAssetRefs(materialized[key], context.assetRefToVarGuid)
-      ;(nc as Record<string, unknown>)[key] = converted
+      nc[key] = converted
+      continue
+    }
+    if (key === 'derivedTextData' && node.source.id) {
+      nc[key] = materialized[key]
       continue
     }
     // Skip any key already set on nc — explicit serialization takes priority
-    if (key in (nc as Record<string, unknown>)) continue
-    ;(nc as Record<string, unknown>)[key] = materialized[key]
+    if (key in nc) continue
+    nc[key] = materialized[key]
   }
 }
 
@@ -351,26 +383,18 @@ function applyRawFigmaNodeFields(
  * reference resolvable regardless of whether key/version is present on the
  * VARIABLE NodeChange.
  */
-function convertColorVarAssetRefs(
-  paints: unknown,
-  assetRefToVarGuid: Map<string, GUID>
-): unknown {
+function convertColorVarAssetRefs<T>(paints: T, assetRefToVarGuid: Map<string, GUID>): T {
   if (!Array.isArray(paints)) return paints
-  const result = paints.map((paint: Record<string, unknown>) => {
-    const colorVar = paint.colorVar as Record<string, unknown> | undefined
-    if (!colorVar) return paint
-    const value = colorVar.value as Record<string, unknown> | undefined
-    if (!value) return paint
-    const alias = value.alias as Record<string, unknown> | undefined
-    if (!alias) return paint
-    // If alias already has guid, nothing to convert
+  const result = paints.map((paint: ColorVarCarrier) => {
+    const colorVar = paint.colorVar
+    const value = colorVar?.value
+    const alias = value?.alias
+    if (!colorVar || !value || !alias) return paint
     if (alias.guid) return paint
-    const assetRef = alias.assetRef as { key: string; version?: string } | undefined
+    const assetRef = alias.assetRef
     if (!assetRef?.key) return paint
     // Look up by key@version first, then by key alone
-    const lookupKey = assetRef.version
-      ? `${assetRef.key}@${assetRef.version}`
-      : assetRef.key
+    const lookupKey = assetRef.version ? `${assetRef.key}@${assetRef.version}` : assetRef.key
     const guid = assetRefToVarGuid.get(lookupKey) ?? assetRefToVarGuid.get(assetRef.key)
     if (!guid) return paint
     return {
@@ -386,7 +410,7 @@ function convertColorVarAssetRefs(
   })
   // Check if any paint was actually changed (skip expensive JSON comparison)
   for (let i = 0; i < paints.length; i++) {
-    if (result[i] !== paints[i]) return result
+    if (result[i] !== paints[i]) return result as T
   }
   return paints
 }

@@ -1,15 +1,21 @@
-import type { GUID, NodeChange } from '#core/kiwi/fig/codec'
+import type { GUID, NodeChange, VariableConsumptionEntry } from '#core/kiwi/fig/codec'
 import type { SceneGraph } from '#core/scene-graph'
 import type { Matrix, Vector } from '#core/types'
 
 import type { ProtectionMap } from './patches'
 
-export interface SymbolOverride {
+export interface VariableConsumptionMapFields {
+  variableConsumptionMap?: { entries?: VariableConsumptionEntry[] }
+  [key: string]: unknown
+}
+
+export interface SymbolOverride extends VariableConsumptionMapFields {
   guidPath?: { guids?: GUID[] }
   overriddenSymbolID?: GUID
   componentPropAssignments?: ComponentPropAssignment[]
-  [key: string]: unknown
 }
+
+export type SymbolOverrideFields = VariableConsumptionMapFields
 
 export interface SymbolData {
   symbolID?: GUID
@@ -80,6 +86,10 @@ export interface InstanceNodeChange {
   strokeGeometry?: Array<{ windingRule?: string; commandsBlob?: number }>
   strokeWeight?: number
   derivedSymbolData?: DerivedSymbolOverride[]
+  key?: string
+  version?: string
+  userFacingVersion?: string
+  variableDataValues?: NodeChange['variableDataValues']
 }
 
 /**

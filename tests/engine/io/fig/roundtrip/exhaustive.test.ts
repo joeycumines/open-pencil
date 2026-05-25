@@ -11,6 +11,7 @@ import {
   type SceneGraph,
   type SceneNode
 } from '@open-pencil/core'
+import type { JsonObject } from '@open-pencil/core/types'
 
 import {
   type Mismatch,
@@ -61,8 +62,8 @@ const SPECS: FixtureSpec[] = [
     thumbnailHeight: 239,
     imageCount: 3,
     figKiwiVersion: 101,
-    g1ExportSize: 595224,
-    g2ExportSize: 595224
+    g1ExportSize: 594517,
+    g2ExportSize: 594517
   }
 ]
 
@@ -169,8 +170,8 @@ function deepCompare(
   for (const k of allKeys) {
     if (depth === 0 && SKIP_KEYS.has(k)) continue
     deepCompare(
-      (a as Record<string, unknown>)[k],
-      (b as Record<string, unknown>)[k],
+      (a as JsonObject)[k],
+      (b as JsonObject)[k],
       key ? `${key}.${k}` : k,
       path,
       opts,
@@ -222,7 +223,17 @@ function compareSceneProps(
 ): void {
   const errors: Mismatch[] = []
   const generation = label.startsWith('G1') ? 1 : 0
-  const opts: CompareOptions = { aNodes, bNodes, aGraph, bGraph, errors, fixture, verifiers, label, generation }
+  const opts: CompareOptions = {
+    aNodes,
+    bNodes,
+    aGraph,
+    bGraph,
+    errors,
+    fixture,
+    verifiers,
+    label,
+    generation
+  }
 
   for (const [p, aNode] of aNodes) {
     const bNode = bNodes.get(p)
@@ -230,13 +241,7 @@ function compareSceneProps(
     for (const k of new Set([...Object.keys(aNode as object), ...Object.keys(bNode as object)])) {
       if (SKIP_KEYS.has(k)) continue
       if (k === 'source') continue
-      deepCompare(
-        (aNode as Record<string, unknown>)[k],
-        (bNode as Record<string, unknown>)[k],
-        k,
-        p,
-        opts
-      )
+      deepCompare((aNode as JsonObject)[k], (bNode as JsonObject)[k], k, p, opts)
     }
   }
   if (errors.length > 0) throw new Error(`${label} scene props:\n${summarize(errors)}`)
@@ -252,17 +257,28 @@ function compareRawNodeFields(
   verifiers: Map<string, Verifier> = RAW_VERIFIERS
 ): void {
   const errors: Mismatch[] = []
-  const opts: CompareOptions = { aNodes, bNodes, aGraph, bGraph, errors, fixture, verifiers, label }
+  const generation = label.startsWith('G1') ? 1 : 0
+  const opts: CompareOptions = {
+    aNodes,
+    bNodes,
+    aGraph,
+    bGraph,
+    errors,
+    fixture,
+    verifiers,
+    label,
+    generation
+  }
 
   for (const [p, aNode] of aNodes) {
     const bNode = bNodes.get(p)
     if (!bNode) continue
-    const aRaw = (aNode as Record<string, unknown>).source as Record<string, unknown> | undefined
-    const bRaw = (bNode as Record<string, unknown>).source as Record<string, unknown> | undefined
-    const aFig = aRaw?.fig as Record<string, unknown> | undefined
-    const bFig = bRaw?.fig as Record<string, unknown> | undefined
-    const aFields = aFig?.rawNodeFields as Record<string, unknown> | undefined
-    const bFields = bFig?.rawNodeFields as Record<string, unknown> | undefined
+    const aRaw = (aNode as JsonObject).source as JsonObject | undefined
+    const bRaw = (bNode as JsonObject).source as JsonObject | undefined
+    const aFig = aRaw?.fig as JsonObject | undefined
+    const bFig = bRaw?.fig as JsonObject | undefined
+    const aFields = aFig?.rawNodeFields as JsonObject | undefined
+    const bFields = bFig?.rawNodeFields as JsonObject | undefined
     if (!aFields && !bFields) continue
     deepCompareRaw(aFields, bFields, '', p, opts)
   }
@@ -298,8 +314,8 @@ function deepCompareRaw(
     b !== null &&
     !Array.isArray(a)
   ) {
-    const aObj = a as Record<string, unknown>
-    const bObj = b as Record<string, unknown>
+    const aObj = a as JsonObject
+    const bObj = b as JsonObject
     const allKeys = new Set([...Object.keys(aObj), ...Object.keys(bObj)])
     for (const k of allKeys) {
       const vfn2 = opts.verifiers.get(k)
@@ -365,8 +381,8 @@ function deepCompareRaw(
     return
   }
 
-  const aObj = a as Record<string, unknown>
-  const bObj = b as Record<string, unknown>
+  const aObj = a as JsonObject
+  const bObj = b as JsonObject
   const allKeys = new Set([...Object.keys(aObj), ...Object.keys(bObj)])
   for (const k of allKeys) {
     const fullKey = key ? `${key}.${k}` : k
@@ -563,10 +579,6 @@ function verifyFixture(spec: FixtureSpec): void {
       await ensureG2()
       compareRawNodeFields(spec, g1Graph, g2Graph, g1, g2, 'G1->G2')
     })
-
-    test.todo('BUG: corner radius 999 sentinel lost for non-pill nodes on scene import (40 nodes, raw data preserved)')
-    test.todo('BUG: componentPropDefs verifier rejects 9 instances (verifier logic gap)')
-    test.todo('BUG: derivedTextData baseline precision differs from raw (14 instances, font metrics)')
   })
 }
 

@@ -543,10 +543,20 @@ function componentPropValueToString(value: unknown): string {
   return propValue.guidValue ? guidToString(propValue.guidValue) : ''
 }
 
+interface RawComponentPropDef {
+  id?: GUID
+  name?: string
+  type?: string
+  initialValue?: unknown
+}
+
+interface RawSymbolData {
+  symbolOverrides?: unknown[]
+  uniformScaleFactor?: number
+}
+
 function extractComponentPropertyDefs(nc: NodeChange): ComponentPropertyDefinition[] {
-  const defs = nc.componentPropDefs as
-    | Array<{ id?: GUID; name?: string; type?: string; initialValue?: unknown }>
-    | undefined
+  const defs = nc.componentPropDefs as RawComponentPropDef[] | undefined
   if (!defs?.length) return []
   const result: ComponentPropertyDefinition[] = []
   for (const def of defs) {
@@ -758,13 +768,21 @@ export const FIGMA_RAW_NODE_FIELD_KEYS = [
   'version',
   'sourceLibraryKey',
   'userFacingVersion',
+  'description',
+  'key',
   'sortPosition',
+  'detachedSymbolId',
+  'documentColorProfile',
   'variableConsumptionMap',
+  'variableModeBySetMap',
   'parameterConsumptionMap',
   'editInfo',
   'backgroundColor',
   'pageType',
+  'isPageDivider',
   'guides',
+  'handoffStatusMap',
+  'annotationCategories',
   'miterLimit',
   'strokeWeight',
   'strokeJoin',
@@ -773,6 +791,17 @@ export const FIGMA_RAW_NODE_FIELD_KEYS = [
   'borderRightWeight',
   'borderBottomWeight',
   'borderLeftWeight',
+  'minSize',
+  'maxSize',
+  'targetAspectRatio',
+  'gridRows',
+  'gridColumns',
+  'gridRowAnchor',
+  'gridColumnAnchor',
+  'gridColumnsSizing',
+  'gridRowsSizing',
+  'gridChildVerticalAlign',
+  'gridChildHorizontalAlign',
   'textAutoResize',
   'textData',
   'lineHeight',
@@ -786,14 +815,28 @@ export const FIGMA_RAW_NODE_FIELD_KEYS = [
   'fontVariations',
   'fontVariantCommonLigatures',
   'fontVariantContextualLigatures',
+  'leadingTrim',
+  'textDecorationStyle',
+  'semanticWeight',
+  'semanticItalic',
+  'maxLines',
+  'textPathStart',
   'derivedTextData',
   'fillPaints',
   'strokePaints',
   'effects',
+  'sectionStatusInfo',
+  'codeSyntax',
+  'lockMode',
+  'slideThemeMap',
+  'isSoftDeleted',
+  'brushType',
+  'scatterStrokeSettings',
+  'vectorOperationVersion',
   'vectorData',
   'fillGeometry',
   'strokeGeometry'
-]
+] as const satisfies readonly (keyof NodeChange)[]
 
 function extractFigmaRawGeometry(
   nc: NodeChange,
@@ -801,7 +844,7 @@ function extractFigmaRawGeometry(
 ): Pick<SceneNode['source']['fig'], 'rawSize' | 'rawTransform' | 'rawNodeFields'> {
   const rawNodeFields: Record<string, unknown> = {}
   for (const key of FIGMA_RAW_NODE_FIELD_KEYS) {
-    const value = (nc as Record<string, unknown>)[key]
+    const value = nc[key]
     if (value !== undefined) rawNodeFields[key] = preserveFigmaPayloadBlobs(value, blobs)
   }
   return {
@@ -822,9 +865,7 @@ function extractFigmaSymbolMetadata(
   | 'derivedSymbolDataLayoutVersion'
   | 'uniformScaleFactor'
 > {
-  const sd = nc.symbolData as
-    | { symbolOverrides?: unknown[]; uniformScaleFactor?: number }
-    | undefined
+  const sd = nc.symbolData as RawSymbolData | undefined
   return {
     symbolOverrides: preserveFigmaPayloadBlobs(sd?.symbolOverrides ?? [], blobs) as unknown[],
     componentPropAssignments: preserveFigmaPayloadBlobs(

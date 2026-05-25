@@ -4,6 +4,7 @@ import { buildDerivedTextData as buildSharedDerivedTextData } from '#core/text/d
 import { normalizeFontFamily, weightToFigmaStyle, weightToStyle } from '#core/text/fonts'
 import { getGlyphOutlineMetricsSync } from '#core/text/opentype'
 import { encodeVectorNetworkBlob, buildStyleOverrideTable } from '#core/vector'
+
 export {
   buildFigKiwi,
   decompressFigKiwiData,
@@ -15,10 +16,14 @@ export { buildFontDigestMap } from './font/digests'
 
 import type { NodeChange, Paint, VariableConsumptionEntry } from '#core/kiwi/fig/codec'
 import type { SceneGraph, SceneNode } from '#core/scene-graph'
-import type { Color, GUID, Matrix } from '#core/types'
+import type { Color, GUID, JsonObject, Matrix } from '#core/types'
 
 import { guidToString, stringToGuid, VARIABLE_BINDING_FIELDS } from './convert'
-import { buildAssetRefToVarGuidMap, sceneNodeToKiwiWithContext, type KiwiNodeChange } from './export-node'
+import {
+  buildAssetRefToVarGuidMap,
+  sceneNodeToKiwiWithContext,
+  type KiwiNodeChange
+} from './export-node'
 import { applyFontFeaturesToKiwi } from './font/features'
 import {
   BOUND_VARIABLES_PLUGIN_KEY,
@@ -212,6 +217,16 @@ function fillToKiwiPaint(f: SceneNode['fills'][number]): Paint {
   if (f.imageHash) paint.image = { hash: hexToBytes(f.imageHash) }
   if (f.imageScaleMode) paint.imageScaleMode = f.imageScaleMode
   if (f.imageTransform) paint.transform = f.imageTransform
+  if (f.sourceNodeId) paint.sourceNodeId = stringToGuid(f.sourceNodeId)
+  if (f.spacing) paint.spacing = f.spacing
+  if (f.patternSpacing) paint.patternSpacing = f.patternSpacing
+  if (f.patternTileType) paint.patternTileType = f.patternTileType
+  if (f.verticalAlignment) paint.verticalAlignment = f.verticalAlignment
+  if (f.horizontalAlignment) paint.horizontalAlignment = f.horizontalAlignment
+  if (f.noiseType) paint.noiseType = f.noiseType
+  if (f.density !== undefined) paint.density = f.density
+  if (f.noiseSize) paint.noiseSize = f.noiseSize
+  if (f.customEffectId) paint.customEffectId = { guid: stringToGuid(f.customEffectId) }
   return paint
 }
 
@@ -230,10 +245,10 @@ function serializeCornerRadii(node: SceneNode, nc: KiwiNodeChange): void {
     // the raw Figma data. Figma may emit per-corner radii without setting the
     // independent flag (preserve rectangleCornerRadiiIndependent).
     const rawIndependent = node.source.id
-      ? ((node.source.fig.rawNodeFields as Record<string, unknown> | undefined)
-          ?.rectangleCornerRadiiIndependent)
+      ? (node.source.fig.rawNodeFields as JsonObject | undefined)?.rectangleCornerRadiiIndependent
       : undefined
-    nc.rectangleCornerRadiiIndependent = typeof rawIndependent === 'boolean' ? rawIndependent : node.independentCorners
+    nc.rectangleCornerRadiiIndependent =
+      typeof rawIndependent === 'boolean' ? rawIndependent : node.independentCorners
     nc.rectangleTopLeftCornerRadius = node.topLeftRadius
     nc.rectangleTopRightCornerRadius = node.topRightRadius
     nc.rectangleBottomLeftCornerRadius = node.bottomLeftRadius
@@ -338,11 +353,11 @@ function serializeLayoutProps(node: SceneNode, nc: KiwiNodeChange): void {
     nc.stackCounterAlignItems = normalizeStackCounterAlign(figLayout.stackCounterAlignItems)
     nc.stackPrimaryAlignItems = normalizeStackJustify(figLayout.stackPrimaryAlignItems)
     // For imported nodes, figLayout captures the original kiwi NC values.
-    // When stackPrimarySizing is absent (undefined), the kiwi schema default
-    // is FIXED (enum value 0). node.primaryAxisSizing may differ due to
-    // import-side override sync, so we prefer figLayout as source of truth.
-    nc.stackPrimarySizing = normalizeStackSizing(figLayout.stackPrimarySizing) ?? 'FIXED'
-    nc.stackCounterSizing = normalizeStackSizing(figLayout.stackCounterSizing) ?? 'FIXED'
+    // Preserve omitted sizing fields instead of materializing schema defaults.
+    const stackPrimarySizing = normalizeStackSizing(figLayout.stackPrimarySizing)
+    if (stackPrimarySizing) nc.stackPrimarySizing = stackPrimarySizing
+    const stackCounterSizing = normalizeStackSizing(figLayout.stackCounterSizing)
+    if (stackCounterSizing) nc.stackCounterSizing = stackCounterSizing
     nc.stackVerticalPadding = figLayout.stackVerticalPadding
     nc.stackHorizontalPadding = figLayout.stackHorizontalPadding
     nc.stackWrap = figLayout.stackWrap
