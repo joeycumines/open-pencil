@@ -157,7 +157,7 @@ Figma's design documentation groups features into these areas:
 | Text case | ✅ | ◐ | — | ✅ | ✅ | Model/export/JSX support; UI missing. |
 | Vertical text alignment | ✅ | ◐ | — | ✅ | ✅ | Modeled; UI/render parity needs more coverage. |
 | Justified text | ✅ | ◐ | — | ✅ | ✅ | Modeled; UI does not expose it. |
-| Font variations / OpenType features | ✅ | ✅ | — | ✅ | — | Imported `fontVariations` and common ligature toggles are applied to CanvasKit text styles and exported; broader OpenType controls are not exposed. |
+| Font variations / OpenType features | ✅ | ✅ | — | ✅ | — | Imported `fontVariations`, common ligature toggles, and raw `toggledOnOTFeatures` / `toggledOffOTFeatures` are applied to CanvasKit text styles and exported; UI controls are not exposed. |
 | Variables: collections/modes/aliases | ✅ | ◐ | ◐ | ✅ | ✅ | Color/number/string/boolean model exists; inspector coverage is still incomplete. |
 | Variables bound to fills/strokes | ✅ | ✅ | ✅ | ✅ | ✅ | Common color bindings render and edit. |
 | Variables bound to text/layout/visibility/effects | ◐ | ◐ | ◐ | ◐ | ✅ | Some bindings exist; not full Figma property coverage. |
@@ -176,13 +176,13 @@ Figma's design documentation groups features into these areas:
 
 ## Raw Kiwi metadata coverage
 
-OpenPencil deliberately preserves many Figma/Kiwi fields even when they are not rendered or editable. These live under `SceneNode.source.fig` and are applied late during `.fig` export.
+OpenPencil deliberately preserves many Figma/Kiwi fields even when they are not rendered or editable. These live under `SceneNode.source.fig` and are applied late during `.fig` export. A schema coverage test compares the current `fig.kiwi` `NodeChange` fields against modeled codec fields, raw-preserved fields, and intentionally schema-only metadata buckets so drift stays visible.
 
 | Field group | Import/export | Render | UI | Fidelity impact |
 |---|---:|---:|---:|---|
 | `source.fig.rawSize` | ✅ | Indirect | — | Preserves original Figma size for round-trip. Cleared when size is edited. |
 | `source.fig.rawTransform` | ✅ | Indirect | — | Preserves exact Figma transform. Cleared when transform is edited. |
-| `source.fig.rawNodeFields` | ✅ | Mixed | — | Late-applied to exported NodeChange for round-trip fidelity; exhaustive raw-field round-trip tests guard schema drift. |
+| `source.fig.rawNodeFields` | ✅ | Mixed | — | Late-applied to exported NodeChange for round-trip fidelity; raw-field and schema coverage tests guard preservation drift. |
 | `source.fig.layout` | ✅ | ✅ | ◐ | Preserves original Figma stack metadata while using normalized layout fields. |
 | `source.fig.symbolOverrides` | ✅ | Indirect | — | Important for instance override fidelity. |
 | `source.fig.componentPropAssignments` | ✅ | Indirect | ◐ | Used for component property fidelity; not raw-editable. |
@@ -195,9 +195,9 @@ OpenPencil deliberately preserves many Figma/Kiwi fields even when they are not 
 | Version/sort/publish/library metadata | ↩ | — | ◐ | Assets UI shows a subset; publish/update workflow is missing. |
 | Variable and parameter consumption maps | ✅ | ◐ | ◐ | Filtered/preserved for safe round-trip; normalized bindings cover common cases. |
 | Page fields: background, page type, guides | ↩ | ◐ | — | Background/page type/guides mostly round-trip. Guides are not rendered/editable. |
-| Text internals: `textData`, layout versions, font version, derived data | ✅ | ✅ | — | Important for text fidelity; most internals are not editable. Imported derived text data, leading trim, decoration style, and semantic font metadata are preserved for round-trip when safe. |
+| Text internals: `textData`, layout versions, font version, derived data | ✅ | ✅ | — | Important for text fidelity; most internals are not editable. Imported derived text data, leading trim, decoration style, underline decoration paint/offset/thickness, semantic font metadata, and raw OpenType feature toggles are preserved for round-trip when safe. |
 | `fontVariations` | ✅ | ✅ | — | Variable font axes are imported, rendered, and exported for text nodes and style runs. |
-| Raw paint/effect/vector/geometry payloads | ✅ | ✅ | ◐ | Converted fields render; raw payloads preserve Figma import/export details. |
+| Raw paint/effect/vector/geometry payloads | ✅ | ✅ | ◐ | Converted fields render; raw payloads preserve Figma import/export details, including mask, background paint, layout grid, export setting, and prototype interaction metadata where safe. |
 
 ## Highest-priority visual gaps
 
@@ -206,7 +206,7 @@ These are parsed or visible in Figma docs and most likely to cause visible diffe
 1. **Masks** — tune remaining exact Figma stack semantics beyond common alpha/vector/luminance and consecutive-mask paths.
 2. **Corner smoothing** — expand Figma fixture comparisons and tune remaining stroke/effect edge cases.
 3. **Pattern/noise/custom fills** — replace the current solid-color fallback with Figma-oracle rendering for schema-level paint objects and transforms beyond image tile fills.
-4. **Variable-font and rich text fixtures** — broaden real-file coverage for variable axes, derived text data, leading trim, decoration style, semantic font metadata, and additional OpenType feature metadata beyond common ligature toggles.
+4. **Variable-font and rich text fixtures** — broaden real-file coverage for variable axes, derived text data, leading trim, decoration style, semantic font metadata, and raw OpenType feature metadata.
 5. **Boolean operation editing** — improve inspector/tooling workflows for imported boolean-operation nodes.
 6. **Layout grids and guides** — render/edit page guides and Figma layout grids, or clearly keep them round-trip-only.
 7. **Full component property and slot workflows** — support authoring, not just preserving imported payloads.
@@ -220,7 +220,7 @@ These are parsed or visible in Figma docs and most likely to cause visible diffe
 | Source metadata invalidation | `packages/core/src/scene-graph/source-metadata.ts` |
 | Kiwi import mapping | `packages/core/src/kiwi/fig/node-change/convert.ts` |
 | Kiwi export mapping | `packages/core/src/kiwi/fig/node-change/export-node.ts`, `packages/core/src/kiwi/fig/node-change/serialize.ts` |
-| Kiwi schema | `packages/core/src/kiwi/fig/codec/schema/fig.kiwi` |
+| Kiwi schema | `packages/core/src/kiwi/fig/codec/schema/fig.kiwi`, `tests/engine/io/fig/import/schema-coverage.test.ts` |
 | Renderer dispatch | `packages/core/src/canvas/scene.ts` |
 | Fills / images / gradients | `packages/core/src/canvas/fills.ts` |
 | Strokes | `packages/core/src/canvas/strokes.ts` |
