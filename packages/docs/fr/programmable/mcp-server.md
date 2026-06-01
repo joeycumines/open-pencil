@@ -2,7 +2,7 @@
 
 OpenPencil includes an MCP (Model Context Protocol) server that lets AI coding tools — Claude Code, Cursor, Windsurf, etc. — read and modify `.fig` files headlessly.
 
-Two transports: **stdio** for MCP clients, **HTTP** for everything else.
+Three transports: **stdio** for MCP clients, **Unix domain socket** for local tools, **HTTP** for browser extensions and scripts.
 
 ## Install
 
@@ -65,7 +65,7 @@ Security defaults (HTTP transport):
 - `eval` tool is disabled
 - File operations are limited to `OPENPENCIL_MCP_ROOT` (defaults to current working directory)
 - CORS is disabled by default; set `OPENPENCIL_MCP_CORS_ORIGIN` to allow one origin
-- Optional auth token: `OPENPENCIL_MCP_AUTH_TOKEN` (client sends `Authorization: Bearer <token>` or `x-mcp-token`)
+- Auth token: auto-generated on startup (32-hex random). Override with `OPENPENCIL_MCP_AUTH_TOKEN` (client sends `Authorization: Bearer <token>` or `x-mcp-token`). Token stored in discovery file with `0o600` permissions — prevents access from other users, but not from other processes running as the same user.
 
 Server starts on port 7600 (override with `PORT` env var). Endpoints:
 

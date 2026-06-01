@@ -1,6 +1,6 @@
 {
   "name": "@open-pencil/mcp",
-  "version": "0.12.2",
+  "version": "0.13.2",
   "license": "MIT",
   "type": "module",
   "imports": {
@@ -21,14 +21,23 @@
       "types": "./dist/stdio.d.mts",
       "import": "./dist/stdio.mjs",
       "default": "./dist/stdio.mjs"
+    },
+    "./transport": {
+      "types": "./dist/transport.d.mts",
+      "import": "./dist/transport.mjs",
+      "default": "./dist/transport.mjs"
+    },
+    "./discovery": {
+      "types": "./dist/discovery.d.mts",
+      "import": "./dist/discovery.mjs",
+      "default": "./dist/discovery.mjs"
     }
   },
   "bin": {
-    "openpencil-mcp": "./bin/openpencil-mcp.js",
-    "openpencil-mcp-http": "./bin/openpencil-mcp-http.js"
+    "openpencil-mcp": "./dist/stdio.mjs",
+    "openpencil-mcp-http": "./dist/index.mjs"
   },
   "files": [
-    "bin",
     "dist"
   ],
   "scripts": {

@@ -2,7 +2,59 @@
 
 ## Unreleased
 
+### Added
+
+- MCP server uses Unix domain socket as the primary transport on macOS/Linux, named pipe on Windows, with optional TCP fallback for browser connections
+- Discovery file (`mcp.json`) for stdio bridge and CLI auto-connection, stored with `0o600` permissions alongside the socket
+- `OPENPENCIL_MCP_SOCKET` and `OPENPENCIL_MCP_TCP` environment variables for transport configuration
+- Add JSX authoring support for components, component sets, and instances.
+
+### Security
+
+- Auth token comparison uses `crypto.timingSafeEqual` to prevent timing attacks (applied to HTTP endpoints and WebSocket browser registration)
+- Auth token auto-generated on startup (32-hex random); no longer exposed via `/health` endpoint; stored in discovery file with `0o600` permissions
+- Restrictive file permissions: socket `0o600`, directory `0o700` (best-effort; subject to process umask); prevents access from other users but not from same-user processes
+- Path traversal protection hardened against symlink attacks via `fs.realpath` in `resolveSafePath`; symlink targets are validated against root before returning the user-provided normalized path
+
+### Changed
+
+- Stdio bridge connects via HTTP-over-socket instead of WebSocket
+- WebSocket upgrades happen on the same HTTP port (no separate WS_PORT)
+- Discovery file checks if the recorded PID is still running to detect stale entries (note: PID recycling may cause false positives on long-running systems)
+
+### Breaking
+
+- `startServer()` is now async, returns `Promise<ServerHandle { app, server, socketPath, httpPort, close }>` instead of `{ app, wss, httpPort, close }`
+- `WS_PORT` and `AUTOMATION_WS_PORT` removed; WebSocket uses the unified HTTP port
+
 ### Fixes
+
+- Harden MCP calls with bounded page-tree responses, oversized-result errors, JSON HTTP responses, and stale WebSocket cleanup.
+
+## 0.13.2 — 2026-05-30
+
+### Changed
+
+- Update the Homebrew install command to use the published `openpencil` cask.
+
+### Fixes
+
+- Improve Figma boolean imports by preserving XOR operations as editable exclude nodes and falling back to imported fill geometry when boolean path reconstruction cannot produce a path.
+- Preserve rotated Figma transform origins for imported vector nodes.
+- Render complex text fills through vector glyph outlines so imported Figma text can use the normal fill pipeline for gradients, images, patterns, and other non-solid paints.
+- Fix the published MCP package so global installs include the `openpencil-mcp` and `openpencil-mcp-http` launchers required by desktop app integrations.
+
+## 0.13.1 — 2026-05-29
+
+### Fixes
+
+- Fix the npm package contents for the CLI so Bun installs include the built `openpencil` binary and runtime bundle.
+
+## 0.13.0 — 2026-05-29
+
+### Fixes
+
+- Fix the published CLI package so Bun global installs run the built `openpencil` binary instead of raw TypeScript sources.
 
 - Greatly improve importing Figma `.fig` files with complex component systems: badges, avatars, icons, links, input fields, lists, date pickers, nested instances, component swaps, and variant properties now open much closer to their original Figma appearance.
 - Fix missing or white content in imported `.fig` files caused by unresolved Figma variable bindings, including image/avatar badges, icon colors, text colors, and variable-backed component overrides.
@@ -19,6 +71,7 @@
 - Improve imported tiled image fills by applying Figma image transforms when repeating image patterns.
 - Keep imported Figma boolean operations editable as boolean-operation nodes instead of flattening them to vectors.
 - Apply imported variable font axes from Figma `fontVariations` when rendering text.
+- Render more imported Figma visual metadata, including text decoration styles, leading trim, pattern fills, layout grids, page guides, and deterministic fallbacks for raw noise effects.
 
 ### Performance
 
