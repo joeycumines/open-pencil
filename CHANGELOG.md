@@ -29,6 +29,7 @@
 
 ### Fixes
 
+- Fix tooltips around inspector dropdowns/popovers without breaking floating menu anchoring.
 - Harden MCP calls with bounded page-tree responses, oversized-result errors, JSON HTTP responses, and stale WebSocket cleanup.
 
 ## 0.13.2 — 2026-05-30
