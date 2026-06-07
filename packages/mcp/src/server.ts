@@ -443,7 +443,6 @@ function buildHandle(
       })
 
       await teardownListeners(state)
-      await cleanupSocket(resolvedSocketPath)
       await cleanupDiscovery()
     })()
     return closePromise

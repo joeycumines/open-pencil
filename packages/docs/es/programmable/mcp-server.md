@@ -25,13 +25,15 @@ El servidor MCP se inicia automáticamente al abrir la app de escritorio (los bu
   Cliente MCP          Servidor MCP             App OpenPencil
   (Claude Code,       (openpencil-mcp-http)    (desktop / browser)
    Cursor, etc.)
-                      ┌──────────────┐
-  stdio ◄───────────► │  /rpc  (WS)  │ ◄──── WebSocket ────► Pestaña del navegador
-  (openpencil-mcp)    │              │
-                      │  /mcp  (SSE) │ ◄──── HTTP/SSE ─────► Herramientas externas
-                      │              │
-                      │  /health     │
-                      └──────┬───────┘
+                      ┌──────────────────┐
+  stdio ◄───────────► │  /rpc (HTTP)     │ ◄──── JSON-RPC ─────► Stdio bridge
+  (openpencil-mcp)    │                  │
+                      │  / (WS)          │ ◄──── WebSocket ────► Pestaña del navegador
+                      │                  │
+                      │  /mcp (SSE)      │ ◄──── HTTP/SSE ─────► Herramientas externas
+                      │                  │
+                      │  /health         │
+                      └──────┬───────────┘
                              │
                     socket o TCP (127.0.0.1)
 ```
@@ -235,7 +237,7 @@ rm ~/Library/Application\ Support/OpenPencil/mcp.sock
 
 ### Versión incompatible
 
-El endpoint `/health` retorna la `version` del servidor. La app lo verifica al conectarse y rechaza si las versiones no coinciden. Actualiza el paquete global:
+El endpoint `/health` retorna la `version` del servidor. La app lo verifica al conectarse y advierte si las versiones no coinciden. Actualiza el paquete global:
 
 ```sh
 npm install -g @open-pencil/mcp@latest

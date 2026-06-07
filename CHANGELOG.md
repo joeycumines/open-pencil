@@ -4,7 +4,7 @@
 
 ### Added
 
-- MCP server uses Unix domain socket as the primary transport on macOS/Linux, named pipe on Windows, with optional TCP fallback for browser connections
+- MCP server uses Unix domain socket as the primary transport on macOS/Linux, with optional TCP fallback for browser connections
 - Discovery file (`mcp.json`) for stdio bridge and CLI auto-connection, stored with `0o600` permissions alongside the socket
 - `OPENPENCIL_MCP_SOCKET` and `OPENPENCIL_MCP_TCP` environment variables for transport configuration
 - Add JSX authoring support for components, component sets, and instances.

@@ -135,7 +135,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     }
   }
 
-  function registerBrowser(ws: WebSocket, token: string) {
+  function registerBrowser(ws: WebSocket, token: string | null) {
     if (!isAuthorized(token, authToken)) {
       ws.close()
       return
@@ -170,8 +170,8 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
       return
     }
 
-    if (msg.type === 'register' && msg.token) {
-      registerBrowser(ws, msg.token)
+    if (msg.type === 'register' && msg.token !== undefined) {
+      registerBrowser(ws, msg.token as string | null)
       return
     }
     if (msg.type === 'request') {

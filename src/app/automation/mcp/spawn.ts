@@ -95,7 +95,9 @@ async function pollHealth(retries: number, delayMs: number): Promise<AutomationH
 export async function getAutomationAuthToken(): Promise<string | null> {
   if (runtimeAutomationAuthToken) return runtimeAutomationAuthToken
   const health = await readHealth()
-  if (!health?.discoveryPath) return null
+  if (!health) return null
+  assertCompatibleMcpVersion(health)
+  if (!health.discoveryPath) return null
   const token = await readDiscoveryToken(health.discoveryPath)
   runtimeAutomationAuthToken = token
   return runtimeAutomationAuthToken
@@ -165,9 +167,8 @@ export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null>
     runtimeAutomationAuthToken = discovered ?? authToken
     return {
       disconnect: () => {
-        // Await the kill so the child process has actually exited before
-        // the editor view is destroyed — otherwise the MCP server can outlive
-        // its parent and the user sees ghost processes.
+        // Send SIGTERM to the child process. Fire-and-forget to avoid blocking
+        // if the child is hung. Errors are logged for debugging.
         void child.kill().catch((e) => {
           console.error('[MCP] Failed to kill server:', e)
         })

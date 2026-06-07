@@ -234,7 +234,7 @@ rm ~/Library/Application\ Support/OpenPencil/mcp.sock
 
 ### Versione incompatibile
 
-L'endpoint `/health` restituisce la `version` del server. L'app verifica alla connessione e rifiuta se le versioni non corrispondono. Aggiorna il pacchetto globale:
+L'endpoint `/health` restituisce la `version` del server. L'app verifica alla connessione e avvisa se le versioni non corrispondono. Aggiorna il pacchetto globale:
 
 ```sh
 npm install -g @open-pencil/mcp@latest

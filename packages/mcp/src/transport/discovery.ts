@@ -82,7 +82,9 @@ export async function readDiscoveryFile(): Promise<DiscoveryInfo | null> {
     typeof info.version !== 'string' ||
     typeof info.httpPort !== 'number' ||
     typeof info.authRequired !== 'boolean' ||
-    typeof info.startedAt !== 'string'
+    typeof info.startedAt !== 'string' ||
+    typeof info.socketPath !== 'string' ||
+    (info.authToken !== null && typeof info.authToken !== 'string')
   )
     return null
 
