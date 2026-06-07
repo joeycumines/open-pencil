@@ -525,8 +525,20 @@ export class SceneGraph {
     const src = this.nodes.get(sourceId)
     if (!src) return null
 
-    const { id: _srcId, parentId: _srcParent, childIds: _srcChildren, ...rest } = src
-    const clone = this.createNode(src.type, parentId, { ...rest, ...overrides })
+    const {
+      id: _srcId,
+      parentId: _srcParent,
+      childIds: _srcChildren,
+      source: srcSource,
+      ...rest
+    } = src
+    const source = {
+      ...srcSource,
+      id: null as string | null,
+      orderKey: null as string | null,
+      fig: structuredClone(srcSource.fig)
+    }
+    const clone = this.createNode(src.type, parentId, { ...rest, source, ...overrides })
 
     for (const childId of src.childIds) {
       this.cloneTree(childId, clone.id)
