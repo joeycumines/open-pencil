@@ -4,25 +4,21 @@ import { dirname, join } from 'node:path'
 
 /**
  * Platform-specific paths for the MCP server's Unix domain socket
- * (or Windows named pipe) and the discovery JSON file.
+ * and the discovery JSON file.
  *
  * Socket directory layout:
  *   macOS:   ~/Library/Application Support/OpenPencil/
  *   Linux:   $XDG_RUNTIME_DIR/openpencil/  (fallback: ~/.openpencil/)
- *   Windows: %APPDATA%\OpenPencil\
  *
  * Discovery file: <socketDir>/mcp.json
- * Socket file:     <socketDir>/mcp.sock  (Unix) | \\.\pipe\openpencil-mcp (Windows)
+ * Socket file:     <socketDir>/mcp.sock
  */
 
 const DIR_NAME_UNIX = 'openpencil'
 const DIR_NAME_MACOS = 'OpenPencil'
-const DIR_NAME_WINDOWS = 'OpenPencil'
 const SOCKET_FILENAME = 'mcp.sock'
 const DISCOVERY_FILENAME = 'mcp.json'
-const NAMED_PIPE_ID = 'openpencil-mcp'
 
-const isWindows = platform() === 'win32'
 const isMacOS = platform() === 'darwin'
 
 /**
@@ -39,10 +35,6 @@ export async function getSocketDir(): Promise<string> {
 
   if (socketOverride) {
     dir = dirname(socketOverride)
-  } else if (isWindows) {
-    const localAppData = process.env.LOCALAPPDATA?.trim()
-    const appData = process.env.APPDATA?.trim()
-    dir = join(localAppData || appData || join(homedir(), 'AppData', 'Local'), DIR_NAME_WINDOWS)
   } else if (isMacOS) {
     dir = join(homedir(), 'Library', 'Application Support', DIR_NAME_MACOS)
   } else {
@@ -61,10 +53,9 @@ export async function getSocketDir(): Promise<string> {
 }
 
 /**
- * Returns the full path to the MCP Unix domain socket (or named pipe on Windows).
+ * Returns the full path to the MCP Unix domain socket.
  *
  * On macOS/Linux: <socketDir>/mcp.sock
- * On Windows:     \\.\pipe\openpencil-mcp
  *
  * When OPENPENCIL_MCP_SOCKET is set, its value is returned directly
  * (no directory resolution needed).
@@ -72,10 +63,6 @@ export async function getSocketDir(): Promise<string> {
 export async function getSocketPath(): Promise<string> {
   const socketOverride = process.env.OPENPENCIL_MCP_SOCKET?.trim()
   if (socketOverride) return socketOverride
-
-  if (isWindows) {
-    return `\\\\.\\pipe\\${NAMED_PIPE_ID}`
-  }
 
   const dir = await getSocketDir()
   return join(dir, SOCKET_FILENAME)
@@ -93,12 +80,6 @@ export async function getSocketPath(): Promise<string> {
 export async function getDiscoveryPath(): Promise<string> {
   const socketOverride = process.env.OPENPENCIL_MCP_SOCKET?.trim()
 
-  if (isWindows) {
-    // On Windows, named pipes don't have a filesystem path, so use the app data dir
-    const dir = await getSocketDir()
-    return join(dir, DISCOVERY_FILENAME)
-  }
-
   if (socketOverride) {
     return join(dirname(socketOverride), DISCOVERY_FILENAME)
   }
@@ -108,27 +89,17 @@ export async function getDiscoveryPath(): Promise<string> {
 }
 
 /**
- * Returns the default TCP port for the MCP HTTP server.
- * Can be overridden with the PORT environment variable.
- */
-export function getDefaultHttpPort(): number {
-  return Number.parseInt(process.env.PORT ?? '7600', 10)
-}
-
-/**
  * Returns true if the current platform supports Unix domain sockets.
- * (macOS and Linux; Windows uses named pipes instead.)
  */
 export function platformHasUnixSockets(): boolean {
-  return !isWindows
+  return true
 }
 
 /**
  * Returns the platform name for display purposes.
  */
-export function platformName(): 'macos' | 'linux' | 'windows' | 'other' {
+export function platformName(): 'macos' | 'linux' | 'other' {
   if (isMacOS) return 'macos'
-  if (isWindows) return 'windows'
   if (platform() === 'linux') return 'linux'
   return 'other'
 }

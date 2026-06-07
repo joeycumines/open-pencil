@@ -76,8 +76,15 @@ export async function readDiscoveryFile(): Promise<DiscoveryInfo | null> {
     return null
   }
 
-  // Validate required fields
-  if (!info.pid || !info.version) return null
+  // Validate structurally required fields
+  if (
+    typeof info.pid !== 'number' ||
+    typeof info.version !== 'string' ||
+    typeof info.httpPort !== 'number' ||
+    typeof info.authRequired !== 'boolean' ||
+    typeof info.startedAt !== 'string'
+  )
+    return null
 
   // Check if the recorded process is still alive
   if (!isProcessAlive(info.pid)) return null
@@ -100,8 +107,6 @@ export async function removeDiscoveryFile(): Promise<void> {
 /**
  * Removes a stale Unix domain socket file if it exists and is not live.
  * A socket is considered stale if no process is listening on it.
- *
- * On Windows, this is a no-op (named pipes are auto-cleaned by the OS).
  */
 export async function removeStaleSocket(socketPathOverride?: string): Promise<void> {
   if (!platformHasUnixSockets()) return

@@ -15,13 +15,13 @@ OpenPencil incluye un servidor MCP (Model Context Protocol) que permite a herram
 Antes de conectar cualquier cliente:
 
 1. La app de escritorio OpenPencil debe estar ejecutándose **con un documento abierto**. El servidor MCP es un puente, no un renderizador — no funciona sin la app.
-2. La versión del paquete MCP debe coincidir con la versión de la app. El endpoint `/health` lo verifica y rechaza conexiones con versiones diferentes.
+2. La versión del paquete MCP debe coincidir con la versión de la app. El endpoint `/health` reporta las versiones para que los clientes puedan detectar incompatibilidades.
 
 El servidor MCP se inicia automáticamente al abrir la app de escritorio (los builds Tauri ejecutan `openpencil-mcp-http`; en modo dev usa un plugin de Vite). También puedes ejecutarlo de forma independiente.
 
 ## Arquitectura
 
-```
+```text
   Cliente MCP          Servidor MCP             App OpenPencil
   (Claude Code,       (openpencil-mcp-http)    (desktop / browser)
    Cursor, etc.)
@@ -36,7 +36,7 @@ El servidor MCP se inicia automáticamente al abrir la app de escritorio (los bu
                     socket o TCP (127.0.0.1)
 ```
 
-El puente stdio (`openpencil-mcp`) se conecta al servidor HTTP vía socket Unix (macOS/Linux) o TCP (Windows). No habla MCP directamente con la app — envía las llamadas MCP por HTTP al servidor, que las retransmite a la app vía WebSocket.
+El puente stdio (`openpencil-mcp`) se conecta al servidor HTTP vía socket Unix. No habla MCP directamente con la app — envía las llamadas MCP por HTTP al servidor, que las retransmite a la app vía WebSocket.
 
 ## Cómo se conecta
 
@@ -48,7 +48,6 @@ El servidor escribe un **archivo de descubrimiento** al iniciarse. El puente std
 |------------|------|
 | macOS | `~/Library/Application Support/OpenPencil/mcp.json` |
 | Linux | `$XDG_RUNTIME_DIR/openpencil/mcp.json` (fallback: `~/.openpencil/mcp.json`) |
-| Windows | `%LOCALAPPDATA%\OpenPencil\mcp.json` |
 
 Sobreescribe con `OPENPENCIL_MCP_SOCKET` — su directorio padre se usa como directorio de descubrimiento.
 
@@ -73,9 +72,8 @@ El archivo se escribe con permisos `0o600` (solo lectura/escritura del propietar
 | Plataforma | Primario | Fallback |
 |------------|----------|----------|
 | macOS / Linux | Socket Unix | TCP en `127.0.0.1:7600` |
-| Windows | TCP en `127.0.0.1:7600` | — |
 
-En Unix, el puente stdio prefiere el socket. Si el servidor se inició solo con TCP, el puente usa `httpPort` del archivo de descubrimiento. En Windows, las named pipes no funcionan con `http.request({ socketPath })` de Node, así que siempre se usa TCP.
+En Unix, el puente stdio prefiere el socket. Si el servidor se inició solo con TCP, el puente usa `httpPort` del archivo de descubrimiento.
 
 ## Instalar
 
@@ -133,6 +131,7 @@ Añade a tu configuración MCP (ej. `.cursor/mcp.json`):
 Ejecutar desde el código fuente sin instalar:
 
 ::: code-group
+
 ```json [Bun]
 {
   "mcpServers": {
@@ -170,7 +169,7 @@ O desde el código fuente: `bun packages/mcp/src/index.ts` / `npx tsx packages/m
 | Endpoint | Método | Auth | Descripción |
 |----------|--------|------|-------------|
 | `/health` | GET | No | Estado del servidor, versión, comando de instalación, ruta de descubrimiento |
-| `/rpc` | WebSocket | Bearer token | Puente JSON-RPC a la app en ejecución |
+| `/rpc` | POST | Bearer token | Puente JSON-RPC a la app en ejecución |
 | `/mcp` | POST (SSE) | Bearer token | MCP Streamable HTTP. Sesiones vía header `mcp-session-id` |
 
 ### Autenticación
@@ -194,9 +193,9 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 | Variable | Default | Descripción |
 |----------|---------|-------------|
 | `PORT` | `7600` | Puerto TCP. `0` para desactivar TCP (solo socket). |
-| `OPENPENCIL_MCP_SOCKET` | Por plataforma | Sobreescribir ruta de socket/pipe |
+| `OPENPENCIL_MCP_SOCKET` | Por plataforma | Sobreescribir ruta de socket |
 | `OPENPENCIL_MCP_TCP` | Auto | `1` para forzar TCP habilitado |
-| `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generado | Token de auth. String vacío → auto-descubrir. `""` para desactivar. |
+| `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generado | Token de autenticación del servidor. Si no se establece, se genera automáticamente; si se establece como cadena vacía (`""`), la autenticación se deshabilita. |
 | `OPENPENCIL_MCP_ROOT` | `cwd()` | Directorio alcance para `open_file`, `save_file` y export con escritura |
 | `OPENPENCIL_MCP_EVAL` | Desactivado | `1` para habilitar `eval` (solo stdio, nunca HTTP) |
 | `OPENPENCIL_MCP_CORS_ORIGIN` | Desactivado | Origen CORS permitido para acceso desde navegador |

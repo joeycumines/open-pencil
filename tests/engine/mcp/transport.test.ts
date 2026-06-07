@@ -5,12 +5,9 @@ import {
   getSocketDir,
   getSocketPath,
   getDiscoveryPath,
-  getDefaultHttpPort,
   platformHasUnixSockets,
   platformName
 } from '@open-pencil/mcp/transport'
-
-const isUnix = process.platform !== 'win32'
 
 describe('transport/paths', () => {
   describe('getSocketDir', () => {
@@ -45,8 +42,6 @@ describe('transport/paths', () => {
           } else {
             expect(dir).toContain('.openpencil')
           }
-        } else if (process.platform === 'win32') {
-          expect(dir).toContain('OpenPencil')
         }
       } finally {
         if (originalSocket) process.env.OPENPENCIL_MCP_SOCKET = originalSocket
@@ -72,25 +67,12 @@ describe('transport/paths', () => {
   })
 
   describe('getSocketPath', () => {
-    it('returns a path ending in mcp.sock on Unix', async () => {
-      if (!isUnix) return
+    it('returns a path ending in mcp.sock', async () => {
       const originalSocket = process.env.OPENPENCIL_MCP_SOCKET
       delete process.env.OPENPENCIL_MCP_SOCKET
       try {
         const path = await getSocketPath()
         expect(path).toMatch(/mcp\.sock$/)
-      } finally {
-        if (originalSocket) process.env.OPENPENCIL_MCP_SOCKET = originalSocket
-      }
-    })
-
-    it('returns named pipe path on Windows', async () => {
-      if (isUnix) return
-      const originalSocket = process.env.OPENPENCIL_MCP_SOCKET
-      delete process.env.OPENPENCIL_MCP_SOCKET
-      try {
-        const path = await getSocketPath()
-        expect(path).toContain('pipe')
       } finally {
         if (originalSocket) process.env.OPENPENCIL_MCP_SOCKET = originalSocket
       }
@@ -121,38 +103,16 @@ describe('transport/paths', () => {
     })
   })
 
-  describe('getDefaultHttpPort', () => {
-    it('returns 7600 by default', () => {
-      const originalPort = process.env.PORT
-      delete process.env.PORT
-      try {
-        expect(getDefaultHttpPort()).toBe(7600)
-      } finally {
-        if (originalPort) process.env.PORT = originalPort
-      }
-    })
-
-    it('respects PORT env var', () => {
-      const originalPort = process.env.PORT
-      process.env.PORT = '9999'
-      try {
-        expect(getDefaultHttpPort()).toBe(9999)
-      } finally {
-        process.env.PORT = originalPort
-      }
-    })
-  })
-
   describe('platformHasUnixSockets', () => {
-    it('returns true on Unix, false on Windows', () => {
-      expect(platformHasUnixSockets()).toBe(isUnix)
+    it('returns true', () => {
+      expect(platformHasUnixSockets()).toBe(true)
     })
   })
 
   describe('platformName', () => {
     it('returns a valid platform name', () => {
       const name = platformName()
-      expect(['macos', 'linux', 'windows', 'other']).toContain(name)
+      expect(['macos', 'linux', 'other']).toContain(name)
     })
   })
 })
