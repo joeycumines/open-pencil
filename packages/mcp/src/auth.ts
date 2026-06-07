@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
+
 export function bearerToken(header: string | undefined | null): string | null {
   return header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
 }
@@ -8,8 +10,6 @@ export function mcpRequestToken(
 ): string | null {
   return bearerToken(authorization) ?? headerToken ?? null
 }
-
-import { createHash, timingSafeEqual } from 'node:crypto'
 
 export function isAuthorized(provided: string | null, expected: string | null): boolean {
   if (expected === null) return true
