@@ -9,7 +9,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
     `openpencil-mcp\n\n` +
       `Start the OpenPencil MCP stdio bridge.\n\n` +
-      `Connects to the MCP server via Unix domain socket.\n` +
+      `Connects to the MCP server via Unix domain socket (TCP fallback).\n` +
       `The MCP server is started by the OpenPencil\n` +
       `desktop app; this bridge only forwards stdio JSON-RPC to it.\n\n` +
       `Options:\n` +

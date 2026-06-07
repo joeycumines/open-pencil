@@ -89,14 +89,6 @@ export async function getDiscoveryPath(): Promise<string> {
 }
 
 /**
- * Returns the default TCP port for the MCP HTTP server.
- * Can be overridden with the PORT environment variable.
- */
-export function getDefaultHttpPort(): number {
-  return Number.parseInt(process.env.PORT ?? '7600', 10)
-}
-
-/**
  * Returns true if the current platform supports Unix domain sockets.
  */
 export function platformHasUnixSockets(): boolean {

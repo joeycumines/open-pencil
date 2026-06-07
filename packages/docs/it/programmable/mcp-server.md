@@ -131,6 +131,7 @@ Aggiungi alla tua configurazione MCP (es. `.cursor/mcp.json`):
 Esegui dal sorgente senza installare:
 
 ::: code-group
+
 ```json [Bun]
 {
   "mcpServers": {
@@ -168,7 +169,7 @@ O dal sorgente: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/inde
 | Endpoint | Metodo | Auth | Descrizione |
 |----------|--------|------|-------------|
 | `/health` | GET | No | Stato server, versione, comando installazione, percorso discovery |
-| `/rpc` | WebSocket | Bearer token | Bridge JSON-RPC all'app in esecuzione |
+| `/rpc` | POST | Bearer token | Bridge JSON-RPC all'app in esecuzione |
 | `/mcp` | POST (SSE) | Bearer token | MCP Streamable HTTP. Sessioni via header `mcp-session-id` |
 
 ### Autenticazione
