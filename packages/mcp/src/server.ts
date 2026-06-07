@@ -56,9 +56,9 @@ export { paramToZod } from './tool/schema'
 export interface ServerOptions {
   /** TCP port for the HTTP + WebSocket server. 0 to disable TCP. Defaults to 7600. */
   httpPort?: number
-  /** Path to the Unix domain socket or Windows named pipe. Auto-resolved if omitted. */
+  /** Path to the Unix domain socket. Auto-resolved if omitted. */
   socketPath?: string | null
-  /** Whether to also listen on TCP (in addition to the socket). Defaults to true on Windows, false on Unix. */
+  /** Whether to also listen on TCP (in addition to the socket). */
   withTcp?: boolean
   enableEval?: boolean
   mcpRoot?: string | null
@@ -119,7 +119,7 @@ function createHonoApp(options: {
       return c.json({ error: 'OpenPencil app is not connected. Is a document open?' }, 503)
     }
     // When authToken is null (operator explicitly disabled auth), skip token check —
-    // the socket/pipe or localhost TCP already restricts access to local processes.
+    // the Unix socket or localhost TCP already restricts access to local processes.
     if (authToken !== null) {
       const provided = bearerToken(c.req.header('authorization'))
       if (!isAuthorized(provided, authToken)) {
@@ -398,7 +398,7 @@ function buildServerContext(options: ServerOptions) {
   const authToken =
     options.authToken === undefined ? randomBytes(16).toString('hex') : options.authToken
   const corsOrigin = options.corsOrigin ?? null
-  const withTcp = options.withTcp ?? !platformHasUnixSockets()
+  const withTcp = options.withTcp ?? false
 
   const mcpSessions = createMcpSessionManager({
     serverVersion: MCP_VERSION,

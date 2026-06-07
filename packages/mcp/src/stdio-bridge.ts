@@ -25,8 +25,7 @@ type TransportMode = 'socket' | 'tcp'
 
 /**
  * Creates an RPC bridge that connects to the MCP server via HTTP
- * over a Unix domain socket, or TCP on Windows (named pipes are not
- * supported by Node.js http.request's socketPath option).
+ * over a Unix domain socket.
  *
  * This replaces the previous WebSocket-based bridge with a simpler
  * HTTP approach that natively supports Unix domain sockets.
@@ -63,15 +62,14 @@ export function createStdioRpcBridge({
     // Try reading the discovery file
     const info = await readDiscoveryFile()
 
-    // On Windows (or when no Unix socket is available), prefer TCP via httpPort
+    // When no Unix socket is available, prefer TCP via httpPort
     if (!platformHasUnixSockets()) {
       if (info?.httpPort) {
         resolvedHttpPort = info.httpPort
         transportMode = 'tcp'
         return
       }
-      // No discovery file — can't connect without a port
-      throw new Error('No MCP server discovery info found (Windows requires TCP)')
+      throw new Error('No MCP server discovery info found')
     }
 
     // Unix: prefer socket path from discovery file, fall back to default.

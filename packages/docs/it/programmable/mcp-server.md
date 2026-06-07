@@ -15,13 +15,13 @@ OpenPencil include un server MCP (Model Context Protocol) che permette agli stru
 Prima di collegare qualsiasi client:
 
 1. L'app desktop OpenPencil deve essere in esecuzione **con un documento aperto**. Il server MCP è un bridge, non un renderer — non funziona senza l'app.
-2. La versione del pacchetto MCP deve corrispondere alla versione dell'app. L'endpoint `/health` verifica questo e rifiuta connessioni con versioni diverse.
+2. La versione del pacchetto MCP deve corrispondere alla versione dell'app. L'endpoint `/health` riporta le versioni così che i client possano rilevare versioni non compatibili.
 
 Il server MCP si avvia automaticamente all'apertura dell'app desktop (i build Tauri lanciano `openpencil-mcp-http`; in dev usa un plugin Vite). Puoi anche eseguirlo autonomamente.
 
 ## Architettura
 
-```
+```text
   Client MCP          Server MCP              App OpenPencil
   (Claude Code,       (openpencil-mcp-http)   (desktop / browser)
    Cursor, etc.)
@@ -36,7 +36,7 @@ Il server MCP si avvia automaticamente all'apertura dell'app desktop (i build Ta
                     socket o TCP (127.0.0.1)
 ```
 
-Il bridge stdio (`openpencil-mcp`) si connette al server HTTP via socket Unix (macOS/Linux) o TCP (Windows). Non parla MCP direttamente con l'app — invia le chiamate MCP tramite HTTP al server, che le inoltra all'app via WebSocket.
+Il bridge stdio (`openpencil-mcp`) si connette al server HTTP via socket Unix. Non parla MCP direttamente con l'app — invia le chiamate MCP tramite HTTP al server, che le inoltra all'app via WebSocket.
 
 ## Come si collega
 
@@ -48,7 +48,6 @@ Il server scrive un **file di discovery** all'avvio. Il bridge stdio legge quest
 |-------------|----------|
 | macOS | `~/Library/Application Support/OpenPencil/mcp.json` |
 | Linux | `$XDG_RUNTIME_DIR/openpencil/mcp.json` (fallback: `~/.openpencil/mcp.json`) |
-| Windows | `%LOCALAPPDATA%\OpenPencil\mcp.json` |
 
 Sovrascrivi con `OPENPENCIL_MCP_SOCKET` — la sua directory padre diventa la directory di discovery.
 
@@ -73,9 +72,8 @@ Il file viene scritto con permessi `0o600` (solo lettura/scrittura del proprieta
 | Piattaforma | Primario | Fallback |
 |-------------|----------|----------|
 | macOS / Linux | Socket Unix | TCP su `127.0.0.1:7600` |
-| Windows | TCP su `127.0.0.1:7600` | — |
 
-Su Unix, il bridge stdio preferisce il socket. Se il server è stato avviato solo con TCP, il bridge usa `httpPort` dal file di discovery. Su Windows, le named pipe non funzionano con `http.request({ socketPath })` di Node, quindi si usa sempre TCP.
+Su Unix, il bridge stdio preferisce il socket. Se il server è stato avviato solo con TCP, il bridge usa `httpPort` dal file di discovery.
 
 ## Installare
 
@@ -194,9 +192,9 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 | Variabile | Default | Descrizione |
 |-----------|---------|-------------|
 | `PORT` | `7600` | Porta TCP. `0` per disabilitare TCP (solo socket). |
-| `OPENPENCIL_MCP_SOCKET` | Per piattaforma | Sovrascrivi percorso socket/pipe |
+| `OPENPENCIL_MCP_SOCKET` | Per piattaforma | Sovrascrivi percorso socket |
 | `OPENPENCIL_MCP_TCP` | Auto | `1` per forzare TCP abilitato |
-| `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generato | Token auth. Stringa vuota → auto-discovery. `""` per disabilitare. |
+| `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generato | Token auth del server. Se non impostato, viene generato automaticamente; se impostato a stringa vuota (`""`), l'autenticazione viene disabilitata. |
 | `OPENPENCIL_MCP_ROOT` | `cwd()` | Directory scope per `open_file`, `save_file` e export con scrittura |
 | `OPENPENCIL_MCP_EVAL` | Disabilitato | `1` per abilitare `eval` (solo stdio, mai HTTP) |
 | `OPENPENCIL_MCP_CORS_ORIGIN` | Disabilitato | Origine CORS consentita per accesso browser |

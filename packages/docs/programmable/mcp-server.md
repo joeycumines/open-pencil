@@ -15,13 +15,13 @@ OpenPencil ships an MCP server that lets AI coding tools — Claude Code, Cursor
 Before connecting any client, make sure:
 
 1. The OpenPencil desktop app is running **with a document open**. The MCP server is useless without an app connection — it's a bridge, not a renderer.
-2. The MCP package version matches the app version. The health endpoint enforces this and will refuse connections on mismatch.
+2. The MCP package version matches the app version. The `/health` endpoint reports versions so clients can detect mismatches.
 
 The MCP server starts automatically when you launch the desktop app (Tauri production builds spawn `openpencil-mcp-http`; dev mode uses a Vite plugin). You can also run it standalone.
 
 ## Architecture
 
-```
+```text
   MCP Client          MCP Server              OpenPencil App
   (Claude Code,       (openpencil-mcp-http)   (desktop / browser)
    Cursor, etc.)
@@ -36,7 +36,7 @@ The MCP server starts automatically when you launch the desktop app (Tauri produ
                     socket or TCP (127.0.0.1)
 ```
 
-The stdio bridge (`openpencil-mcp`) connects to the HTTP server over a Unix domain socket (macOS/Linux) or TCP (Windows). It does **not** speak MCP directly to the app — it tunnels MCP tool calls through HTTP to the server, which relays them to the running app via WebSocket.
+The stdio bridge (`openpencil-mcp`) connects to the HTTP server over a Unix domain socket. It does **not** speak MCP directly to the app — it tunnels MCP tool calls through HTTP to the server, which relays them to the running app via WebSocket.
 
 ## How It Connects
 
@@ -48,7 +48,6 @@ The server writes a **discovery file** on startup. The stdio bridge reads this f
 |----------|------|
 | macOS | `~/Library/Application Support/OpenPencil/mcp.json` |
 | Linux | `$XDG_RUNTIME_DIR/openpencil/mcp.json` (fallback: `~/.openpencil/mcp.json`) |
-| Windows | `%LOCALAPPDATA%\OpenPencil\mcp.json` |
 
 Override with `OPENPENCIL_MCP_SOCKET` — its dirname becomes the discovery directory.
 
@@ -73,9 +72,8 @@ The discovery file is written with `0o600` permissions (owner read/write only). 
 | Platform | Primary | Fallback |
 |----------|---------|----------|
 | macOS / Linux | Unix domain socket | TCP on `127.0.0.1:7600` |
-| Windows | TCP on `127.0.0.1:7600` | — |
 
-On Unix, the stdio bridge prefers the socket. If the server was started with TCP only (no socket), the bridge falls back to `httpPort` from the discovery file. On Windows, named pipes don't work with Node's `http.request({ socketPath })`, so TCP is always used.
+The stdio bridge prefers the socket. If the server was started with TCP only (no socket), the bridge falls back to `httpPort` from the discovery file.
 
 ## Install
 
@@ -194,9 +192,9 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `7600` | TCP port. Set `0` to disable TCP (socket-only). |
-| `OPENPENCIL_MCP_SOCKET` | Platform default | Override socket/pipe path |
+| `OPENPENCIL_MCP_SOCKET` | Platform default | Override socket path |
 | `OPENPENCIL_MCP_TCP` | Auto | Set `1` to force TCP enabled |
-| `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generated | Auth token. Empty string → auto-discover from discovery file. Set to `""` to disable. |
+| `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generated | Server auth token. If unset, one is generated at startup. If set to an empty string (`""`), auth is disabled. |
 | `OPENPENCIL_MCP_ROOT` | `cwd()` | Directory scope for `open_file`, `save_file`, and file-writing export tools |
 | `OPENPENCIL_MCP_EVAL` | Disabled | Set `1` to enable the `eval` tool (stdio only, never HTTP) |
 | `OPENPENCIL_MCP_CORS_ORIGIN` | Disabled | Allowed CORS origin for browser access |
@@ -236,7 +234,7 @@ rm ~/Library/Application\ Support/OpenPencil/mcp.sock
 
 ### Version mismatch
 
-The `/health` endpoint returns the server's `version`. The app checks this on connection and throws if versions don't match. Fix by updating the global package:
+The `/health` endpoint returns the server's `version`. The app checks this on connection and warns if versions don't match. Fix by updating the global package:
 
 ```sh
 npm install -g @open-pencil/mcp@latest

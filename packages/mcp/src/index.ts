@@ -1,20 +1,17 @@
 #!/usr/bin/env node
 import { startServer } from './server'
-import { platformHasUnixSockets } from './transport/paths'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
     `openpencil-mcp-http\n\n` +
       `Start the OpenPencil MCP server.\n\n` +
-      `The server listens on a Unix domain socket (macOS/Linux) or a Windows\n` +
-      `named pipe by default. Optional TCP is available for browser clients.\n` +
-      `The stdio bridge on Windows uses TCP, since Node's http.request does\n` +
-      `not support named pipes.\n\n` +
+      `The server listens on a Unix domain socket by default.\n` +
+      `Optional TCP is available for browser clients.\n\n` +
       `Options:\n` +
       `  --help, -h    Show this help message\n\n` +
       `Environment variables:\n` +
       `  PORT                         TCP port (default: 7600, set to 0 to disable TCP)\n` +
-      `  OPENPENCIL_MCP_SOCKET        Override socket/pipe path\n` +
+      `  OPENPENCIL_MCP_SOCKET        Override socket path\n` +
       `  OPENPENCIL_MCP_TCP           Set to 1 to enable TCP (TCP is on when PORT > 0, off when PORT=0)\n` +
       `  OPENPENCIL_MCP_AUTH_TOKEN    Bearer token for MCP and RPC auth\n` +
       `  OPENPENCIL_MCP_ROOT          Allowed directory for file-scoped tools\n` +
@@ -26,7 +23,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
 const port = Number.parseInt(process.env.PORT ?? '7600', 10)
 const enableTcp = process.env.OPENPENCIL_MCP_TCP?.trim() === '1'
-const withTcp = enableTcp || !platformHasUnixSockets() || port > 0
+const withTcp = enableTcp || port > 0
 
 const handle = await startServer({
   httpPort: withTcp ? port : 0,

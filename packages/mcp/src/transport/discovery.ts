@@ -100,8 +100,6 @@ export async function removeDiscoveryFile(): Promise<void> {
 /**
  * Removes a stale Unix domain socket file if it exists and is not live.
  * A socket is considered stale if no process is listening on it.
- *
- * On Windows, this is a no-op (named pipes are auto-cleaned by the OS).
  */
 export async function removeStaleSocket(socketPathOverride?: string): Promise<void> {
   if (!platformHasUnixSockets()) return
