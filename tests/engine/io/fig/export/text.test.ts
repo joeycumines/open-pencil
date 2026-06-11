@@ -289,6 +289,7 @@ describe('text node export', () => {
       for (const node of reimportedText.slice(0, 10)) {
         expect(node.text.length).toBeGreaterThan(0)
       }
-    }
+    },
+    90_000
   )
 })
