@@ -34,11 +34,17 @@ export function findWorkspaceRoot(startDir: string): string {
  * supporting both array and object-with-packages shapes.
  */
 export function resolveWorkspaceGlobs(rootPkg: Record<string, unknown>): string[] {
-  if (Array.isArray(rootPkg.workspaces)) {
+  if (
+    Array.isArray(rootPkg.workspaces) &&
+    rootPkg.workspaces.every((glob): glob is string => typeof glob === 'string')
+  ) {
     return rootPkg.workspaces
   }
-  const workspaces = rootPkg.workspaces as { packages?: string[] } | undefined
-  if (workspaces?.packages) {
+  const workspaces = rootPkg.workspaces as { packages?: unknown } | undefined
+  if (
+    Array.isArray(workspaces?.packages) &&
+    workspaces.packages.every((glob): glob is string => typeof glob === 'string')
+  ) {
     return workspaces.packages
   }
   console.warn(
@@ -79,6 +85,12 @@ export function discoverWorkspacePackages(
           ...Object.keys(pkgData.peerDependencies ?? {})
         ]
 
+        if (allPackagesMap.has(pkgData.name)) {
+          const existing = allPackagesMap.get(pkgData.name)
+          die(
+            `Duplicate package name '${pkgData.name}' found in both ${existing?.dir} and ${pkgDir}. Ensure workspace globs do not overlap.`
+          )
+        }
         allPackagesMap.set(pkgData.name, {
           name: pkgData.name,
           dir: pkgDir,
@@ -106,7 +118,9 @@ export function buildCommandToPackageMap(
   for (const [pkgName, pkg] of allPackagesMap.entries()) {
     for (const bin of pkg.bins) {
       if (commandToPackage.has(bin)) {
-        console.warn(`Warning: Command '${bin}' is defined in multiple packages. Using ${pkgName}`)
+        die(
+          `Command '${bin}' is defined by both '${commandToPackage.get(bin)}' and '${pkgName}'. Resolve the collision before installing.`
+        )
       }
       commandToPackage.set(bin, pkgName)
     }
@@ -135,7 +149,8 @@ export function computeTopologicalOrder(
   const bfsQueue = Array.from(entryPackages)
 
   while (bfsQueue.length > 0) {
-    const current = bfsQueue.shift() as string
+    const current = bfsQueue.shift()
+    if (current == null) break
     if (!requiredPackages.has(current)) {
       requiredPackages.add(current)
       const pkgData = allPackagesMap.get(current)

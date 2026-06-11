@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import {
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   readSync,
   rmSync,
   writeFileSync,
@@ -172,18 +174,47 @@ export function uninstallOldGlobals(topoOrder: string[]): void {
  */
 export function verifyCommandsAbsent(targetCommands: string[], bunBinDir: string): void {
   log('\nVerifying absence of target commands in PATH...')
-  const normalizedBunBinDir = resolve(bunBinDir)
+  const isWindows = process.platform === 'win32'
+  const comparePath = isWindows
+    ? (p: string) => resolve(p).toLowerCase()
+    : (p: string) => resolve(p)
+  const binDirKey = comparePath(bunBinDir)
 
   for (const bin of targetCommands) {
     let resolved = which(bin)
     if (resolved === null) continue
 
-    const normalizedResolved = resolve(resolved)
-    const isInBunBinDir =
-      normalizedResolved.startsWith(normalizedBunBinDir + sep) ||
-      normalizedResolved === normalizedBunBinDir
+    const resolvedKey = comparePath(resolved)
+    const isInBunBinDir = resolvedKey.startsWith(binDirKey + sep) || resolvedKey === binDirKey
 
     if (isInBunBinDir) {
+      // Verify ownership: only remove if the binary appears to be a Bun-generated
+      // wrapper (symlink into Bun's global install, or a small JS shim referencing
+      // the Bun global install path). This prevents accidentally deleting a
+      // wrapper belonging to another globally installed Bun package.
+      let ownedByBunGlobal = false
+      try {
+        const stat = lstatSync(resolved)
+        if (stat.isSymbolicLink()) {
+          const target = readlinkSync(resolved)
+          ownedByBunGlobal = target.includes('install/global') || target.includes('node_modules')
+        } else {
+          // Regular file — Bun wrappers are typically small JS shims.
+          // Check if the content references the Bun global install path.
+          const content = readFileSync(resolved, 'utf-8')
+          ownedByBunGlobal = content.includes('install/global') || content.includes('@bun')
+        }
+      } catch {
+        // Inspection failed — do NOT assume ownership. Require manual removal.
+        ownedByBunGlobal = false
+      }
+
+      if (!ownedByBunGlobal) {
+        die(
+          `Binary '${bin}' at ${resolved} appears to belong to another package. Remove it manually and re-run.`
+        )
+      }
+
       const shouldRemove = confirmAction(
         `Binary '${bin}' is still present at ${resolved} after uninstall.\n  Remove it?`
       )
@@ -234,16 +265,18 @@ export function installPackages(topoOrder: string[], packagesMap: Map<string, Pa
  */
 export function verifyCommandsPresent(targetCommands: string[], bunBinDir: string): void {
   log('\nVerifying presence of target commands in PATH...')
-  const normalizedBunBinDir = resolve(bunBinDir)
+  const isWindows = process.platform === 'win32'
+  const comparePath = isWindows
+    ? (p: string) => resolve(p).toLowerCase()
+    : (p: string) => resolve(p)
+  const binDirKey = comparePath(bunBinDir)
   for (const bin of targetCommands) {
     const resolved = which(bin)
     if (resolved === null) {
       die(`Binary '${bin}' was not found in PATH after installation!`)
     }
-    const normalizedResolved = resolve(resolved)
-    const isInBunBinDir =
-      normalizedResolved.startsWith(normalizedBunBinDir + sep) ||
-      normalizedResolved === normalizedBunBinDir
+    const resolvedKey = comparePath(resolved)
+    const isInBunBinDir = resolvedKey.startsWith(binDirKey + sep) || resolvedKey === binDirKey
     if (!isInBunBinDir) {
       die(
         `Binary '${bin}' resolved to ${resolved}, which is outside Bun's global bin dir (${bunBinDir}). The Bun-installed version may be shadowed by another provider.`

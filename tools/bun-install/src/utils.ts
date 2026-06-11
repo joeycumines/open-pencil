@@ -92,9 +92,12 @@ export function getBunGlobalBinDir(): string {
 export function ensureBunBinInPath(): string {
   const bunBin = getBunGlobalBinDir()
   const normalizedBunBin = resolve(bunBin)
+  const isWindows = process.platform === 'win32'
+  const compareKey = isWindows ? (p: string) => resolve(p).toLowerCase() : (p: string) => resolve(p)
+  const normalizedKey = compareKey(bunBin)
   const rest = (process.env.PATH ?? '')
     .split(delimiter)
-    .filter((entry) => entry.length > 0 && resolve(entry) !== normalizedBunBin)
+    .filter((entry) => entry.length > 0 && compareKey(entry) !== normalizedKey)
   process.env.PATH = [normalizedBunBin, ...rest].join(delimiter)
   return normalizedBunBin
 }
@@ -149,7 +152,8 @@ export function topologicalSort(packages: Map<string, PackageData>): string[] {
 
   const result: string[] = []
   while (queue.length > 0) {
-    const current = queue.shift() as string
+    const current = queue.shift()
+    if (current == null) break
     result.push(current)
 
     const neighbors = adjList.get(current)
