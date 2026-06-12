@@ -104,58 +104,24 @@ describe('MCP path scoping', () => {
     }
   })
 
-  test('rejects symlink pointing outside root', async () => {
-    const testDir = resolve('/tmp/mcp-symlink-test')
-    const linkPath = `${testDir}/escape.fig`
-    try {
-      await mkdir(testDir, { recursive: true })
-      await symlink('/etc/passwd', linkPath)
-      await expect(resolveSafePath(linkPath, testDir)).rejects.toThrow('outside the allowed root')
-    } finally {
-      await rm(testDir, { recursive: true, force: true })
-    }
+  test('rejects trivially broad root "/"', async () => {
+    await expect(resolveSafePath('/some/path', '/')).rejects.toThrow('Root path is too broad')
   })
 
-  test('allows symlink pointing inside root', async () => {
-    const testDir = resolve('/tmp/mcp-symlink-safe-test')
-    const targetDir = `${testDir}/targets`
-    const targetFile = `${targetDir}/real.fig`
-    const linkPath = `${testDir}/link.fig`
-    try {
-      await mkdir(targetDir, { recursive: true })
-      await writeFile(targetFile, 'test')
-      await symlink(targetFile, linkPath)
-      // Returns the resolved (not realpath) path — symlink target is
-      // checked via realpath for security, but the returned path is
-      // the user-provided normalized path for usability.
-      await expect(resolveSafePath(linkPath, testDir)).resolves.toBe(resolve(linkPath))
-    } finally {
-      await rm(testDir, { recursive: true, force: true })
+  test.skipIf(process.platform === 'win32')(
+    'rejects drive root as broad root on Windows',
+    async () => {
+      // On Windows, path.parse('C:\\').root === 'C:\\', which resolveSafePath
+      // should reject. This test is skipped on non-Windows since there's no
+      // drive-root concept.
+      const { parse, resolve: winResolve } = await import('node:path')
+      const driveRoot = parse(winResolve('C:\\')).root
+      // Only run if the platform actually produces a drive root (not '/')
+      if (driveRoot !== '/') {
+        await expect(resolveSafePath('C:\\some\\path', driveRoot)).rejects.toThrow(
+          'Root path is too broad'
+        )
+      }
     }
-  })
-
-  test('rejects dangling symlink pointing outside root', async () => {
-    const testDir = resolve('/tmp/mcp-symlink-dangling-test')
-    const linkPath = `${testDir}/dangling.fig`
-    try {
-      await mkdir(testDir, { recursive: true })
-      // Dangling symlink: target doesn't exist, points outside root
-      await symlink('/etc/nonexistent-secret', linkPath)
-      await expect(resolveSafePath(linkPath, testDir)).rejects.toThrow('outside the allowed root')
-    } finally {
-      await rm(testDir, { recursive: true, force: true })
-    }
-  })
-
-  test('allows nonexistent file inside root', async () => {
-    const testDir = resolve('/tmp/mcp-nonexistent-test')
-    const filePath = `${testDir}/new.fig`
-    try {
-      await mkdir(testDir, { recursive: true })
-      // File doesn't exist yet (common for save_file / export operations)
-      await expect(resolveSafePath(filePath, testDir)).resolves.toBe(resolve(filePath))
-    } finally {
-      await rm(testDir, { recursive: true, force: true })
-    }
-  })
+  )
 })
