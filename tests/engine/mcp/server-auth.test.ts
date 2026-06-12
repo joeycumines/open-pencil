@@ -201,7 +201,11 @@ describe('MCP auth boundary', () => {
     try {
       const r = await fetch(`http://127.0.0.1:${httpPort}/mcp`, {
         method: 'POST',
-        headers: { Authorization: 'Bearer wrong-token' }
+        headers: {
+          Authorization: 'Bearer wrong-token',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mcp.ping', params: {} })
       })
       expect(r.status).toBe(401)
     } finally {
@@ -226,7 +230,11 @@ describe('MCP auth boundary', () => {
     }
 
     try {
-      const r = await fetch(`http://127.0.0.1:${httpPort}/mcp`, { method: 'POST' })
+      const r = await fetch(`http://127.0.0.1:${httpPort}/mcp`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mcp.ping', params: {} })
+      })
       expect(r.status).toBe(401)
     } finally {
       await handle.close()
@@ -255,8 +263,24 @@ describe('MCP auth boundary', () => {
       }
       expect(healthResp.authRequired).toBe(false)
 
-      const mcpResp = await fetch(`http://127.0.0.1:${httpPort}/mcp`, { method: 'POST' })
-      expect(mcpResp.status).not.toBe(401)
+      const mcpResp = await fetch(`http://127.0.0.1:${httpPort}/mcp`, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'auth-disabled-test', version: '0.0.0' }
+          }
+        })
+      })
+      expect(mcpResp.status).toBe(200)
     } finally {
       await handle.close()
     }
@@ -354,5 +378,43 @@ describe('Discovery PID liveness', () => {
     // primary signal that the server is no longer reachable.
     const discoveryPath = await getDiscoveryPath()
     expect(await Bun.file(discoveryPath).exists()).toBe(false)
+  })
+
+  test('readDiscoveryFile returns null for a discovery file with a dead PID', async () => {
+    const { getDiscoveryPath } = await import('@open-pencil/mcp/transport')
+    const { readDiscoveryFile } = await import('#mcp/transport/discovery')
+    const discoveryPath = await getDiscoveryPath()
+
+    // Write a discovery file with a PID that is guaranteed not to be alive.
+    // PID 1 (init/launchd) is alive on most systems, so use a very high PID
+    // that is extremely unlikely to be in use.
+    const deadPid = 4_000_000
+    const discoveryDir = discoveryPath.slice(0, discoveryPath.lastIndexOf('/'))
+    await mkdir(discoveryDir, { recursive: true })
+    await Bun.write(
+      discoveryPath,
+      JSON.stringify({
+        pid: deadPid,
+        socketPath: '/tmp/nonexistent-mcp.sock',
+        httpPort: 9999,
+        authRequired: true,
+        authToken: 'dead-pid-test-token',
+        version: '0.1.0-test',
+        startedAt: new Date().toISOString()
+      })
+    )
+
+    try {
+      const result = await readDiscoveryFile()
+      expect(result).toBeNull()
+    } finally {
+      // Clean up the seeded discovery file
+      try {
+        const { unlink } = await import('node:fs/promises')
+        await unlink(discoveryPath)
+      } catch {
+        void 0 // best-effort cleanup
+      }
+    }
   })
 })

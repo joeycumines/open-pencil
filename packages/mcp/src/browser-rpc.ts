@@ -20,7 +20,7 @@ type BrowserRpcBridgeOptions = {
 type BrowserMessage = {
   type: string
   id?: string
-  token?: string
+  token?: unknown
   result?: unknown
   error?: string
   ok?: boolean
@@ -188,13 +188,15 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     const previousBrowserWs = browserWs
     browserWs = ws
     browserRegistered = true
-    if (previousBrowserWs && previousBrowserWs !== ws && previousBrowserWs.readyState === ws.OPEN) {
+    if (previousBrowserWs && previousBrowserWs !== ws) {
       // Reject in-flight requests to the old browser. Without this, pending
       // requests sit in the pending map until RPC_TIMEOUT (20s), because
       // handleClose for the old socket returns early (browserWs is already
       // set to the new socket, so browserWs !== previousBrowserWs).
       rejectAllPending('Browser reconnected')
-      previousBrowserWs.close()
+      if (previousBrowserWs.readyState === ws.OPEN) {
+        previousBrowserWs.close()
+      }
     }
     notifyConnectionWaiters()
     onConnectionChange()
@@ -223,8 +225,12 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
       return
     }
 
-    if (msg.type === 'register' && msg.token !== undefined) {
-      registerBrowser(ws, msg.token as string | null)
+    if (msg.type === 'register') {
+      if (msg.token === null || typeof msg.token === 'string') {
+        registerBrowser(ws, msg.token)
+      } else if (msg.token !== undefined) {
+        ws.close()
+      }
       return
     }
     if (msg.type === 'request') {
@@ -250,6 +256,11 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
 
   function handleConnection(ws: WebSocket) {
     clients.add(ws)
+    // WebSocket connections are already gated by transport security (Unix
+    // socket with 0o600 permissions or TCP localhost + auth), so all
+    // connected WebSocket clients are considered authenticated for sending
+    // requests. Browser registration (registerBrowser) still requires a
+    // valid token — this only gates request forwarding.
     sendRegisterToken(ws)
   }
 

@@ -194,6 +194,7 @@ describe('MCP server', () => {
 describe('MCP server with mcpRoot', () => {
   test('registers open_file and new_document tools when mcpRoot is set', async () => {
     if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
+    await mkdir(TEST_MCP_ROOT, { recursive: true })
     const handle = await startServer({
       httpPort: 0,
       withTcp: true,
@@ -219,18 +220,21 @@ describe('MCP server with mcpRoot', () => {
     )
     await client.connect(transport)
 
-    const { tools } = await client.listTools()
-    const names = tools.map((t) => t.name)
-    expect(names).toContain('open_file')
-    expect(names).toContain('new_document')
-
-    await client.close()
-    browser.close()
-    await handle.close()
+    try {
+      const { tools } = await client.listTools()
+      const names = tools.map((t) => t.name)
+      expect(names).toContain('open_file')
+      expect(names).toContain('new_document')
+    } finally {
+      await client.close()
+      browser.close()
+      await handle.close()
+    }
   })
 
   test('save_file accepts an explicit path inside mcpRoot', async () => {
     if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
+    await mkdir(TEST_MCP_ROOT, { recursive: true })
     const handle = await startServer({
       httpPort: 0,
       withTcp: true,
@@ -256,23 +260,26 @@ describe('MCP server with mcpRoot', () => {
     )
     await client.connect(transport)
 
-    const savePath = join(TEST_MCP_ROOT, 'unicode', 'пример.fig')
-    const result = await client.callTool({
-      name: 'save_file',
-      arguments: { path: savePath }
-    })
+    try {
+      const savePath = join(TEST_MCP_ROOT, 'unicode', 'пример.fig')
+      const result = await client.callTool({
+        name: 'save_file',
+        arguments: { path: savePath }
+      })
 
-    expect(result.isError).not.toBe(true)
-    const request = browser.requests.find((item) => item.command === 'save_file')
-    expect(request?.args).toEqual({ path: savePath })
-
-    await client.close()
-    browser.close()
-    await handle.close()
+      expect(result.isError).not.toBe(true)
+      const request = browser.requests.find((item) => item.command === 'save_file')
+      expect(request?.args).toEqual({ path: savePath })
+    } finally {
+      await client.close()
+      browser.close()
+      await handle.close()
+    }
   })
 
   test('save_file rejects paths outside mcpRoot', async () => {
     if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
+    await mkdir(TEST_MCP_ROOT, { recursive: true })
     const handle = await startServer({
       httpPort: 0,
       withTcp: true,
@@ -298,17 +305,19 @@ describe('MCP server with mcpRoot', () => {
     )
     await client.connect(transport)
 
-    const result = await client.callTool({
-      name: 'save_file',
-      arguments: { path: join(join(TEST_MCP_ROOT, '..'), 'outside.fig') }
-    })
+    try {
+      const result = await client.callTool({
+        name: 'save_file',
+        arguments: { path: join(join(TEST_MCP_ROOT, '..'), 'outside.fig') }
+      })
 
-    expect(result.isError).toBe(true)
-    expect(browser.requests.some((item) => item.command === 'save_file')).toBe(false)
-
-    await client.close()
-    browser.close()
-    await handle.close()
+      expect(result.isError).toBe(true)
+      expect(browser.requests.some((item) => item.command === 'save_file')).toBe(false)
+    } finally {
+      await client.close()
+      browser.close()
+      await handle.close()
+    }
   })
 
   test('does not register open_file when mcpRoot is null', async () => {
@@ -338,14 +347,16 @@ describe('MCP server with mcpRoot', () => {
     )
     await client.connect(transport)
 
-    const { tools } = await client.listTools()
-    const names = tools.map((t) => t.name)
-    expect(names).not.toContain('open_file')
-    expect(names).not.toContain('new_document')
-
-    await client.close()
-    browser.close()
-    await handle.close()
+    try {
+      const { tools } = await client.listTools()
+      const names = tools.map((t) => t.name)
+      expect(names).not.toContain('open_file')
+      expect(names).not.toContain('new_document')
+    } finally {
+      await client.close()
+      browser.close()
+      await handle.close()
+    }
   })
 })
 
@@ -377,7 +388,7 @@ describe('MCP server lifecycle', () => {
     if (!isUnix) return
     await mkdir(SOCKET_DIR, { recursive: true })
     const socketPath = testSocketPath()
-    if (!socketPath) return
+    expect(socketPath).toBeTruthy()
 
     const handle = await startServer({
       httpPort: 0,
@@ -488,6 +499,49 @@ describe('MCP server concurrent startServer', () => {
       expect(['token-a', 'token-b']).toContain(info.authToken)
     } finally {
       await a.close()
+      await b.close()
+    }
+  }, 15000)
+
+  test("closing one server does not delete another server's discovery file", async () => {
+    if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
+    const { getDiscoveryPath } = await import('@open-pencil/mcp/transport')
+
+    const a = await startServer({
+      httpPort: 0,
+      withTcp: true,
+      socketPath: testSocketPath(),
+      authToken: 'token-a',
+      enableEval: false,
+      mcpRoot: null
+    })
+    const b = await startServer({
+      httpPort: 0,
+      withTcp: true,
+      socketPath: testSocketPath(),
+      authToken: 'token-b',
+      enableEval: false,
+      mcpRoot: null
+    })
+
+    try {
+      // Close server a — its discovery cleanup should NOT remove the file
+      // because server b still owns it (different auth token).
+      await a.close()
+
+      // Server b should still be healthy and reachable.
+      const bHealth = (await (await fetch(`http://127.0.0.1:${b.httpPort}/health`)).json()) as {
+        status: string
+      }
+      expect(bHealth.status).toBe('no_app')
+
+      // Discovery file should still exist (owned by server b now).
+      const discoveryPath = await getDiscoveryPath()
+      const file = Bun.file(discoveryPath)
+      expect(await file.exists()).toBe(true)
+      const info = (await file.json()) as { authToken: string }
+      expect(info.authToken).toBe('token-b')
+    } finally {
       await b.close()
     }
   }, 15000)

@@ -58,7 +58,7 @@ export interface ServerOptions {
   httpPort?: number
   /** Path to the Unix domain socket. Auto-resolved if omitted. */
   socketPath?: string | null
-  /** Whether to also listen on TCP (in addition to the socket). */
+  /** Whether to also listen on TCP (in addition to the socket). API default is `false`; the CLI passes `true` by default (derived from PORT, default 7600). */
   withTcp?: boolean
   enableEval?: boolean
   mcpRoot?: string | null
@@ -257,8 +257,11 @@ async function startSocketListener(
 
   const ss = server
   await new Promise<void>((resolve, reject) => {
-    ss.listen(resolvedPath, () => resolve())
     ss.on('error', reject)
+    ss.listen(resolvedPath, () => {
+      ss.off('error', reject)
+      resolve()
+    })
   })
 
   // NOTE: There is a brief TOCTOU window between listen() and chmod() below
@@ -291,12 +294,13 @@ async function startTcpListener(
 
   const ts = server
   const actualPort = await new Promise<number>((resolve, reject) => {
+    ts.on('error', reject)
     ts.listen(httpPort, host, () => {
+      ts.off('error', reject)
       const addr = ts.address()
       const port = typeof addr === 'object' && addr ? addr.port : httpPort
       resolve(port)
     })
-    ts.on('error', reject)
   })
 
   return { server, port: actualPort }
@@ -336,7 +340,21 @@ async function cleanupSocket(socketPath: string | null): Promise<void> {
   }
 }
 
-async function cleanupDiscovery(): Promise<void> {
+async function cleanupDiscovery(ownAuthToken: string | null): Promise<void> {
+  // Only remove the discovery file if it was written by this server instance.
+  // Without this guard, closing one of two concurrent servers can delete the
+  // other's discovery file, breaking auto-discovery for the surviving server.
+  const discoveryPath = await getDiscoveryPath()
+  try {
+    const raw = await Bun.file(discoveryPath).text()
+    const info = JSON.parse(raw) as { authToken: string | null }
+    // If the file's auth token doesn't match ours, another server owns it.
+    if (info.authToken !== ownAuthToken) return
+  } catch {
+    // File doesn't exist or can't be parsed — fall through to removeDiscoveryFile
+    // which handles ENOENT gracefully.
+    void 0
+  }
   await removeDiscoveryFile().catch((e) => {
     process.stderr.write(`  Discovery: cleanup warning (${e instanceof Error ? e.message : e})\n`)
   })
@@ -425,7 +443,8 @@ function buildHandle(
   mcpSessions: ReturnType<typeof createMcpSessionManager>,
   state: ListenerState,
   resolvedSocketPath: string | null,
-  actualHttpPort: number
+  actualHttpPort: number,
+  authToken: string | null
 ): ServerHandle {
   // Promise-based lock ensures idempotency even under concurrent calls:
   // the first call creates the teardown promise; subsequent calls return
@@ -444,7 +463,7 @@ function buildHandle(
       })
 
       await teardownListeners(state)
-      await cleanupDiscovery()
+      await cleanupDiscovery(authToken)
     })()
     return closePromise
   }
@@ -472,6 +491,13 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
   const resolvedSocketPath = socketResult?.resolvedPath ?? null
   const actualHttpPort = state.tcpResult?.port ?? 0
 
+  if (!resolvedSocketPath && !actualHttpPort) {
+    throw new Error(
+      'MCP server has no active listeners (both socket and TCP are unavailable). ' +
+        'Ensure Unix domain sockets are supported on this platform or enable TCP with withTcp: true.'
+    )
+  }
+
   await tryWriteDiscovery(resolvedSocketPath, actualHttpPort, ctx.authToken, state)
 
   return buildHandle(
@@ -481,6 +507,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     ctx.mcpSessions,
     state,
     resolvedSocketPath,
-    actualHttpPort
+    actualHttpPort,
+    ctx.authToken
   )
 }

@@ -52,6 +52,7 @@ export function createStdioRpcBridge({
   let resolvedAuthToken: string | null = authToken ?? null
 
   async function resolveAuthToken(): Promise<string | null> {
+    if (hasExplicitAuth) return resolvedAuthToken
     if (resolvedAuthToken) return resolvedAuthToken
     const info = await readDiscoveryFile()
     if (info?.authToken) {
@@ -87,7 +88,11 @@ export function createStdioRpcBridge({
 
     // Unix: prefer socket path from discovery file, fall back to default.
     // If no socket is available (TCP-only server), use TCP via httpPort.
-    if (info?.socketPath) {
+    // Caller-provided socket paths (OPENPENCIL_MCP_SOCKET or the socketPath
+    // option) take precedence and are never overwritten by discovery.
+    if (resolvedSocketPath) {
+      // Caller already provided a socket path — keep it
+    } else if (info?.socketPath) {
       resolvedSocketPath = info.socketPath
     } else if (info?.httpPort) {
       // Server is TCP-only (no socket listener) — use TCP
@@ -306,7 +311,9 @@ export function createStdioRpcBridge({
               // Explicit token was rejected (config error), or auto-retry
               // already failed — surface the error immediately.
               clearTimeout(timer)
-              resolvedAuthToken = null
+              if (!hasExplicitAuth) {
+                resolvedAuthToken = null
+              }
               transportMode = null
               ready = false
               settled = true

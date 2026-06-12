@@ -1,6 +1,6 @@
 import { describe, expect, it, test, beforeAll, afterAll } from 'bun:test'
 import { stat, mkdir, rm } from 'node:fs/promises'
-import { request as httpRequest } from 'node:http'
+import { request as httpRequest, type RequestOptions } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -133,7 +133,8 @@ describe('MCP server unified transport', () => {
     describe('Unix domain socket endpoint', () => {
       it('responds to /health via socket', async () => {
         const socketPath = handle.socketPath
-        if (!socketPath) return
+        expect(socketPath).toBeTruthy()
+        if (!socketPath) throw new Error('socketPath is null')
         const result = await socketRequest(socketPath, 'GET', '/health')
         expect(result.status).toBe(200)
         const health = result.data as HealthResponse
@@ -142,7 +143,8 @@ describe('MCP server unified transport', () => {
 
       it('socket file has restrictive permissions', async () => {
         const socketPath = handle.socketPath
-        if (!socketPath) return
+        expect(socketPath).toBeTruthy()
+        if (!socketPath) throw new Error('socketPath is null')
         const info = await stat(socketPath)
         const mode = info.mode & 0o777
         expect(mode).toBe(0o600)
@@ -353,10 +355,16 @@ describe('MCP WebSocket stdio bridge routing', () => {
     let browser: MockBrowser | null = null
 
     try {
+      // Read the initial register prompt sent on connection (before browser)
+      const initialRegister = await readWsJson<{ type: string; token?: string | null }>(clientWs)
+      expect(initialRegister.type).toBe('register')
+      expect(initialRegister.token).toBe(authToken)
+
       browser = await connectMockBrowser(httpPort, graph, authToken)
-      const register = await readWsJson<{ type: string; token?: string | null }>(clientWs)
-      expect(register.type).toBe('register')
-      expect(register.token).toBe(authToken)
+      // Read the broadcast register notification sent when browser connects
+      const broadcastRegister = await readWsJson<{ type: string; token?: string | null }>(clientWs)
+      expect(broadcastRegister.type).toBe('register')
+      expect(broadcastRegister.token).toBe(authToken)
     } finally {
       clientWs.close()
       browser?.close()
@@ -515,8 +523,34 @@ describe('MCP WebSocket stdio bridge routing', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Helper: Make HTTP request via TCP
+// Helpers: Make HTTP requests via TCP or Unix domain socket
 // ---------------------------------------------------------------------------
+
+function nodeHttpRequest(
+  opts: RequestOptions,
+  bodyJson?: string
+): Promise<{ status: number; data: unknown }> {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(opts, (res) => {
+      const chunks: Buffer[] = []
+      res.on('data', (chunk: Buffer) => chunks.push(chunk))
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf-8')
+        let data: unknown
+        try {
+          data = JSON.parse(raw)
+        } catch {
+          data = raw
+        }
+        resolve({ status: res.statusCode ?? 200, data })
+      })
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    if (bodyJson) req.write(bodyJson)
+    req.end()
+  })
+}
 
 function tcpRequest(
   method: string,
@@ -524,75 +558,24 @@ function tcpRequest(
   body?: Record<string, unknown>,
   headers?: Record<string, string>
 ): Promise<{ status: number; data: unknown }> {
-  return new Promise((resolve, reject) => {
-    const bodyJson = body ? JSON.stringify(body) : undefined
-    const allHeaders: Record<string, string> = {
-      ...(bodyJson ? { 'Content-Type': 'application/json' } : {}),
-      ...headers
-    }
-    const req = httpRequest(
-      {
-        hostname: '127.0.0.1',
-        port: sharedPort,
-        path,
-        method,
-        headers: allHeaders
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.on('end', () => {
-          const raw = Buffer.concat(chunks).toString('utf-8')
-          let data: unknown
-          try {
-            data = JSON.parse(raw)
-          } catch {
-            data = raw
-          }
-          resolve({ status: res.statusCode ?? 200, data })
-        })
-        res.on('error', reject)
-      }
-    )
-    req.on('error', reject)
-    if (bodyJson) req.write(bodyJson)
-    req.end()
-  })
+  const bodyJson = body ? JSON.stringify(body) : undefined
+  return nodeHttpRequest(
+    {
+      hostname: '127.0.0.1',
+      port: sharedPort,
+      path,
+      method,
+      headers: { ...(bodyJson ? { 'Content-Type': 'application/json' } : {}), ...headers }
+    },
+    bodyJson
+  )
 }
 
-// Helper: Make HTTP request via Unix domain socket
 function socketRequest(
   socketPath: string,
   method: string,
   path: string,
   headers?: Record<string, string>
 ): Promise<{ status: number; data: unknown }> {
-  return new Promise((resolve, reject) => {
-    const allHeaders = headers ?? {}
-    const req = httpRequest(
-      {
-        socketPath,
-        path,
-        method,
-        headers: allHeaders
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.on('end', () => {
-          const raw = Buffer.concat(chunks).toString('utf-8')
-          let data: unknown
-          try {
-            data = JSON.parse(raw)
-          } catch {
-            data = raw
-          }
-          resolve({ status: res.statusCode ?? 200, data })
-        })
-        res.on('error', reject)
-      }
-    )
-    req.on('error', reject)
-    req.end()
-  })
+  return nodeHttpRequest({ socketPath, path, method, headers: headers ?? {} })
 }
