@@ -30,7 +30,7 @@ Il server MCP si avvia automaticamente all'apertura dell'app desktop (i build Ta
                       │              │
                       │  /    (WS)   │ ◄──── WebSocket ────► Scheda browser
   (openpencil-mcp)    │              │
-                      │  /mcp  (SSE) │ ◄──── HTTP/SSE ─────► Strumenti esterni
+                      │  /mcp (HTTP) │ ◄──── Streamable HTTP ─────► Strumenti esterni
                       │              │
                       │  /health     │
                       └──────┬───────┘
@@ -50,8 +50,9 @@ Il server scrive un **file di discovery** all'avvio. Il bridge stdio legge quest
 |-------------|----------|
 | macOS | `~/Library/Application Support/OpenPencil/mcp.json` |
 | Linux | `$XDG_RUNTIME_DIR/openpencil/mcp.json` (fallback: `~/.openpencil/mcp.json`) |
+| Windows | `%LOCALAPPDATA%\OpenPencil\mcp.json` |
 
-Sovrascrivi con `OPENPENCIL_MCP_SOCKET` — la sua directory padre diventa la directory di discovery.
+`OPENPENCIL_MCP_SOCKET` (solo macOS/Linux) sovrascrive solo il percorso del socket — il file di discovery rimane sempre nel percorso della piattaforma sopra indicato.
 
 ### Contenuto del file di discovery
 
@@ -74,6 +75,7 @@ Il file viene scritto con permessi `0o600` (solo lettura/scrittura del proprieta
 | Piattaforma | Primario | Fallback |
 |-------------|----------|----------|
 | macOS / Linux | Socket Unix | TCP su `127.0.0.1:7600` |
+| Windows | TCP su `127.0.0.1:7600` | — |
 
 Su macOS/Linux, il bridge stdio preferisce il socket Unix. Se il server è stato avviato solo con TCP, il bridge usa `httpPort` dal file di discovery. Su Windows, il bridge usa esclusivamente TCP poiché Windows non supporta i socket Unix.
 
@@ -172,11 +174,11 @@ O dal sorgente: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/inde
 |----------|--------|------|-------------|
 | `/health` | GET | No | Stato server, versione, comando installazione, percorso discovery |
 | `/rpc` | POST | Bearer token | Bridge JSON-RPC all'app in esecuzione |
-| `/mcp` | POST (SSE), DELETE | Bearer token | MCP Streamable HTTP. Sessioni via header `mcp-session-id`. DELETE chiude una sessione |
+| `/mcp` | POST, DELETE | Bearer token o `x-mcp-token` | MCP Streamable HTTP. Sessioni via header `mcp-session-id`. DELETE chiude una sessione |
 
 ### Autenticazione
 
-Un token di autenticazione viene **generato automaticamente all'avvio** (32-hex casuale da `crypto.randomBytes`). I client devono inviarlo come `Authorization: Bearer <token>` per gli endpoint `/rpc` e `/mcp`. Il confronto usa tempo costante (`crypto.timingSafeEqual`) per prevenire attacchi timing.
+Un token di autenticazione viene **generato automaticamente all'avvio** (32-hex casuale da `crypto.randomBytes`). I client devono inviarlo come `Authorization: Bearer <token>` per `/rpc`, o come `Authorization: Bearer <token>` o header `x-mcp-token` per `/mcp`. Il confronto usa tempo costante (`crypto.timingSafeEqual`) per prevenire attacchi timing.
 
 | Scenario | Da dove viene il token |
 |----------|----------------------|
@@ -184,7 +186,7 @@ Un token di autenticazione viene **generato automaticamente all'avvio** (32-hex 
 | Interno (Tauri/browser) | Legge il file di discovery via `/health` → `discoveryPath` |
 | Client HTTP personalizzato | Imposta `OPENPENCIL_MCP_AUTH_TOKEN` su server e client, o leggi il file di discovery |
 
-Per **disabilitare** l'autenticazione (es. sviluppo locale dietro firewall), avvia il server con `authToken: null` esplicitamente:
+Per **disabilitare** l'autenticazione (es. sviluppo locale dietro firewall), imposta `OPENPENCIL_MCP_AUTH_TOKEN=""` prima di avviare il server:
 
 ```sh
 OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
@@ -194,11 +196,11 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 
 | Variabile | Default | Descrizione |
 |-----------|---------|-------------|
-| `PORT` | `7600` | Porta TCP. `0` per disabilitare TCP (solo socket). |
-| `OPENPENCIL_MCP_SOCKET` | Per piattaforma | Sovrascrivi percorso socket |
-| `OPENPENCIL_MCP_TCP` | Auto | `1` per forzare TCP abilitato |
+| `PORT` | `7600` | Porta TCP. `0` per disabilitare TCP (su Windows disabilita l'unico trasporto disponibile). |
+| `OPENPENCIL_MCP_SOCKET` | Per piattaforma | Sovrascrivi percorso socket (solo macOS/Linux) |
+| `OPENPENCIL_MCP_TCP` | Deprecato | Nessun effetto — TCP è controllato da `PORT` (>0 = attivo, 0 = disattivato) |
 | `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generato | Token auth del server. Se non impostato, viene generato automaticamente; se impostato a stringa vuota (`""`), l'autenticazione viene disabilitata. |
-| `OPENPENCIL_MCP_ROOT` | `cwd()` | Directory scope per `open_file`, `save_file` e export con scrittura |
+| `OPENPENCIL_MCP_ROOT` | `cwd()` | Directory scope per `open_file`, `new_document` e export con scrittura. `save_file` è sempre disponibile; il percorso viene validato contro questa directory quando impostato |
 | `OPENPENCIL_MCP_EVAL` | Disabilitato | `1` per abilitare `eval` (solo stdio, mai HTTP) |
 | `OPENPENCIL_MCP_CORS_ORIGIN` | Disabilitato | Origine CORS consentita per accesso browser |
 
@@ -211,7 +213,7 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 - Permessi socket `0o600` su Unix — restringe l'accesso al tuo utente
 - Permessi file di discovery `0o600` — stessa restrizione
 
-**Limitazione nota:** Su Unix, c'è una breve finestra tra `listen()` e `chmod(0o600)` dove il socket ha permessi predefiniti. Il token di autenticazione mitiga questo — anche se un altro processo si connette durante la finestra, ha bisogno del token. Nessuna mitigazione per `authToken: null` su macchine condivise.
+**Limitazione nota:** Su Unix, c'è una breve finestra tra `listen()` e `chmod(0o600)` dove il socket ha permessi predefiniti. Il token di autenticazione mitiga questo — anche se un altro processo si connette durante la finestra, ha bisogno del token. Nessuna mitigazione quando l'autenticazione è disabilitata (`OPENPENCIL_MCP_AUTH_TOKEN=""`) su macchine condivise.
 
 ## Risoluzione problemi
 
@@ -225,7 +227,7 @@ Un'altra istanza di OpenPencil (o un altro processo) sta usando la porta 7600. S
 
 - Chiudi l'altra istanza
 - Imposta `PORT=7601` (o qualsiasi porta libera) prima di avviare
-- Imposta `PORT=0` per disabilitare TCP e usare solo socket
+- Su macOS/Linux: imposta `PORT=0` per disabilitare TCP e usare solo socket Unix
 
 ### Errori "stale socket" su macOS/Linux
 
@@ -249,8 +251,7 @@ Il bridge legge il file di discovery per localizzare il server. Se manca o è st
 
 1. Controlla che il file di discovery esista nel percorso della tua piattaforma
 2. Se TCP è abilitato (`PORT` non è `0`), verifica che il server sia in esecuzione: `curl http://127.0.0.1:${PORT:-7600}/health`
-3. Se usi `OPENPENCIL_MCP_SOCKET` personalizzato, assicurati che il bridge usi la stessa variabile
-4. Su Windows (trasporto solo TCP), verifica che `httpPort` del server sia raggiungibile
+3. Su Windows (trasporto solo TCP), verifica che `httpPort` del server sia raggiungibile
 
 ## Flusso di lavoro
 

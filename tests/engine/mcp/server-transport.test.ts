@@ -6,12 +6,16 @@ import { join } from 'node:path'
 
 import WebSocket from 'ws'
 
-import { SceneGraph } from '@open-pencil/core'
-import { getDiscoveryPath } from '@open-pencil/mcp/transport'
+import { SceneGraph } from '@open-pencil/core/scene-graph'
 
 import { startServer, type ServerHandle } from '#mcp/server'
 
-import { connectMockBrowser, type HealthResponse, type MockBrowser } from './helpers'
+import {
+  connectMockBrowser,
+  waitForBrowserRegistration,
+  type HealthResponse,
+  type MockBrowser
+} from './helpers'
 
 const isUnix = process.platform !== 'win32'
 const SOCKET_DIR = join(tmpdir(), `openpencil-test-server-${process.pid}`)
@@ -52,10 +56,18 @@ function readWsJson<T>(ws: WebSocket, timeoutMs = 1000): Promise<T> {
   })
 }
 
-function openWs(url: string): Promise<WebSocket> {
+function openWs(url: string, authToken?: string | null): Promise<WebSocket> {
   const ws = new WebSocket(url)
   return new Promise((resolve, reject) => {
-    ws.once('open', () => resolve(ws))
+    ws.once('open', () => {
+      if (authToken) {
+        // Authenticate as a stdio bridge client (not the browser app).
+        // The "auth" message type validates the token and adds the client
+        // to authenticatedClients without replacing the registered browser.
+        ws.send(JSON.stringify({ type: 'auth', token: authToken }))
+      }
+      resolve(ws)
+    })
     ws.once('error', reject)
   })
 }
@@ -81,23 +93,28 @@ function testSocketPath(): string | null {
 // ---------------------------------------------------------------------------
 
 describe('MCP server unified transport', () => {
-  let handle: ServerHandle
+  let handle: ServerHandle | null = null
 
   beforeAll(async () => {
     if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
-    handle = await startServer({
-      httpPort: 0,
-      withTcp: true,
-      socketPath: SOCKET_PATH,
-      authToken: 'test-token-123',
-      enableEval: false,
-      mcpRoot: null
-    })
-    sharedPort = handle.httpPort
+    try {
+      handle = await startServer({
+        httpPort: 0,
+        withTcp: true,
+        socketPath: SOCKET_PATH,
+        authToken: 'test-token-123',
+        enableEval: false,
+        mcpRoot: null
+      })
+      sharedPort = handle.httpPort
+    } catch (e) {
+      await handle?.close().catch(() => undefined)
+      throw e
+    }
   })
 
   afterAll(async () => {
-    await handle.close()
+    await handle?.close()
     if (isUnix) await rm(SOCKET_DIR, { recursive: true, force: true })
   })
 
@@ -122,10 +139,25 @@ describe('MCP server unified transport', () => {
     })
 
     it('accepts /mcp with auth token', async () => {
-      const result = await tcpRequest('POST', '/mcp', undefined, {
-        Authorization: 'Bearer test-token-123'
-      })
-      expect(result.status).not.toBe(401)
+      const result = await tcpRequest(
+        'POST',
+        '/mcp',
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'smoke-test', version: '0.0.0' }
+          }
+        },
+        {
+          accept: 'application/json, text/event-stream',
+          Authorization: 'Bearer test-token-123'
+        }
+      )
+      expect(result.status).toBe(200)
     })
   })
 
@@ -154,19 +186,24 @@ describe('MCP server unified transport', () => {
 
   describe('Discovery', () => {
     it('writes a discovery file matching the running server', async () => {
-      const discoveryPath = await getDiscoveryPath()
+      // Derive the discovery path from the running server's /health endpoint
+      // rather than calling getDiscoveryPath() independently, ensuring we
+      // validate the actual server instance's discovery file.
+      const healthResp = await fetch(`http://127.0.0.1:${sharedPort}/health`)
+      const health = (await healthResp.json()) as { discoveryPath: string }
+      const discoveryPath = health.discoveryPath
       const file = Bun.file(discoveryPath)
       expect(await file.exists()).toBe(true)
       const info = (await file.json()) as {
         pid: number
         httpPort: number
-        socketPath: string
+        socketPath: string | null
         version: string
         authToken: string | null
       }
       expect(info.pid).toBe(process.pid)
-      expect(info.httpPort).toBe(handle.httpPort)
-      expect(info.socketPath).toBe(handle.socketPath)
+      expect(info.httpPort).toBe(handle?.httpPort ?? 0)
+      expect(info.socketPath).toBe(handle?.socketPath ?? null)
       expect(info.version).toBeTruthy()
       expect(info.authToken).toBe('test-token-123')
     })
@@ -249,7 +286,8 @@ describe('MCP WebSocket stdio bridge routing', () => {
 
     const graph = new SceneGraph()
     const browser = await connectMockBrowser(httpPort, graph, authToken)
-    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`)
+    await waitForBrowserRegistration(httpPort)
+    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`, authToken)
 
     try {
       const register = await readWsJson<{ type: string; token?: string | null }>(clientWs)
@@ -302,7 +340,7 @@ describe('MCP WebSocket stdio bridge routing', () => {
       throw new Error('withTcp: true did not produce an HTTP port')
     }
 
-    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`)
+    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`, 'bridge-test-token')
 
     try {
       // Consume the initial register message sent on connection
@@ -352,7 +390,7 @@ describe('MCP WebSocket stdio bridge routing', () => {
       throw new Error('withTcp: true did not produce an HTTP port')
     }
 
-    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`)
+    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`, authToken)
     const graph = new SceneGraph()
     let browser: MockBrowser | null = null
 
@@ -394,7 +432,7 @@ describe('MCP WebSocket stdio bridge routing', () => {
     }
 
     // Connect a WebSocket client (NOT a browser — no register message yet)
-    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`)
+    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`, authToken)
 
     try {
       // Read the initial register prompt
@@ -495,7 +533,7 @@ describe('MCP WebSocket stdio bridge routing', () => {
     // Wait for the second browser to register
     await waitForHealth((s) => s === 'ok')
 
-    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`)
+    const clientWs = await openWs(`ws://127.0.0.1:${httpPort}`, authToken)
 
     try {
       // Read the initial register message (token is null for security —
@@ -535,10 +573,14 @@ function nodeHttpRequest(
   bodyJson?: string
 ): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('nodeHttpRequest timed out after 5s'))
+    }, 5_000)
     const req = httpRequest(opts, (res) => {
       const chunks: Buffer[] = []
       res.on('data', (chunk: Buffer) => chunks.push(chunk))
       res.on('end', () => {
+        clearTimeout(timeout)
         const raw = Buffer.concat(chunks).toString('utf-8')
         let data: unknown
         try {
@@ -548,9 +590,15 @@ function nodeHttpRequest(
         }
         resolve({ status: res.statusCode ?? 200, data })
       })
-      res.on('error', reject)
+      res.on('error', (err) => {
+        clearTimeout(timeout)
+        reject(err)
+      })
     })
-    req.on('error', reject)
+    req.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
     if (bodyJson) req.write(bodyJson)
     req.end()
   })
@@ -562,6 +610,7 @@ function tcpRequest(
   body?: Record<string, unknown>,
   headers?: Record<string, string>
 ): Promise<{ status: number; data: unknown }> {
+  if (!sharedPort) throw new Error('sharedPort not initialized — beforeAll must run first')
   const bodyJson = body ? JSON.stringify(body) : undefined
   return nodeHttpRequest(
     {

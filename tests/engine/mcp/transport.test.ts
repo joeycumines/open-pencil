@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   getSocketDir,
@@ -19,10 +21,10 @@ describe('transport/paths', () => {
 
     it('respects OPENPENCIL_MCP_SOCKET env override', async () => {
       const originalSocket = process.env.OPENPENCIL_MCP_SOCKET
-      process.env.OPENPENCIL_MCP_SOCKET = '/tmp/test-openpencil-socket/mcp.sock'
+      process.env.OPENPENCIL_MCP_SOCKET = join(tmpdir(), 'test-openpencil-socket', 'mcp.sock')
       try {
         const dir = await getSocketDir()
-        expect(dir).toBe('/tmp/test-openpencil-socket')
+        expect(dir).toBe(join(tmpdir(), 'test-openpencil-socket'))
       } finally {
         if (originalSocket == null) {
           delete process.env.OPENPENCIL_MCP_SOCKET
@@ -39,7 +41,14 @@ describe('transport/paths', () => {
         const dir = await getSocketDir()
         if (process.platform === 'darwin') {
           expect(dir).toContain('Library/Application Support/OpenPencil')
-        } else if (process.platform === 'linux') {
+        } else if (process.platform === 'win32') {
+          const localAppData = process.env.LOCALAPPDATA
+          if (localAppData) {
+            expect(dir.toLowerCase()).toContain(localAppData.toLowerCase())
+          }
+          expect(dir.toLowerCase()).toContain('openpencil')
+        } else {
+          // Linux / other Unix
           const xdg = process.env.XDG_RUNTIME_DIR
           if (xdg) {
             expect(dir).toContain(xdg)
@@ -57,7 +66,7 @@ describe('transport/paths', () => {
     })
 
     it('creates the directory if it does not exist', async () => {
-      const testDir = `/tmp/openpencil-test-${Date.now()}`
+      const testDir = join(tmpdir(), `openpencil-test-${Date.now()}`)
       const originalSocket = process.env.OPENPENCIL_MCP_SOCKET
       process.env.OPENPENCIL_MCP_SOCKET = `${testDir}/mcp.sock`
       try {
@@ -96,16 +105,19 @@ describe('transport/paths', () => {
 
     it('respects OPENPENCIL_MCP_SOCKET override', async () => {
       const originalSocket = process.env.OPENPENCIL_MCP_SOCKET
-      process.env.OPENPENCIL_MCP_SOCKET = '/custom/path/mcp.sock'
+      const overrideDir = join(tmpdir(), 'openpencil-test-override')
+      process.env.OPENPENCIL_MCP_SOCKET = join(overrideDir, 'mcp.sock')
       try {
         const path = await getSocketPath()
-        expect(path).toBe('/custom/path/mcp.sock')
+        expect(path).toBe(join(overrideDir, 'mcp.sock'))
       } finally {
         if (originalSocket == null) {
           delete process.env.OPENPENCIL_MCP_SOCKET
         } else {
           process.env.OPENPENCIL_MCP_SOCKET = originalSocket
         }
+        const { rm } = await import('node:fs/promises')
+        await rm(overrideDir, { recursive: true, force: true }).catch(() => null)
       }
     })
   })
@@ -116,6 +128,26 @@ describe('transport/paths', () => {
       delete process.env.OPENPENCIL_MCP_SOCKET
       try {
         const path = await getDiscoveryPath()
+        expect(path).toMatch(/mcp\.json$/)
+      } finally {
+        if (originalSocket == null) {
+          delete process.env.OPENPENCIL_MCP_SOCKET
+        } else {
+          process.env.OPENPENCIL_MCP_SOCKET = originalSocket
+        }
+      }
+    })
+
+    it('ignores OPENPENCIL_MCP_SOCKET override (stays on platform path)', async () => {
+      const originalSocket = process.env.OPENPENCIL_MCP_SOCKET
+      const overrideDir = join(tmpdir(), 'openpencil-test-discovery-override')
+      process.env.OPENPENCIL_MCP_SOCKET = join(overrideDir, 'mcp.sock')
+      try {
+        const path = await getDiscoveryPath()
+        // The discovery file must NOT be co-located with the override socket —
+        // it always stays on the well-known platform path so clients can find
+        // it without knowing the socket override.
+        expect(path).not.toBe(join(overrideDir, 'mcp.json'))
         expect(path).toMatch(/mcp\.json$/)
       } finally {
         if (originalSocket == null) {
@@ -136,7 +168,7 @@ describe('transport/paths', () => {
   describe('platformName', () => {
     it('returns a valid platform name', () => {
       const name = platformName()
-      expect(['macos', 'linux', 'other']).toContain(name)
+      expect(['macos', 'linux', 'windows', 'other']).toContain(name)
     })
   })
 })

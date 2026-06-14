@@ -67,26 +67,83 @@ export function createMcpSessionManager({
     }
   }
 
-  function createSession(id: string): MCPTransport {
-    const server = new McpServer({ name: 'open-pencil', version: serverVersion })
-    registerTools(server)
+  const creating = new Map<string, Promise<MCPTransport>>()
+  let closed = false
 
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => id,
-      enableJsonResponse: true
-    })
-    void server.connect(transport)
-    sessions.set(id, { transport, server, lastSeen: Date.now() })
-    return transport
+  async function createSession(id: string): Promise<MCPTransport> {
+    if (closed) throw new Error('Session manager is closed')
+    const inFlight = creating.get(id)
+    if (inFlight) return inFlight
+
+    const promise = (async () => {
+      const server = new McpServer({ name: 'open-pencil', version: serverVersion })
+      registerTools(server)
+
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => id,
+        enableJsonResponse: true
+      })
+      // Await the MCP handshake before storing/returning the transport so
+      // handleRequest cannot race the SDK's initialization on a fresh
+      // session. Without this, the /mcp route calls resolveTransport() and
+      // immediately awaits handleRequest(), which can fail if connect() has
+      // not completed yet.
+      try {
+        await server.connect(transport)
+      } catch (e) {
+        await transport.close().catch(() => undefined)
+        await server.close().catch(() => undefined)
+        throw e
+      }
+      // `closed` is mutated by clear() which can run concurrently — TypeScript's
+      // control-flow analysis can't track this cross-closure mutation.
+      // oxlint-disable-next-line no-unnecessary-condition
+      if (closed) {
+        // Manager was closed while we were connecting — clean up immediately.
+        await transport.close().catch(() => undefined)
+        await server.close().catch(() => undefined)
+        throw new Error('Session manager closed during session creation')
+      }
+      sessions.set(id, { transport, server, lastSeen: Date.now() })
+      return transport
+    })()
+
+    creating.set(id, promise)
+    try {
+      return await promise
+    } finally {
+      creating.delete(id)
+    }
   }
 
-  function resolveTransport(sessionId: string | undefined): MCPTransport | { error: 'too_many' } {
+  function resolveTransport(
+    sessionId: string | undefined
+  ): Promise<MCPTransport | { error: 'too_many' | 'closed' }> {
+    if (closed) return Promise.resolve({ error: 'closed' })
     cleanupExpired()
     const existing = sessionId ? sessions.get(sessionId) : undefined
-    if (!existing && sessions.size >= MAX_MCP_SESSIONS) {
-      return { error: 'too_many' }
+    if (existing) return Promise.resolve(existing.transport)
+    // Reuse an in-flight creation for the same sessionId before enforcing the cap.
+    if (sessionId) {
+      const inFlight = creating.get(sessionId)
+      if (inFlight) {
+        // Wrap with the same catch as createSession so clear() during
+        // in-flight creation returns { error: 'closed' } instead of throwing.
+        return inFlight.catch((e) => {
+          if (closed) return { error: 'closed' as const }
+          throw e
+        })
+      }
     }
-    return existing?.transport ?? createSession(sessionId ?? randomUUID())
+    if (sessions.size + creating.size >= MAX_MCP_SESSIONS) {
+      return Promise.resolve({ error: 'too_many' })
+    }
+    return createSession(sessionId ?? randomUUID()).catch((e) => {
+      // If the manager was closed during session creation, return the structured
+      // error instead of letting the throw escape as a route-level 500.
+      if (closed) return { error: 'closed' as const }
+      throw e
+    })
   }
 
   function touch(sessionId: string | undefined, transport: MCPTransport) {
@@ -106,8 +163,14 @@ export function createMcpSessionManager({
   }
 
   async function clear() {
+    closed = true
+    // Wait for in-flight session creations to finish (they will check
+    // `closed` and clean up without storing the session).
+    const inFlight = [...creating.values()]
+    await Promise.allSettled(inFlight)
     const all = [...sessions.values()]
     sessions.clear()
+    creating.clear()
     await Promise.all(all.map(closeSession))
   }
 

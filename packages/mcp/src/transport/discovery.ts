@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { access, constants, lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
 
-import { getDiscoveryPath, getSocketPath, platformHasUnixSockets } from './paths'
+import { getDiscoveryPath, getSocketPath, platformHasUnixSockets } from '#mcp/transport/paths'
 
 /**
  * Metadata written to the discovery file so clients can auto-locate
@@ -71,7 +71,9 @@ export async function readDiscoveryFile(): Promise<DiscoveryInfo | null> {
 
   let info: DiscoveryInfo
   try {
-    info = JSON.parse(raw) as DiscoveryInfo
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    info = parsed as DiscoveryInfo
   } catch {
     return null
   }

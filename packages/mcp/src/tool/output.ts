@@ -33,6 +33,31 @@ async function resolveRealAncestor(
   return { realAncestor: current, remainder }
 }
 
+/**
+ * Walks the non-existent path segments (remainder) from the real ancestor and
+ * rejects any that are dangling symlinks. A symlink whose target doesn't exist
+ * could point outside the allowed root — when the file is eventually written,
+ * the OS follows the symlink chain and the write lands outside root.
+ */
+async function assertNoDanglingSymlinks(realAncestor: string, remainder: string): Promise<void> {
+  if (!remainder) return
+  const segments = remainder.split(osSep).filter(Boolean)
+  let current = realAncestor
+  for (const seg of segments) {
+    current = join(current, seg)
+    try {
+      const stat = await lstat(current)
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Path is outside the allowed root: dangling symlink at ${current}`)
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('outside the allowed root')) throw e
+      // lstat failed — the component doesn't exist at all, which is expected
+      // since we're creating a new file. No symlink to worry about.
+    }
+  }
+}
+
 export async function resolveSafePath(filePath: string, root: string): Promise<string> {
   // Reject trivially broad roots that would pass all containment checks.
   // On Unix, "/" matches every absolute path; on Windows, "\" or "C:\" are
@@ -61,6 +86,17 @@ export async function resolveSafePath(filePath: string, root: string): Promise<s
     // Use join instead of concatenation to avoid double-slash issues
     // (e.g. when realAncestor is "/" and remainder starts with "/name").
     realRoot = remainder ? join(realAncestor, remainder.slice(osSep.length)) : realAncestor
+  }
+
+  // Re-check the broad-root guard after resolving symlinks. A root like
+  // "/home" could be a symlink to "/", which would pass the earlier
+  // normalizedRoot check but resolve to the filesystem root here.
+  const parsedRealRoot = parse(realRoot).root
+  if (realRoot === '/' || realRoot === osSep || realRoot === parsedRealRoot) {
+    throw new Error(
+      `Root path is too broad: "${root}" (resolved to "${realRoot}"). ` +
+        'Specify a narrower OPENPENCIL_MCP_ROOT directory.'
+    )
   }
 
   const realSep = realRoot.endsWith('/') || realRoot.endsWith('\\') ? '' : osSep
@@ -98,7 +134,8 @@ export async function resolveSafePath(filePath: string, root: string): Promise<s
       // Parent directory also doesn't exist — walk up to find the
       // nearest existing ancestor and re-append the non-existing path.
       const { realAncestor, remainder } = await resolveRealAncestor(parentDir)
-      realPath = join(realAncestor, remainder.slice(1), baseName) // remainder starts with /
+      await assertNoDanglingSymlinks(realAncestor, remainder)
+      realPath = join(realAncestor, remainder.slice(osSep.length), baseName)
     }
   }
 

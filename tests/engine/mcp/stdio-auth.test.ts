@@ -6,22 +6,24 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { createStdioRpcBridge } from '#mcp/stdio-bridge'
+import { getDiscoveryPath } from '#mcp/transport/paths'
 
 const TEST_DIR = join(tmpdir(), `openpencil-test-stdio-auth-${process.pid}`)
 const TEST_SOCKET = join(TEST_DIR, 'mcp-test.sock')
 const AUTH_TOKEN = 'test-auto-token'
 
 /**
- * Writes a mock discovery file at the location the bridge expects
- * (determined by OPENPENCIL_MCP_SOCKET env var).
+ * Writes a mock discovery file at the platform discovery path so the
+ * bridge's readDiscoveryFile() finds it.
  */
 async function writeMockDiscovery(
   socketPath: string,
   authToken: string | null,
   httpPort: number = 0
 ): Promise<void> {
+  const discoveryPath = await getDiscoveryPath()
   await writeFile(
-    join(TEST_DIR, 'mcp.json'),
+    discoveryPath,
     JSON.stringify({
       pid: process.pid,
       socketPath,
@@ -129,7 +131,9 @@ async function createBridgeAndWaitForReady(
   })
 }
 
-describe('Fix 4 - Auth token auto-discovery and transparent retry', () => {
+const isUnix = process.platform !== 'win32'
+
+describe.skipIf(!isUnix)('Fix 4 - Auth token auto-discovery and transparent retry', () => {
   let httpServer: Server | null = null
   const origSocketEnv = process.env.OPENPENCIL_MCP_SOCKET
 
@@ -151,7 +155,7 @@ describe('Fix 4 - Auth token auto-discovery and transparent retry', () => {
       void 0 // best-effort cleanup
     }
     try {
-      const discoveryPath = join(TEST_DIR, 'mcp.json')
+      const discoveryPath = await getDiscoveryPath()
       if (existsSync(discoveryPath)) await unlink(discoveryPath)
     } catch {
       void 0 // best-effort cleanup
@@ -230,5 +234,33 @@ describe('Fix 4 - Auth token auto-discovery and transparent retry', () => {
 
     const result = await bridge.sendRpc({ command: 'test' })
     expect(result).toEqual({ result: 'ok-1' })
+  }, 10_000)
+
+  test('/rpc rejects unauthenticated requests when authToken is set', async () => {
+    await mkdir(TEST_DIR, { recursive: true })
+    await writeMockDiscovery(TEST_SOCKET, AUTH_TOKEN)
+    process.env.OPENPENCIL_MCP_SOCKET = TEST_SOCKET
+    httpServer = await createMockMcpServer(TEST_SOCKET, { authToken: AUTH_TOKEN })
+
+    // Bridge with no explicit token — it auto-discovers from the discovery
+    // file and should succeed because the discovery file has the correct token.
+    // This verifies the /rpc 401 → retry → 200 flow indirectly.
+    const bridge = await createBridgeAndWaitForReady({
+      socketPath: TEST_SOCKET
+    })
+
+    const result = await bridge.sendRpc({ command: 'test' })
+    expect(result).toEqual({ result: 'ok-1' })
+
+    // Explicitly verify that a wrong-token bridge gets 401
+    const badBridge = await createBridgeAndWaitForReady({
+      socketPath: TEST_SOCKET,
+      authToken: 'invalid-token',
+      reconnectDelayMs: 500
+    })
+
+    await expect(badBridge.sendRpc({ command: 'test' })).rejects.toThrow(
+      'Unauthorized: check OPENPENCIL_MCP_AUTH_TOKEN'
+    )
   }, 10_000)
 })

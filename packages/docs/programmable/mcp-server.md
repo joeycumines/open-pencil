@@ -30,7 +30,7 @@ The MCP server starts automatically when you launch the desktop app (Tauri produ
                       │              │
                       │  /    (WS)   │ ◄──── WebSocket ────► Browser tab
   (openpencil-mcp)    │              │
-                      │  /mcp  (SSE) │ ◄──── HTTP/SSE ─────► External tools
+                      │  /mcp (HTTP) │ ◄── Streamable HTTP ──► External tools
                       │              │
                       │  /health     │
                       └──────┬───────┘
@@ -50,8 +50,9 @@ The server writes a **discovery file** on startup. The stdio bridge reads this f
 |----------|------|
 | macOS | `~/Library/Application Support/OpenPencil/mcp.json` |
 | Linux | `$XDG_RUNTIME_DIR/openpencil/mcp.json` (fallback: `~/.openpencil/mcp.json`) |
+| Windows | `%LOCALAPPDATA%\OpenPencil\mcp.json` |
 
-Override with `OPENPENCIL_MCP_SOCKET` — its dirname becomes the discovery directory.
+`OPENPENCIL_MCP_SOCKET` overrides only the socket path — the discovery file always stays at the platform path above.
 
 ### What's in the discovery file
 
@@ -74,6 +75,7 @@ The discovery file is written with `0o600` permissions (owner read/write only). 
 | Platform | Primary | Fallback |
 |----------|---------|----------|
 | macOS / Linux | Unix domain socket | TCP on `127.0.0.1:7600` |
+| Windows | TCP on `127.0.0.1:7600` | — |
 
 The stdio bridge prefers the socket. If the server was started with TCP only (no socket), the bridge falls back to `httpPort` from the discovery file.
 
@@ -133,6 +135,7 @@ Add to your MCP config (e.g. `.cursor/mcp.json`):
 Run from source without installing:
 
 ::: code-group
+
 ```json [Bun]
 {
   "mcpServers": {
@@ -171,7 +174,7 @@ Or from source: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/inde
 |----------|--------|------|-------------|
 | `/health` | GET | No | Server status, version, install command, discovery path |
 | `/rpc` | POST | Bearer token | JSON-RPC bridge to the running app |
-| `/mcp` | POST (SSE), DELETE | Bearer token | MCP Streamable HTTP. Sessions via `mcp-session-id` header. DELETE closes a session |
+| `/mcp` | POST, DELETE | Bearer token or `x-mcp-token` header | MCP Streamable HTTP. Sessions via `mcp-session-id` header. DELETE closes a session |
 
 ### Authentication
 
@@ -183,7 +186,7 @@ An auth token is **auto-generated on startup** (32-hex random from `crypto.rando
 | App-internal (Tauri/browser) | Reads discovery file via `/health` → `discoveryPath` |
 | Custom HTTP client | Set `OPENPENCIL_MCP_AUTH_TOKEN` on both server and client, or read the discovery file |
 
-To **disable** auth entirely (e.g. local development behind a firewall), start the server with `authToken: null` explicitly:
+To **disable** auth entirely (e.g. local development behind a firewall), set `OPENPENCIL_MCP_AUTH_TOKEN=""` before starting the server:
 
 ```sh
 OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
@@ -193,11 +196,11 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `7600` | TCP port. Set `0` to disable TCP (socket-only). |
-| `OPENPENCIL_MCP_SOCKET` | Platform default | Override socket path |
-| `OPENPENCIL_MCP_TCP` | Auto | Set `1` to force TCP enabled |
+| `PORT` | `7600` | TCP port. Set `0` to disable TCP (socket-only on macOS/Linux; disables all transport on Windows). |
+| `OPENPENCIL_MCP_SOCKET` | Platform default | Override socket path (macOS/Linux only — Windows has no Unix socket support) |
+| `OPENPENCIL_MCP_TCP` | Deprecated | No effect — TCP is controlled by `PORT` (>0 = on, 0 = off) |
 | `OPENPENCIL_MCP_AUTH_TOKEN` | Auto-generated | Server auth token. If unset, one is generated at startup. If set to an empty string (`""`), auth is disabled. |
-| `OPENPENCIL_MCP_ROOT` | `cwd()` | Directory scope for `open_file`, `save_file`, and file-writing export tools |
+| `OPENPENCIL_MCP_ROOT` | `cwd()` | Directory scope for `open_file`, `new_document`, and file-writing export tools. `save_file` is always available; path is validated against this directory when set |
 | `OPENPENCIL_MCP_EVAL` | Disabled | Set `1` to enable the `eval` tool (stdio only, never HTTP) |
 | `OPENPENCIL_MCP_CORS_ORIGIN` | Disabled | Allowed CORS origin for browser access |
 
@@ -210,7 +213,7 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 - Socket file permissions `0o600` on Unix — restricts access to your user
 - Discovery file permissions `0o600` — same restriction
 
-**Known limitation:** On Unix, there is a brief window between `listen()` and `chmod(0o600)` where the socket has default permissions. The auth token mitigates this — even if another process connects during the window, it still needs the token. No mitigation exists for `authToken: null` on shared machines.
+**Known limitation:** On Unix, there is a brief window between `listen()` and `chmod(0o600)` where the socket has default permissions. The auth token mitigates this — even if another process connects during the window, it still needs the token. No mitigation exists when auth is disabled (`OPENPENCIL_MCP_AUTH_TOKEN=""`) on shared machines.
 
 ## Troubleshooting
 
@@ -246,10 +249,9 @@ npm install -g @open-pencil/mcp@latest
 
 The bridge reads the discovery file to locate the server. If the discovery file is missing or stale (PID no longer alive):
 
-1. Check the discovery file exists at the platform path above. If `OPENPENCIL_MCP_SOCKET` is overridden, also check for the discovery file adjacent to the custom socket path (the directory containing the socket file)
+1. Check the discovery file exists at the platform path above
 2. If TCP is enabled (`PORT` is not `0`), verify the server is running: `curl http://127.0.0.1:${PORT:-7600}/health`
-3. If running with a custom `OPENPENCIL_MCP_SOCKET`, make sure the bridge uses the same env var
-4. On Windows (TCP-only transport), verify the server's `httpPort` is reachable
+3. On Windows (TCP-only transport, no Unix socket support), verify the server's `httpPort` is reachable. Setting `PORT=0` on Windows disables the only available transport
 
 ## Workflow
 

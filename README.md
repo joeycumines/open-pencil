@@ -200,9 +200,9 @@ For other MCP clients:
 openpencil-mcp-http   # http://localhost:7600/mcp
 ```
 
-The MCP server uses a Unix domain socket as the primary transport on macOS/Linux, with optional TCP fallback. The stdio bridge (`openpencil-mcp`) connects via the socket; `openpencil-mcp-http` starts the TCP listener. Set `OPENPENCIL_MCP_TCP=1` to force TCP on Unix.
+The MCP server uses discovery-driven transport: a Unix domain socket is preferred on macOS/Linux when available, with TCP/HTTP as a fallback for platforms that lack socket support (e.g. Windows). The stdio bridge (`openpencil-mcp`) tries the socket first and falls back to TCP/HTTP; `openpencil-mcp-http` starts the TCP listener. TCP is controlled by `PORT` (>0 = on, 0 = off). Setting `PORT=0` disables TCP for socket-only transport on macOS/Linux; on Windows (no Unix socket support), choose a different port instead.
 
-**File access:** Set `OPENPENCIL_MCP_ROOT` to scope file operations (`open_file`, `new_document`, export `path` param) to a directory. When using the server/library API (`startServer()` / embedded usage), these tools are only available when this variable is set. The CLI entrypoints (`openpencil-mcp`, `openpencil-mcp-http`) default `mcpRoot` to `process.cwd()` so file-scoped tools work without the env var. Symlinks are resolved to prevent path traversal attacks.
+**File access:** Set `OPENPENCIL_MCP_ROOT` to scope file operations to a directory. `open_file` and `new_document` are only available when this variable is set (or when the CLI defaults `mcpRoot` to `process.cwd()`). `save_file` is always available — when root is set, the path must be inside it; otherwise the existing file path is used. Export `path` params are validated against the root when set. Symlinks are resolved to prevent path traversal attacks.
 
 ### AI agent skill
 

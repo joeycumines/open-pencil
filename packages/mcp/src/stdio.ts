@@ -2,8 +2,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
-import { MCP_VERSION, registerTools } from './server'
-import { createStdioRpcBridge } from './stdio-bridge'
+import { MCP_VERSION, registerTools } from '#mcp/server'
+import { createStdioRpcBridge } from '#mcp/stdio-bridge'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
@@ -16,9 +16,9 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
       `Options:\n` +
       `  --help, -h    Show this help message\n\n` +
       `Environment variables:\n` +
-      `  OPENPENCIL_MCP_SOCKET        Override socket path\n` +
+      `  OPENPENCIL_MCP_SOCKET        Override socket path (auto-discovered from discovery file when unset)\n` +
       `  OPENPENCIL_MCP_AUTH_TOKEN    Bearer token for RPC auth\n` +
-      `  OPENPENCIL_MCP_ROOT          Allowed directory for file-scoped tools\n` +
+      `  OPENPENCIL_MCP_ROOT          Allowed directory for file-scoped tools (default: current working directory)\n` +
       `  OPENPENCIL_MCP_EVAL          Set to 1 to enable the eval tool\n`
   )
   process.exit(0)
@@ -26,15 +26,29 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
 const enableEval = process.env.OPENPENCIL_MCP_EVAL === '1'
 const mcpRoot = process.env.OPENPENCIL_MCP_ROOT?.trim() || process.cwd()
-const socketPath = process.env.OPENPENCIL_MCP_SOCKET?.trim() || null
-// Auth token: unset → auto-discover, empty string → disable auth, otherwise → use value
-const authToken =
-  process.env.OPENPENCIL_MCP_AUTH_TOKEN === ''
-    ? null
-    : process.env.OPENPENCIL_MCP_AUTH_TOKEN?.trim() || undefined
+// Auth token: undefined → auto-discover from discovery file, empty string →
+// disable auth, whitespace-only → reject (same fail-fast as index.ts to catch
+// misconfiguration), otherwise → use the trimmed value.
+const rawAuthToken = process.env.OPENPENCIL_MCP_AUTH_TOKEN
+if (rawAuthToken !== undefined && rawAuthToken !== '' && rawAuthToken.trim() === '') {
+  process.stderr.write(
+    'Error: OPENPENCIL_MCP_AUTH_TOKEN is whitespace-only. Set a real token, or use an empty string to disable auth.\n'
+  )
+  process.exit(1)
+}
+function resolveAuthToken(raw: string | undefined): string | null | undefined {
+  if (raw === undefined) return undefined
+  if (raw === '') return null
+  return raw.trim()
+}
+const authToken = resolveAuthToken(rawAuthToken)
 
+// OPENPENCIL_MCP_SOCKET is intentionally NOT forwarded as an explicit socketPath.
+// The bridge reads the socket path from the discovery file (whose `socketPath`
+// field records the override) via auto-discovery. Treating the env var as an
+// explicit pin would prevent the bridge from following discovery updates after
+// a server restart.
 const bridge = createStdioRpcBridge({
-  socketPath,
   authToken,
   onReady: () => {
     process.stderr.write('Connected to OpenPencil MCP server\n')

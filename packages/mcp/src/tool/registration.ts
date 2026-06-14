@@ -8,9 +8,8 @@ import { ALL_TOOLS, CODEGEN_PROMPT } from '@open-pencil/core/tools'
 
 import type { RpcJsonObject } from '#mcp/json'
 import { MAX_RESULT_BYTES, fail, ok, resultTooLargeMessage } from '#mcp/result'
-
-import { resolveSafePath, writeToolOutput } from './output'
-import { paramToZod } from './schema'
+import { resolveSafePath, writeToolOutput } from '#mcp/tool/output'
+import { paramToZod } from '#mcp/tool/schema'
 
 export type RpcSender = (body: Record<string, unknown>) => Promise<unknown>
 
@@ -87,7 +86,8 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         ? z.object({
             path: z
               .string()
-              .describe('Optional path for the .fig file inside the configured MCP root')
+              .min(1)
+              .describe('Path for the .fig file, absolute or relative to the MCP root')
               .optional()
           })
         : z.object({})
@@ -95,7 +95,9 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
     async (args: { path?: string }) => {
       try {
         const safePath =
-          args.path && resolvedRoot ? await resolveSafePath(args.path, resolvedRoot) : undefined
+          args.path !== undefined && resolvedRoot
+            ? await resolveSafePath(args.path, resolvedRoot)
+            : undefined
         const result = await sendRpc({ command: 'save_file', args: { path: safePath } })
         const res = result as { ok?: boolean; error?: string }
         if (res.ok === false) return fail(new Error(res.error))
@@ -112,7 +114,10 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
       {
         description: `Open a .fig or .pen file from disk into a new tab. Path must be inside ${resolvedRoot}.`,
         inputSchema: z.object({
-          path: z.string().describe('Path to the design file inside the configured MCP root')
+          path: z
+            .string()
+            .min(1)
+            .describe('Path to the design file, absolute or relative to the MCP root')
         })
       },
       async (args: { path: string }) => {
@@ -135,13 +140,15 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         inputSchema: z.object({
           path: z
             .string()
-            .describe('Optional path for the new file inside the configured MCP root')
+            .min(1)
+            .describe('Path for the new file, absolute or relative to the MCP root')
             .optional()
         })
       },
       async (args: { path?: string }) => {
         try {
-          const safePath = args.path ? await resolveSafePath(args.path, resolvedRoot) : undefined
+          const safePath =
+            args.path !== undefined ? await resolveSafePath(args.path, resolvedRoot) : undefined
           const result = await sendRpc({ command: 'new_document', args: { path: safePath } })
           const res = result as { ok?: boolean; error?: string }
           if (res.ok === false) return fail(new Error(res.error))

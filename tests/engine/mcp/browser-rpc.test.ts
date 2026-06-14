@@ -298,19 +298,8 @@ describe('BrowserRpcBridge reconnection', () => {
       onConnectionChange: () => undefined
     })
 
-    // No browser registered — sendRpc will wait for connection.
-    let rpcRejection: Error | null = null
-    bridge.sendRpc(RPC_BODY).catch((e: Error) => {
-      rpcRejection = e
-    })
-
-    // APP_WAIT_TIMEOUT is 10_000 ms. Wait a bit longer.
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 10_200)
-    })
-
-    expect(rpcRejection).not.toBeNull()
-    expect(rpcRejection?.message).toContain('OpenPencil app is not connected')
+    // No browser registered — sendRpc rejects with APP_NOT_CONNECTED.
+    await expect(bridge.sendRpc(RPC_BODY)).rejects.toThrow('OpenPencil app is not connected')
   }, 12_000)
 
   test('response from non-browser WebSocket is ignored (ws guard)', async () => {
@@ -331,38 +320,53 @@ describe('BrowserRpcBridge reconnection', () => {
 
     // Also wire the non-browser client into the bridge so it can send
     // messages via handleMessage (simulating a stdio bridge WS).
+    // Authenticate it first so handleMessage doesn't reject at the auth gate.
+    bridge.handleConnection(clientPair.serverWs)
+    await new Promise<void>((resolve) => {
+      clientPair.clientWs.send(JSON.stringify({ type: 'auth', token: AUTH_TOKEN }))
+      // Wait briefly for the auth message to be processed
+      clientPair.clientWs.once('message', () => resolve())
+    })
     clientPair.serverWs.on('message', (raw: Buffer) => {
       const data = Buffer.from(raw as Buffer).toString('utf-8')
       bridge.handleMessage(data, clientPair.serverWs)
     })
 
-    // Set up the real browser's response handler BEFORE sending the RPC,
-    // so the handler is ready when the request arrives.
-    browserPair.clientWs.on('message', (raw: Buffer) => {
-      const msg = JSON.parse(raw.toString())
-      if (msg.type === 'request') {
-        browserPair.clientWs.send(
-          JSON.stringify({ type: 'response', id: msg.id, ok: true, real: true })
-        )
-      }
+    // Capture the request ID from the browser side. Set up the listener
+    // BEFORE sending the RPC to avoid a race where the request message
+    // arrives before the handler is attached.
+    const capturedIdPromise = new Promise<string>((resolve) => {
+      browserPair.clientWs.on('message', function handler(raw: Buffer) {
+        const msg = JSON.parse(raw.toString())
+        if (msg.type === 'request') {
+          browserPair.clientWs.off('message', handler)
+          resolve(msg.id)
+        }
+      })
     })
 
     // Send an RPC — it goes to the real browser.
     const rpcPromise = bridge.sendRpc(RPC_BODY)
 
-    // Wait briefly for the request to arrive at the browser, then
-    // have the non-browser client try to inject a fake response.
-    // The ws guard (browserWs !== ws) fires here because the message
-    // arrives from a non-browser WebSocket — it returns before
-    // pending.get(msg.id) is reached. The UUID also doesn't match,
-    // but the ws guard is the first check to reject it. The
-    // matching-UUID case is tested separately below.
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 50)
-    })
+    const capturedId = await capturedIdPromise
+
+    // Have the non-browser client inject a fake response with a random UUID.
+    // The ws guard (browserWs !== ws) fires because the message arrives from
+    // a non-browser WebSocket — it returns before pending.get(msg.id) is
+    // reached. The matching-UUID case is tested in the next test.
     const fakeId = randomUUID()
     clientPair.clientWs.send(
       JSON.stringify({ type: 'response', id: fakeId, ok: true, result: 'fake' })
+    )
+
+    // Give the fake message time to be processed
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 50)
+    })
+
+    // Now send the legitimate browser response
+    browserPair.clientWs.send(
+      JSON.stringify({ type: 'response', id: capturedId, ok: true, real: true })
     )
 
     // The RPC should resolve with the real browser's response, not the
@@ -389,27 +393,34 @@ describe('BrowserRpcBridge reconnection', () => {
     await registerBrowser(browserPair.serverWs, browserPair.clientWs, bridge)
 
     // Wire the attacker's WS into the bridge so it can send messages.
+    // Authenticate it first so handleMessage doesn't reject at the auth gate,
+    // ensuring the ws-guard logic is actually tested.
+    bridge.handleConnection(attackerPair.serverWs)
+    await new Promise<void>((resolve) => {
+      attackerPair.clientWs.send(JSON.stringify({ type: 'auth', token: AUTH_TOKEN }))
+      attackerPair.clientWs.once('message', () => resolve())
+    })
     attackerPair.serverWs.on('message', (raw: Buffer) => {
       const data = Buffer.from(raw as Buffer).toString('utf-8')
       bridge.handleMessage(data, attackerPair.serverWs)
     })
 
-    // Capture the real request UUID by intercepting messages on browser
-    let capturedId = ''
-    browserPair.clientWs.on('message', (raw: Buffer) => {
-      const msg = JSON.parse(raw.toString())
-      if (msg.type === 'request') {
-        capturedId = msg.id
-      }
+    // Set up the message listener BEFORE sending the RPC to avoid a race
+    // where the request arrives before the handler is attached.
+    const capturedIdPromise = new Promise<string>((resolve) => {
+      browserPair.clientWs.on('message', function handler(raw: Buffer) {
+        const msg = JSON.parse(raw.toString())
+        if (msg.type === 'request') {
+          browserPair.clientWs.off('message', handler)
+          resolve(msg.id)
+        }
+      })
     })
 
     // Send an RPC — it goes to the real browser.
     const rpcPromise = bridge.sendRpc(RPC_BODY)
 
-    // Wait for the request to arrive so we can capture the UUID
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 50)
-    })
+    const capturedId = await capturedIdPromise
     expect(capturedId).toBeTruthy()
     const requestId = capturedId
 

@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto'
-import { chmod, readFile, unlink } from 'node:fs/promises'
+import { chmod, mkdir, readFile, unlink } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { Server as HttpServer } from 'node:http'
+import { dirname } from 'node:path'
 
 import { getRequestListener } from '@hono/node-server'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -11,17 +12,26 @@ import { resolveCommand } from 'package-manager-detector/commands'
 import { detect, getUserAgent } from 'package-manager-detector/detect'
 import { WebSocketServer, type WebSocket } from 'ws'
 
+import { bearerToken, isAuthorized, mcpRequestToken } from '#mcp/auth'
+import { createBrowserRpcBridge } from '#mcp/browser-rpc'
+import { MCP_CORS_HEADERS, MCP_CORS_METHODS, MCP_EXPOSED_HEADERS } from '#mcp/http-options'
 import type { RpcJsonObject } from '#mcp/json'
+import { preprocessRpc } from '#mcp/jsx-preprocess'
+import { createMcpSessionManager } from '#mcp/mcp-sessions'
+import { registerTools } from '#mcp/tool/registration'
+import {
+  removeDiscoveryFile,
+  removeStaleSocket,
+  writeDiscoveryFile
+} from '#mcp/transport/discovery'
+import {
+  getDiscoveryPath,
+  getSocketDir,
+  getSocketPath,
+  platformHasUnixSockets
+} from '#mcp/transport/paths'
 
 import packageJson from '../package.json' with { type: 'json' }
-import { bearerToken, isAuthorized, mcpRequestToken } from './auth'
-import { createBrowserRpcBridge } from './browser-rpc'
-import { MCP_CORS_HEADERS, MCP_CORS_METHODS, MCP_EXPOSED_HEADERS } from './http-options'
-import { preprocessRpc } from './jsx-preprocess'
-import { createMcpSessionManager } from './mcp-sessions'
-import { registerTools } from './tool/registration'
-import { removeDiscoveryFile, removeStaleSocket, writeDiscoveryFile } from './transport/discovery'
-import { getDiscoveryPath, getSocketPath, platformHasUnixSockets } from './transport/paths'
 
 export const MCP_VERSION: string = packageJson.version
 
@@ -48,10 +58,10 @@ function mcpInstallCommand(): Promise<string> {
   return installCommandPromise
 }
 
-export { fail, ok, type MCPContent, type MCPResult } from './result'
+export { fail, ok, type MCPContent, type MCPResult } from '#mcp/result'
 
-export { registerTools, type RegisterToolsOptions, type RpcSender } from './tool/registration'
-export { paramToZod } from './tool/schema'
+export { registerTools, type RegisterToolsOptions, type RpcSender } from '#mcp/tool/registration'
+export { paramToZod } from '#mcp/tool/schema'
 
 export interface ServerOptions {
   /** TCP port for the HTTP + WebSocket server. 0 to disable TCP. Defaults to 7600. */
@@ -160,8 +170,11 @@ function createHonoApp(options: {
     if (c.req.method === 'DELETE' && !sessionId) {
       return c.json({ error: 'Missing MCP session id' }, 400)
     }
-    const transport = mcpSessions.resolveTransport(sessionId)
+    const transport = await mcpSessions.resolveTransport(sessionId)
     if ('error' in transport) {
+      if (transport.error === 'closed') {
+        return c.json({ error: 'MCP server is shutting down' }, 503)
+      }
       return c.json(
         { error: 'Too many active MCP sessions' },
         { status: 503, headers: { 'Retry-After': '5' } }
@@ -254,9 +267,20 @@ async function startSocketListener(
   wss: WebSocketServer,
   socketPathOverride: string | null
 ): Promise<{ server: HttpServer; resolvedPath: string } | null> {
-  if (!platformHasUnixSockets() && !socketPathOverride) return null
+  // Unix domain sockets are not available on Windows — always use TCP there,
+  // even when a socketPath override is provided.
+  if (!platformHasUnixSockets()) return null
 
   const resolvedPath = socketPathOverride ?? (await getSocketPath())
+  if (socketPathOverride) {
+    // Create the parent directory for the caller-provided socket path.
+    // Skip getSocketDir() — it would create the platform-default directory
+    // (or the OPENPENCIL_MCP_SOCKET env dir) which is unrelated to this path.
+    await mkdir(dirname(resolvedPath), { recursive: true })
+  } else {
+    // Ensure the default platform socket directory exists.
+    await getSocketDir()
+  }
   await removeStaleSocket(resolvedPath)
 
   const server = createAppServer(app)
@@ -278,12 +302,10 @@ async function startSocketListener(
   // limitation; calling process.umask(0o077) would close the window but has
   // global side effects.
 
-  if (platformHasUnixSockets()) {
-    try {
-      await chmod(resolvedPath, 0o600)
-    } catch (e) {
-      if (e instanceof Error) process.stderr.write(`  Socket: chmod warning (${e.message})\n`)
-    }
+  try {
+    await chmod(resolvedPath, 0o600)
+  } catch (e) {
+    if (e instanceof Error) process.stderr.write(`  Socket: chmod warning (${e.message})\n`)
   }
 
   return { server, resolvedPath }
@@ -441,6 +463,18 @@ function buildServerContext(options: ServerOptions) {
   const corsOrigin = options.corsOrigin ?? null
   const withTcp = options.withTcp ?? false
 
+  // Warn if auth is disabled while TCP is active — any local process can
+  // interact with the server without authentication. Socket-only transport
+  // (PORT=0) is safer because 0o600 permissions restrict access to the
+  // same OS user.
+  if (authToken === null && withTcp) {
+    process.stderr.write(
+      `WARNING: MCP server is running without authentication on TCP port ${httpPort}. ` +
+        'Any local process can interact with the server. ' +
+        'Set OPENPENCIL_MCP_AUTH_TOKEN to enable auth, or use PORT=0 for socket-only transport.\n'
+    )
+  }
+
   const mcpSessions = createMcpSessionManager({
     serverVersion: MCP_VERSION,
     registerTools: (mcpServer: McpServer) =>
@@ -480,6 +514,9 @@ function buildHandle(
       browserRpc.close()
       await mcpSessions.clear()
 
+      // Close the WebSocket server. ws.WebSocketServer.close() prevents new
+      // connections but waits for existing ones to close naturally. The HTTP
+      // server close (via teardownListeners) will drop any lingering sockets.
       await new Promise<void>((resolve) => {
         wss.close(() => resolve())
       })
@@ -507,20 +544,31 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
   // any client connecting during startup is handled immediately.
   wireConnectionHandling(ctx.wss, ctx.browserRpc)
 
-  const socketResult = await startSocketListener(ctx.app, ctx.wss, options.socketPath ?? null)
-  const state: ListenerState = { socketResult, tcpResult: null }
-  state.tcpResult = ctx.withTcp ? await tryStartTcp(ctx.app, ctx.wss, ctx.httpPort, state) : null
-  const resolvedSocketPath = socketResult?.resolvedPath ?? null
-  const actualHttpPort = state.tcpResult?.port ?? 0
+  const state: ListenerState = { socketResult: null, tcpResult: null }
+  try {
+    state.socketResult = await startSocketListener(ctx.app, ctx.wss, options.socketPath ?? null)
+    state.tcpResult = ctx.withTcp ? await tryStartTcp(ctx.app, ctx.wss, ctx.httpPort, state) : null
+    const resolvedSocketPath = state.socketResult?.resolvedPath ?? null
+    const actualHttpPort = state.tcpResult?.port ?? 0
 
-  if (!resolvedSocketPath && !actualHttpPort) {
-    throw new Error(
-      'MCP server has no active listeners (both socket and TCP are unavailable). ' +
-        'Ensure Unix domain sockets are supported on this platform or enable TCP with withTcp: true.'
-    )
+    if (!resolvedSocketPath && !actualHttpPort) {
+      throw new Error(
+        'MCP server has no active listeners (both socket and TCP are unavailable). ' +
+          'Ensure Unix domain sockets are supported on this platform or enable TCP with withTcp: true.'
+      )
+    }
+
+    await tryWriteDiscovery(resolvedSocketPath, actualHttpPort, ctx.authToken, state)
+  } catch (err) {
+    // Tear down any listeners that started before the failure, then close
+    // the WebSocket server so no resources leak when startServer rejects.
+    await teardownListeners(state).catch(() => undefined)
+    ctx.wss.close()
+    throw err
   }
 
-  await tryWriteDiscovery(resolvedSocketPath, actualHttpPort, ctx.authToken, state)
+  const resolvedSocketPath = state.socketResult?.resolvedPath ?? null
+  const actualHttpPort = state.tcpResult?.port ?? 0
 
   return buildHandle(
     ctx.app,

@@ -6,11 +6,12 @@ import { dirname, join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
-import { SceneGraph } from '@open-pencil/core'
+import { SceneGraph } from '@open-pencil/core/scene-graph'
 
 import { startServer, paramToZod } from '#mcp/server'
+import type { DiscoveryInfo } from '#mcp/transport/discovery'
 
-import { connectMockBrowser, type HealthResponse } from './helpers'
+import { connectMockBrowser, waitForBrowserRegistration, type HealthResponse } from './helpers'
 
 const isUnix = process.platform !== 'win32'
 const SOCKET_DIR = join(tmpdir(), `openpencil-test-server-${process.pid}`)
@@ -110,36 +111,39 @@ describe('MCP server /rpc auth skip', () => {
       // Connect a browser
       const graph = new SceneGraph()
       const browser = await connectMockBrowser(httpPort, graph)
+      await waitForBrowserRegistration(httpPort)
 
-      // /rpc should succeed without auth when browser IS connected
-      const rpcResp = await fetch(`http://127.0.0.1:${httpPort}/rpc`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ command: 'tool', args: { name: 'get_current_page' } })
-      })
-      expect(rpcResp.status).toBe(200)
-
-      // /mcp should still work (no auth required)
-      const mcpResp = await fetch(`http://127.0.0.1:${httpPort}/mcp`, {
-        method: 'POST',
-        headers: {
-          accept: 'application/json, text/event-stream',
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            protocolVersion: '2025-06-18',
-            capabilities: {},
-            clientInfo: { name: 'no-auth-rpc-test', version: '0.0.0' }
-          }
+      try {
+        // /rpc should succeed without auth when browser IS connected
+        const rpcResp = await fetch(`http://127.0.0.1:${httpPort}/rpc`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ command: 'tool', args: { name: 'get_current_page' } })
         })
-      })
-      expect(mcpResp.status).toBe(200)
+        expect(rpcResp.status).toBe(200)
 
-      browser.close()
+        // /mcp should still work (no auth required)
+        const mcpResp = await fetch(`http://127.0.0.1:${httpPort}/mcp`, {
+          method: 'POST',
+          headers: {
+            accept: 'application/json, text/event-stream',
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+              protocolVersion: '2025-06-18',
+              capabilities: {},
+              clientInfo: { name: 'no-auth-rpc-test', version: '0.0.0' }
+            }
+          })
+        })
+        expect(mcpResp.status).toBe(200)
+      } finally {
+        browser.close()
+      }
     } finally {
       await handle.close()
     }
@@ -367,7 +371,7 @@ describe('Discovery PID liveness', () => {
     })
     try {
       const discoveryPath = await getDiscoveryPath()
-      const raw = (await Bun.file(discoveryPath).json()) as { pid: number }
+      const raw = (await Bun.file(discoveryPath).json()) as Pick<DiscoveryInfo, 'pid'>
       expect(raw.pid).toBe(process.pid)
     } finally {
       await handle.close()
@@ -385,10 +389,20 @@ describe('Discovery PID liveness', () => {
     const { readDiscoveryFile } = await import('#mcp/transport/discovery')
     const discoveryPath = await getDiscoveryPath()
 
+    // Snapshot any existing discovery file so we can restore it after the test.
+    let originalContents: string | null = null
+    try {
+      originalContents = await Bun.file(discoveryPath).text()
+    } catch {
+      void 0 // File doesn't exist — nothing to save
+    }
+
     // Write a discovery file with a PID that is guaranteed not to be alive.
-    // PID 1 (init/launchd) is alive on most systems, so use a very high PID
-    // that is extremely unlikely to be in use.
-    const deadPid = 4_000_000
+    // Use PID 1 on macOS (launchd is always alive) won't work; instead use
+    // the theoretical maximum PID (2^22 = 4_194_304) which exceeds the
+    // default pid_max on all major platforms (Linux: 32768–4194304, macOS:
+    // 99999, Windows: ~4M). This guarantees the PID cannot be in use.
+    const deadPid = 4_194_304
     const discoveryDir = dirname(discoveryPath)
     await mkdir(discoveryDir, { recursive: true })
     await Bun.write(
@@ -408,12 +422,16 @@ describe('Discovery PID liveness', () => {
       const result = await readDiscoveryFile()
       expect(result).toBeNull()
     } finally {
-      // Clean up the seeded discovery file
-      try {
-        const { unlink } = await import('node:fs/promises')
-        await unlink(discoveryPath)
-      } catch {
-        void 0 // best-effort cleanup
+      // Restore the original discovery file (or remove our seeded one)
+      if (originalContents !== null) {
+        await Bun.write(discoveryPath, originalContents)
+      } else {
+        try {
+          const { unlink } = await import('node:fs/promises')
+          await unlink(discoveryPath)
+        } catch {
+          void 0
+        }
       }
     }
   })
