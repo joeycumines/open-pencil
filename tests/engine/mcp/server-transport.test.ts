@@ -401,9 +401,12 @@ describe('MCP WebSocket stdio bridge routing', () => {
       // Token is null — the browser app sends its token proactively
       expect(initialRegister.token).toBeNull()
 
+      // Set up the broadcast listener BEFORE registering the browser,
+      // otherwise the message can be lost (ws doesn't buffer messages).
+      const broadcastPromise = readWsJson<{ type: string; token?: string | null }>(clientWs, 3_000)
       browser = await connectMockBrowser(httpPort, graph, authToken)
       // Read the broadcast register notification sent when browser connects
-      const broadcastRegister = await readWsJson<{ type: string; token?: string | null }>(clientWs)
+      const broadcastRegister = await broadcastPromise
       expect(broadcastRegister.type).toBe('register')
       expect(broadcastRegister.token).toBeNull()
     } finally {
@@ -570,12 +573,13 @@ describe('MCP WebSocket stdio bridge routing', () => {
 
 function nodeHttpRequest(
   opts: RequestOptions,
-  bodyJson?: string
+  bodyJson?: string,
+  timeoutMs = 5_000
 ): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error('nodeHttpRequest timed out after 5s'))
-    }, 5_000)
+      req.destroy(new Error(`nodeHttpRequest timed out after ${timeoutMs / 1000}s`))
+    }, timeoutMs)
     const req = httpRequest(opts, (res) => {
       const chunks: Buffer[] = []
       res.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -598,6 +602,13 @@ function nodeHttpRequest(
     req.on('error', (err) => {
       clearTimeout(timeout)
       reject(err)
+    })
+    // Connection-level timeout: destroys the socket if the server stalls
+    // during connection or mid-request. The response-level timeout above
+    // handles slow responses; this handles hung connections (e.g., socket
+    // exists but no one is listening).
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`nodeHttpRequest connection timed out after ${timeoutMs / 1000}s`))
     })
     if (bodyJson) req.write(bodyJson)
     req.end()

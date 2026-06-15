@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { chmod, mkdir, readFile, unlink } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { Server as HttpServer } from 'node:http'
+import { connect } from 'node:net'
 import { dirname } from 'node:path'
 
 import { getRequestListener } from '@hono/node-server'
@@ -353,13 +354,58 @@ async function writeDiscovery(
 
 async function closeServer(srv: HttpServer | null): Promise<void> {
   if (!srv) return
-  await new Promise<void>((resolve) => {
-    srv.close(() => resolve())
-  })
+  // Close all idle keep-alive connections first to prevent server.close()
+  // from hanging indefinitely on persistent HTTP connections.
+  srv.closeIdleConnections()
+  // If any stubborn connections remain after 5 seconds, force-close them
+  // so the server shutdown can complete. Without this, a misbehaving HTTP
+  // client with an active request can block shutdown indefinitely.
+  const forceClose = setTimeout(() => {
+    srv.closeAllConnections()
+    srv.close()
+  }, 5_000).unref()
+  try {
+    await new Promise<void>((resolve) => {
+      srv.close(() => resolve())
+    })
+  } finally {
+    clearTimeout(forceClose)
+  }
 }
 
 async function cleanupSocket(socketPath: string | null): Promise<void> {
   if (!socketPath || !platformHasUnixSockets()) return
+  // Only remove the socket if no other server is listening on it.
+  // A replacement server that won the restart race may have already
+  // bound the same path — unlinking it would kill the replacement.
+  try {
+    const alive = await new Promise<boolean>((resolve) => {
+      let settled = false
+      const finish = (value: boolean) => {
+        if (settled) return
+        settled = true
+        client.destroy()
+        resolve(value)
+      }
+      const client = connect(socketPath)
+        .on('connect', () => finish(true))
+        .on('error', (err: NodeJS.ErrnoException) => {
+          // Only ECONNREFUSED and ENOENT mean "nobody is listening".
+          // All other errors (EACCES, ECONNRESET, etc.) are treated as
+          // "alive" to avoid unlinking a live replacement server's socket.
+          // This mirrors the conservative error handling in testSocketConnection
+          // (packages/mcp/src/transport/discovery.ts).
+          const isDead = err.code === 'ECONNREFUSED' || err.code === 'ENOENT'
+          finish(!isDead)
+        })
+      // Fail fast — we only need to know if something is listening.
+      client.setTimeout(500, () => finish(false))
+    })
+    if (alive) return // Another server owns this socket — leave it alone.
+  } catch {
+    // Connection test itself failed (unlikely) — fall through to unlink.
+    void 0
+  }
   try {
     await unlink(socketPath)
   } catch (e) {
@@ -514,11 +560,33 @@ function buildHandle(
       browserRpc.close()
       await mcpSessions.clear()
 
-      // Close the WebSocket server. ws.WebSocketServer.close() prevents new
-      // connections but waits for existing ones to close naturally. The HTTP
-      // server close (via teardownListeners) will drop any lingering sockets.
+      // Close the WebSocket server. wss.close() prevents new connections
+      // but waits for existing ones to close naturally. If a client is
+      // unresponsive, this can hang shutdown. Terminate lingering clients
+      // after a short grace period to ensure shutdown completes promptly.
       await new Promise<void>((resolve) => {
-        wss.close(() => resolve())
+        let settled = false
+        const done = () => {
+          if (settled) return
+          settled = true
+          resolve()
+        }
+        const graceTimer = setTimeout(() => {
+          // Snapshot clients before iterating — terminate() triggers handleClose
+          // which modifies wss.clients mid-iteration via clients.delete(ws).
+          const snapshot = [...wss.clients]
+          for (const ws of snapshot) {
+            try {
+              ws.terminate()
+            } catch (e) {
+              console.warn('[MCP] Failed to terminate WebSocket client:', e)
+            }
+          }
+        }, 2_000).unref()
+        wss.close(() => {
+          clearTimeout(graceTimer)
+          done()
+        })
       })
 
       await teardownListeners(state)
@@ -561,9 +629,11 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     await tryWriteDiscovery(resolvedSocketPath, actualHttpPort, ctx.authToken, state)
   } catch (err) {
     // Tear down any listeners that started before the failure, then close
-    // the WebSocket server so no resources leak when startServer rejects.
+    // all resources so nothing leaks when startServer rejects.
     await teardownListeners(state).catch(() => undefined)
     ctx.wss.close()
+    ctx.browserRpc.close()
+    ctx.mcpSessions.clear().catch(() => undefined)
     throw err
   }
 

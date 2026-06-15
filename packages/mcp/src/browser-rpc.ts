@@ -111,7 +111,16 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
         },
         timer
       }
+      // Add the waiter BEFORE checking browser state to avoid a lost-wakeup
+      // race: if the browser registers between sendRpc's initial check and
+      // this point, notifyConnectionWaiters() will have already fired and
+      // cleared the set. Without this re-check, the waiter would stall for
+      // APP_WAIT_TIMEOUT even though the browser is connected.
       connectionWaiters.add(waiter)
+      if (browserWs && browserWs.readyState === browserWs.OPEN && browserRegistered) {
+        waiter.resolve(undefined)
+        connectionWaiters.delete(waiter)
+      }
     })
   }
 
@@ -191,6 +200,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
   }
 
   function registerBrowser(ws: WebSocket, token: string | null) {
+    if (bridgeClosed) return
     if (!isAuthorized(token, authToken)) {
       ws.close()
       return

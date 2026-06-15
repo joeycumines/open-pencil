@@ -283,7 +283,12 @@ describe('MCP server with mcpRoot', () => {
 
       expect(result.isError).not.toBe(true)
       const request = browser.requests.find((item) => item.command === 'save_file')
-      expect(request?.args).toEqual({ path: savePath })
+      // The server sends the canonical (realpath-resolved) path to the browser
+      // to prevent TOCTOU races. On macOS, /var -> /private/var.
+      const { realpath } = await import('node:fs/promises')
+      const { dirname, basename } = await import('node:path')
+      const canonicalPath = join(await realpath(dirname(savePath)), basename(savePath))
+      expect(request?.args).toEqual({ path: canonicalPath })
     })
   })
 
@@ -351,6 +356,28 @@ describe('MCP server lifecycle', () => {
     expect(info.isSocket()).toBe(true)
 
     await handle.close()
+    await expect(stat(socketPath)).rejects.toThrow()
+  })
+
+  test('close() removes socket file when no replacement server is listening', async () => {
+    if (!isUnix) return
+    await mkdir(SOCKET_DIR, { recursive: true })
+    const socketPath = testSocketPath()
+
+    // Start the first server on the socket path
+    const handle1 = await startServer({
+      httpPort: 0,
+      withTcp: false,
+      socketPath,
+      authToken: TEST_AUTH_TOKEN,
+      enableEval: false,
+      mcpRoot: null
+    })
+    expect(handle1.socketPath).toBe(socketPath)
+
+    // Close the first server. After it stops listening, the socket file
+    // should be removed (nothing is listening on it).
+    await handle1.close()
     await expect(stat(socketPath)).rejects.toThrow()
   })
 
