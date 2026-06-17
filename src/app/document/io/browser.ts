@@ -1,38 +1,41 @@
 import type { ViewportSize } from '@/app/document/io/types'
 
+type AnimationFrameGlobals = Partial<
+  Pick<typeof globalThis, 'requestAnimationFrame' | 'cancelAnimationFrame'>
+>
+
 export function yieldToUI(timeoutMs = 100): Promise<void> {
-  let timeoutId: ReturnType<typeof setTimeout>
-  let animationFrameId: number
-  const animation = new Promise<void>((resolve) => {
+  const g = globalThis as AnimationFrameGlobals
+  const requestAnimationFrame =
+    g.requestAnimationFrame ??
+    ((cb: (time: number) => void) => {
+      cb(0)
+      return 0
+    })
+  const cancelAnimationFrame = g.cancelAnimationFrame ?? (() => undefined)
+
+  return new Promise<void>((resolve) => {
     let resolved = false
     const settle = () => {
       if (resolved) return
       resolved = true
       resolve()
     }
+
+    // Schedule the fallback timer first so a synchronous rAF callback (e.g.
+    // a runtime polyfill) can clear it before it fires, preventing a dangling
+    // timeout when requestAnimationFrame is unavailable.
+    let animationFrameId = 0
+    const timeoutId = setTimeout(() => {
+      cancelAnimationFrame(animationFrameId)
+      settle()
+    }, timeoutMs)
 
     animationFrameId = requestAnimationFrame(() => {
       clearTimeout(timeoutId)
       settle()
     })
   })
-  const fallback = new Promise<void>((resolve) => {
-    let resolved = false
-    const settle = () => {
-      if (resolved) return
-      resolved = true
-      resolve()
-    }
-
-    timeoutId = setTimeout(() => {
-      cancelAnimationFrame(animationFrameId)
-      settle()
-    }, timeoutMs)
-  })
-  // Race so the UI continues even if requestAnimationFrame is throttled or
-  // suspended while the window is hidden. Whichever callback fires first
-  // cancels the other to avoid leaving dangling timers or rAF callbacks.
-  return Promise.race([animation, fallback])
 }
 
 type ViewportEditor = {
