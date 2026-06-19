@@ -11,7 +11,6 @@ import {
 } from '@/app/collab/session'
 import { DEFAULT_COLLAB_STATE, type CollabState, type RemotePeer } from '@/app/collab/types'
 import { applyYnodeToGraph, createYjsGraphSync, stableIdForNode } from '@/app/collab/yjs-sync'
-import type { ReconcileRootFn } from '@/app/collab/yjs-sync'
 import type { EditorStore } from '@/app/editor/active-store'
 
 export { COLLAB_KEY, useCollabInjected } from '@/app/collab/context'
@@ -101,7 +100,7 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     applyYjsToGraph,
     syncNodeToYjs,
     resetFollow,
-    reconcileRemoteRoot: reconcileRemoteRoot as ReconcileRootFn
+    reconcileRemoteRoot
   })
 
   function connect(roomId: string): void {

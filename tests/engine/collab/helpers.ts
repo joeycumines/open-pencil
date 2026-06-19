@@ -11,53 +11,66 @@ import {
   yNodeToProps,
   type ReconcileRootFn
 } from '@/app/collab/yjs-sync'
-import type { EditorStore } from '@/app/editor/active-store'
 
-export type TestStore = {
+/**
+ * Minimal store shape required by the collab sync code.
+ * The real EditorStore has many more properties, but the collab
+ * binding only accesses graph, requestRender, and onEditorEvent.
+ */
+export interface TestStore {
   graph: SceneGraph
   requestRender: () => void
-} & EditorStore
+  onEditorEvent: <K extends keyof EditorEvents>(event: K, handler: EditorEvents[K]) => () => void
+}
+
+/**
+ * Bridge editor-event subscriptions to the SceneGraph emitter.
+ *
+ * TypeScript cannot narrow a generic type parameter (`K`) inside a switch
+ * case, so `handler` is still typed as `EditorEvents[K]` — not the specific
+ * overload for each case.  The `as` casts below adapt the generic handler
+ * to the concrete SceneGraphEventHandlers callback shapes.  These casts are
+ * safe because `EditorEvents` extends `SceneGraphEvents`, so the handler
+ * types are structurally identical.
+ */
+function createNodeEventBridge(graph: SceneGraph) {
+  return <K extends keyof EditorEvents>(event: K, handler: EditorEvents[K]): (() => void) => {
+    switch (event) {
+      case 'node:created':
+        return graph.onNodeEvents({ created: handler as (node: SceneNode) => void })
+      case 'node:updated':
+        return graph.onNodeEvents({
+          updated: handler as (id: string, changes: Partial<SceneNode>) => void
+        })
+      case 'node:deleted':
+        return graph.onNodeEvents({ deleted: handler as (id: string) => void })
+      case 'node:reparented':
+        return graph.onNodeEvents({
+          reparented: handler as (
+            nodeId: string,
+            oldParentId: string | null,
+            newParentId: string
+          ) => void
+        })
+      case 'node:reordered':
+        return graph.onNodeEvents({
+          reordered: handler as (nodeId: string, parentId: string, index: number) => void
+        })
+      default:
+        return () => undefined
+    }
+  }
+}
 
 export function createTestStore(graph?: SceneGraph): TestStore {
   const g = graph ?? new SceneGraph()
-  // Bridge editor-event subscriptions to the SceneGraph emitter so tests can
-  // exercise bindCollabGraphEvents (which subscribes via store.onEditorEvent)
-  // against real graph mutations. Only graph-structure events are routed;
-  // other editor events are unused by the collab binding and resolve to a
-  // no-op unbind. This is additive: tests that never call bindCollabGraphEvents
-  // are unaffected.
   return {
     graph: g,
     requestRender: () => {
       // no-op render stub for collab tests
     },
-    onEditorEvent: <K extends keyof EditorEvents>(event: K, handler: EditorEvents[K]) => {
-      switch (event) {
-        case 'node:created':
-          return g.onNodeEvents({ created: handler as (node: SceneNode) => void })
-        case 'node:updated':
-          return g.onNodeEvents({
-            updated: handler as (id: string, changes: Partial<SceneNode>) => void
-          })
-        case 'node:deleted':
-          return g.onNodeEvents({ deleted: handler as (id: string) => void })
-        case 'node:reparented':
-          return g.onNodeEvents({
-            reparented: handler as (
-              nodeId: string,
-              oldParentId: string,
-              newParentId: string
-            ) => void
-          })
-        case 'node:reordered':
-          return g.onNodeEvents({
-            reordered: handler as (nodeId: string, parentId: string, index: number) => void
-          })
-        default:
-          return () => undefined
-      }
-    }
-  } as TestStore
+    onEditorEvent: createNodeEventBridge(g)
+  }
 }
 
 export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
@@ -75,7 +88,7 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
   })
 
   function reconcileRoot(
-    targetStore: EditorStore,
+    targetStore: TestStore,
     remoteRootStableId: string,
     hostRootYnode: Y.Map<unknown>
   ): void {

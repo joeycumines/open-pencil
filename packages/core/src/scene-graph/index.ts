@@ -16,6 +16,8 @@ import * as Instances from './instances'
 import { cloneTree as cloneTreeImpl } from './node/clone'
 import { CONTAINER_TYPES, createDefaultNode, createDefaultSource } from './node/defaults'
 import { deleteNode as deleteNodeImpl } from './node/delete'
+import { reorderChild as reorderChildImpl } from './node/reorder'
+import { reparentNode as reparentNodeImpl } from './node/reparent'
 import { restoreNodeInPlace } from './node/restore'
 import {
   countDescendants as countNodeDescendants,
@@ -55,6 +57,45 @@ import type {
 } from './types'
 
 export { cloneVectorNetwork, normalizeVectorNetwork, validateVectorNetwork } from './vector-network'
+
+const LAYOUT_AFFECTING_KEYS: ReadonlySet<string> = new Set([
+  'x',
+  'y',
+  'width',
+  'height',
+  'rotation',
+  'flipX',
+  'flipY',
+  'layoutMode',
+  'layoutDirection',
+  'itemSpacing',
+  'counterAxisSpacing',
+  'paddingLeft',
+  'paddingRight',
+  'paddingTop',
+  'paddingBottom',
+  'primaryAxisAlign',
+  'counterAxisAlign',
+  'counterAxisAlignContent',
+  'layoutWrap',
+  'primaryAxisSizing',
+  'counterAxisSizing',
+  'layoutPositioning',
+  'layoutGrow',
+  'layoutAlignSelf',
+  'strokesIncludedInLayout',
+  'horizontalConstraint',
+  'verticalConstraint',
+  'gridTemplateColumns',
+  'gridTemplateRows',
+  'gridColumnGap',
+  'gridRowGap',
+  'gridPosition',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight'
+])
 
 export class SceneGraph {
   readonly identity: SceneGraphIdentity
@@ -383,44 +424,7 @@ export class SceneGraph {
 
   static TEXT_PICTURE_KEYS: ReadonlySet<string> = TEXT_PICTURE_KEYS
 
-  static LAYOUT_AFFECTING_KEYS: ReadonlySet<string> = new Set([
-    'x',
-    'y',
-    'width',
-    'height',
-    'rotation',
-    'flipX',
-    'flipY',
-    'layoutMode',
-    'layoutDirection',
-    'itemSpacing',
-    'counterAxisSpacing',
-    'paddingLeft',
-    'paddingRight',
-    'paddingTop',
-    'paddingBottom',
-    'primaryAxisAlign',
-    'counterAxisAlign',
-    'counterAxisAlignContent',
-    'layoutWrap',
-    'primaryAxisSizing',
-    'counterAxisSizing',
-    'layoutPositioning',
-    'layoutGrow',
-    'layoutAlignSelf',
-    'strokesIncludedInLayout',
-    'horizontalConstraint',
-    'verticalConstraint',
-    'gridTemplateColumns',
-    'gridTemplateRows',
-    'gridColumnGap',
-    'gridRowGap',
-    'gridPosition',
-    'minWidth',
-    'maxWidth',
-    'minHeight',
-    'maxHeight'
-  ])
+  static LAYOUT_AFFECTING_KEYS: ReadonlySet<string> = LAYOUT_AFFECTING_KEYS
 
   runPreviewUpdates(fn: () => void): void {
     this.previewMutationDepth++
@@ -486,69 +490,11 @@ export class SceneGraph {
   }
 
   reparentNode(nodeId: string, newParentId: string): void {
-    const node = this.nodes.get(nodeId)
-    if (!node || nodeId === this.rootId) return
-    if (this.isDescendant(newParentId, nodeId)) return
-
-    const oldParent = node.parentId ? this.nodes.get(node.parentId) : undefined
-    const newParent = this.nodes.get(newParentId)
-    if (!newParent) return
-    if (node.parentId === newParentId) return
-
-    const oldParentId = node.parentId
-    this.absPosCache.clear()
-
-    // Convert absolute position
-    const absPos = this.getAbsolutePosition(nodeId)
-    const newParentNode = this.nodes.get(newParentId)
-    const newParentAbs =
-      newParentId === this.rootId || newParentNode?.type === 'CANVAS'
-        ? { x: 0, y: 0 }
-        : this.getAbsolutePosition(newParentId)
-
-    // Remove from old parent
-    if (oldParent) {
-      oldParent.childIds = oldParent.childIds.filter((cid) => cid !== nodeId)
-    }
-
-    // Add to new parent
-    node.parentId = newParentId
-    newParent.childIds.push(nodeId)
-
-    // Adjust position so node stays in same visual place
-    node.x = absPos.x - newParentAbs.x
-    node.y = absPos.y - newParentAbs.y
-
-    this.emitter.emit('node:reparented', nodeId, oldParentId, newParentId)
+    reparentNodeImpl(this, nodeId, newParentId)
   }
 
   reorderChild(nodeId: string, parentId: string, insertIndex: number): void {
-    const node = this.nodes.get(nodeId)
-    if (!node) return
-
-    const oldParent = node.parentId ? this.nodes.get(node.parentId) : undefined
-    const newParent = this.nodes.get(parentId)
-    if (!newParent) return
-
-    // Remove from old parent
-    if (oldParent) {
-      oldParent.childIds = oldParent.childIds.filter((cid) => cid !== nodeId)
-    }
-
-    // If same parent, adjust index since we removed the item
-    let idx = insertIndex
-    if (
-      oldParent === newParent &&
-      idx > (!oldParent.childIds.includes(nodeId) ? idx : oldParent.childIds.length)
-    ) {
-      // Already removed above, no adjustment needed
-    }
-
-    node.parentId = parentId
-    idx = Math.min(idx, newParent.childIds.length)
-    newParent.childIds.splice(idx, 0, nodeId)
-
-    this.emitter.emit('node:reordered', nodeId, parentId, idx)
+    reorderChildImpl(this, nodeId, parentId, insertIndex)
   }
 
   insertChildAt(childId: string, parentId: string, index: number): void {

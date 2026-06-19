@@ -304,7 +304,7 @@ function buildCanvasEntries(
   for (let p = 0; p < pages.length; p++) {
     const page = pages[p]
     const canvasGuid = (() => {
-      if (!page.source.id) return { sessionID: 0, localID: localIdCounter.value++ }
+      if (page.source.id === null) return { sessionID: 0, localID: localIdCounter.value++ }
 
       const importedGuid = stringToGuid(page.source.id)
       const key = `${importedGuid.sessionID}:${importedGuid.localID}`

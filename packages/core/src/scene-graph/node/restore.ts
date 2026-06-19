@@ -31,6 +31,15 @@ import type { NodeType, SceneNode } from '#core/scene-graph/types'
  * The instance index is re-registered after `updateNode` to guard against the
  * edge case where the index entry was cleared by a prior operation but the
  * node remained in the graph. `registerInstanceIndex` is idempotent (`Set.add`).
+ *
+ * **Coordinate semantics:** Callers are responsible for providing x/y
+ * overrides that are correct for `parentId`. This function does NOT translate
+ * coordinates when the parent changes — overrides are applied verbatim. To
+ * preserve visual position across a parent change, use `reparentNode` (which
+ * translates coordinates) or compute the new x/y in the caller (as
+ * `container-wrap.ts` does). All current callers (snapshot restore, .fig
+ * import, undo/redo) already provide parent-relative x/y that is consistent
+ * with the target parent.
  */
 export function restoreNodeInPlace(
   graph: SceneGraph,

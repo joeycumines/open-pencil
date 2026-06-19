@@ -195,10 +195,22 @@ export function createEditor(options?: EditorOptions) {
   ): Map<string, string> {
     const translation = new Map<string, string>()
     translation.set(oldGraph.rootId, newGraph.rootId)
+    // Build a stable-id → runtime-id index from the old graph so each lookup
+    // is O(1) instead of O(n) via stableIdToRuntimeId's linear scan.
+    // Preserve first-match semantics to match stableIdToRuntimeId (which
+    // returns the first node with a matching source.id). Duplicate stable
+    // ids should never occur (the identity layer guarantees uniqueness), but
+    // we keep the same behavior for defense-in-depth.
+    const oldStableToRuntime = new Map<string, string>()
+    for (const node of oldGraph.nodes.values()) {
+      if (node.source.id !== null && !oldStableToRuntime.has(node.source.id)) {
+        oldStableToRuntime.set(node.source.id, node.id)
+      }
+    }
     for (const node of newGraph.nodes.values()) {
       const sourceId = node.source.id
-      if (sourceId == null) continue
-      const oldRuntimeId = oldGraph.stableIdToRuntimeId(sourceId)
+      if (sourceId === null) continue
+      const oldRuntimeId = oldStableToRuntime.get(sourceId)
       if (oldRuntimeId !== undefined && oldRuntimeId !== node.id) {
         translation.set(oldRuntimeId, node.id)
       }
