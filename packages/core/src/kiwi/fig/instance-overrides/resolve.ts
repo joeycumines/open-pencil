@@ -3,13 +3,22 @@ import { guidToString } from '#core/kiwi/fig/node-change/convert'
 import type { SceneNode } from '#core/scene-graph'
 import { copyStrokes } from '#core/scene-graph/copy'
 
+import {
+  clearInstanceOverrideCaches,
+  getCandidateCache,
+  getComponentFindCache,
+  getSiblingGroupCache,
+  getSiblingIndexCache,
+  setCandidateCache,
+  setComponentFindCache,
+  setSiblingGroupCache,
+  setSiblingIndexCache
+} from './cache'
 import type { InstanceNodeChange, OverrideContext } from './types'
 
+export { clearInstanceOverrideCaches }
+
 const MAX_CHAIN_DEPTH = 20
-const siblingIndexCache = new WeakMap<OverrideContext, Map<string, number | null>>()
-const siblingGroupCache = new WeakMap<OverrideContext, Map<string, string[]>>()
-const candidateCache = new WeakMap<OverrideContext, Map<string, string[]>>()
-const componentFindCache = new WeakMap<OverrideContext, Map<string, string | null>>()
 
 /**
  * Pre-compute componentId root for every node.
@@ -112,18 +121,18 @@ function buildSiblingGroups(ctx: OverrideContext): Map<string, string[]> {
 }
 
 function getSiblingGroups(ctx: OverrideContext): Map<string, string[]> {
-  const cached = siblingGroupCache.get(ctx)
+  const cached = getSiblingGroupCache(ctx)
   if (cached) return cached
   const groups = buildSiblingGroups(ctx)
-  siblingGroupCache.set(ctx, groups)
+  setSiblingGroupCache(ctx, groups)
   return groups
 }
 
 function sourceSiblingIndex(ctx: OverrideContext, sourceId: string): number | null {
-  let cache = siblingIndexCache.get(ctx)
+  let cache = getSiblingIndexCache(ctx)
   if (!cache) {
     cache = new Map()
-    siblingIndexCache.set(ctx, cache)
+    setSiblingIndexCache(ctx, cache)
   }
   if (cache.has(sourceId)) return cache.get(sourceId) ?? null
 
@@ -175,10 +184,10 @@ function findNodeBySourceSiblingIndex(
   if (index == null) return null
 
   const targetRoot = ctx.preComputedRoot.get(componentId) ?? getComponentRoot(ctx, componentId)
-  let cache = candidateCache.get(ctx)
+  let cache = getCandidateCache(ctx)
   if (!cache) {
     cache = new Map()
-    candidateCache.set(ctx, cache)
+    setCandidateCache(ctx, cache)
   }
   const cacheKey = `${parentId}\0${targetRoot}`
   let candidates = cache.get(cacheKey)
@@ -210,10 +219,10 @@ export function findNodeByComponentId(
   parentId: string,
   componentId: string
 ): string | null {
-  let cache = componentFindCache.get(ctx)
+  let cache = getComponentFindCache(ctx)
   if (!cache) {
     cache = new Map()
-    componentFindCache.set(ctx, cache)
+    setComponentFindCache(ctx, cache)
   }
   const cacheKey = `${parentId}\0${componentId}`
   if (cache.has(cacheKey)) return cache.get(cacheKey) ?? null
@@ -366,10 +375,14 @@ export function repopulateInstance(ctx: OverrideContext, nodeId: string, compId:
   const node = ctx.graph.getNode(nodeId)
   if (node?.type !== 'INSTANCE') return
 
+  clearInstanceOverrideCaches(ctx)
+
   const previousStrokes = collectStyledStrokeDescendants(ctx, nodeId)
   const rootCompId = node.componentId ? getComponentRoot(ctx, node.componentId) : undefined
   const rootComp = rootCompId ? ctx.graph.getNode(rootCompId) : undefined
-  for (const childId of Array.from(node.childIds)) ctx.graph.deleteNode(childId)
+  for (const childId of Array.from(node.childIds)) {
+    ctx.graph.deleteNode(childId, { permanent: false })
+  }
   const comp = ctx.graph.getNode(compId)
   const updates: Partial<SceneNode> = { componentId: compId }
   if (comp?.name && rootComp?.name && node.name === rootComp.name) {
@@ -382,6 +395,5 @@ export function repopulateInstance(ctx: OverrideContext, nodeId: string, compId:
   }
   ctx.swappedInstances.add(nodeId)
   ctx.componentIdRoot.clear()
-  candidateCache.delete(ctx)
-  componentFindCache.delete(ctx)
+  clearInstanceOverrideCaches(ctx)
 }

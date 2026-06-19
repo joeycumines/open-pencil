@@ -77,7 +77,9 @@ export function propagateOverridesTransitively(
 
       syncNodeProps(graph, source, node, protections)
       if (source.childIds.length !== node.childIds.length) {
-        for (const childId of Array.from(node.childIds)) graph.deleteNode(childId)
+        for (const childId of Array.from(node.childIds)) {
+          graph.deleteNode(childId, { permanent: false })
+        }
         if (source.childIds.length > 0) graph.populateInstanceChildren(node.id, sourceId)
       } else if (source.childIds.length > 0 && node.childIds.length > 0) {
         syncChildrenDeep(graph, sourceId, node.id, swappedInstances, skip, protections)

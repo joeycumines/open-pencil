@@ -358,7 +358,7 @@ function applyRawFigmaNodeFields(
     // original opacity/color.a split (e.g. opacity=0 for invisible strokes).
     // The scene model may lose this distinction for instance children whose
     // strokes are resolved from component overrides. Prefer the raw data.
-    if ((key === 'fillPaints' || key === 'strokePaints') && node.source.id) {
+    if ((key === 'fillPaints' || key === 'strokePaints') && node.source.format === 'fig') {
       let paints = materialized[key]
       // Convert colorVar.assetRef references to guid references so that
       // resolveAliasId can resolve them on reimport. Raw paints from the
@@ -376,7 +376,7 @@ function applyRawFigmaNodeFields(
     // Also convert colorVar.assetRef in raw effects (e.g. shadow color variables)
     if (
       key === 'effects' &&
-      node.source.id &&
+      node.source.format === 'fig' &&
       context.assetRefToVarGuid &&
       context.assetRefToVarGuid.size > 0
     ) {
@@ -384,11 +384,11 @@ function applyRawFigmaNodeFields(
       nc[key] = converted
       continue
     }
-    if (key === 'derivedTextData' && node.source.id) {
+    if (key === 'derivedTextData' && node.source.format === 'fig') {
       nc.derivedTextData = materialized.derivedTextData
       continue
     }
-    if (key === 'textDecorationFillPaints' && node.source.id) {
+    if (key === 'textDecorationFillPaints' && node.source.format === 'fig') {
       nc.textDecorationFillPaints = materialized.textDecorationFillPaints
       continue
     }
@@ -644,7 +644,8 @@ function applyNodeVisualProps(
   if (node.verticalConstraint !== 'MIN') nc.verticalConstraint = node.verticalConstraint
   if (node.strokeCap !== 'NONE') nc.strokeCap = node.strokeCap
   if (node.strokeJoin !== 'MITER') nc.strokeJoin = node.strokeJoin
-  if (!node.source.id && node.strokeMiterLimit !== 28.96) nc.miterLimit = node.strokeMiterLimit
+  if (node.source.format !== 'fig' && node.strokeMiterLimit !== 28.96)
+    nc.miterLimit = node.strokeMiterLimit
   if (node.dashPattern.length > 0) nc.dashPattern = node.dashPattern
   if (node.arcData) {
     nc.arcData = {

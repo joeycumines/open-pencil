@@ -244,9 +244,10 @@ function serializeCornerRadii(node: SceneNode, nc: KiwiNodeChange): void {
     // For imported nodes, preserve the original independentCorners flag from
     // the raw Figma data. Figma may emit per-corner radii without setting the
     // independent flag (preserve rectangleCornerRadiiIndependent).
-    const rawIndependent = node.source.id
-      ? (node.source.fig.rawNodeFields as JsonObject | undefined)?.rectangleCornerRadiiIndependent
-      : undefined
+    const rawIndependent =
+      node.source.format === 'fig'
+        ? (node.source.fig.rawNodeFields as JsonObject | undefined)?.rectangleCornerRadiiIndependent
+        : undefined
     nc.rectangleCornerRadiiIndependent =
       typeof rawIndependent === 'boolean' ? rawIndependent : node.independentCorners
     nc.rectangleTopLeftCornerRadius = node.topLeftRadius
@@ -263,7 +264,7 @@ function resolveTextAutoResize(node: SceneNode, graph: SceneGraph): SceneNode['t
   // For nodes imported from .fig files, preserve the original textAutoResize
   // value. Forcing 'HEIGHT' for fixed-height text inside auto-layout causes
   // layout drift on roundtrip.
-  if (node.source.id) return node.textAutoResize
+  if (node.source.format === 'fig') return node.textAutoResize
   const parent = node.parentId ? graph.getNode(node.parentId) : undefined
   if (
     parent &&
@@ -351,7 +352,8 @@ function normalizeStackCounterAlign(value: string | undefined): string | undefin
 }
 
 function serializeLayoutProps(node: SceneNode, nc: KiwiNodeChange): void {
-  if (!node.source.id) upsertPluginData(node, LAYOUT_DIRECTION_PLUGIN_KEY, node.layoutDirection)
+  if (node.source.format !== 'fig')
+    upsertPluginData(node, LAYOUT_DIRECTION_PLUGIN_KEY, node.layoutDirection)
   const figLayout = node.source.fig.layout
   if (figLayout) {
     nc.stackMode = normalizeStackMode(figLayout.stackMode)

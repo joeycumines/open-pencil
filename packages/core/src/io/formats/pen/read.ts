@@ -386,7 +386,7 @@ function applyDescendantOverrides(
     if (clone) {
       if (overrideData.children) {
         const toDelete = clone.childIds.slice()
-        for (const childId of toDelete) graph.deleteNode(childId)
+        for (const childId of toDelete) graph.deleteNode(childId, { permanent: false })
         for (const child of overrideData.children) {
           createSceneNode(child, clone.id, graph, ctx, componentIds, penSources)
         }
@@ -495,7 +495,7 @@ export function parsePenFile(json: string): SceneGraph {
   const graph = new SceneGraph()
 
   for (const page of graph.getPages(true)) {
-    graph.deleteNode(page.id)
+    graph.deleteNode(page.id, { permanent: false })
   }
 
   const ctx = buildVarContext(graph, doc.variables ?? {}, doc.themes ?? {})
@@ -516,6 +516,9 @@ export function parsePenFile(json: string): SceneGraph {
   resolveThemeVariables(doc.children, graph, ctx)
   fixInstanceWidths(graph)
   fixTextWidths(graph)
+
+  graph.migrateLegacySourceIds()
+  graph.recomputeReservedRuntimeIds()
 
   if (graph.getPages(true).length === 0) {
     graph.addPage('Page 1')

@@ -13,7 +13,9 @@ export function recloneChildren(
   const srcChild = graph.getNode(srcChildId)
   if (!srcChild) return
 
-  for (const childId of Array.from(tgtNode.childIds)) graph.deleteNode(childId)
+  for (const childId of Array.from(tgtNode.childIds)) {
+    graph.deleteNode(childId, { permanent: false })
+  }
   graph.updateNode(tgtNode.id, { name: srcChild.name, componentId: srcChild.componentId })
   syncNodeProps(graph, srcChild, tgtNode, protections)
   if (srcChild.childIds.length > 0) graph.populateInstanceChildren(tgtNode.id, srcChildId)

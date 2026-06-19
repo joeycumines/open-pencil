@@ -104,6 +104,40 @@ async function renderFigThumbnail(
   )
 }
 
+function parseGuidOrNull(value: string | null | undefined): GUID | null {
+  if (typeof value !== 'string' || !/^\d+:\d+$/.test(value)) return null
+  return stringToGuid(value)
+}
+
+function mintExportGuid(localIdCounter: { value: number }, assignedGuidValues: Set<string>): GUID {
+  for (;;) {
+    const guid = { sessionID: 0, localID: localIdCounter.value++ }
+    const key = `${guid.sessionID}:${guid.localID}`
+    if (!assignedGuidValues.has(key)) {
+      assignedGuidValues.add(key)
+      return guid
+    }
+  }
+}
+
+function reuseOrMintGuid(
+  sourceId: string | null | undefined,
+  localIdCounter: { value: number },
+  assignedGuidValues: Set<string>
+): GUID {
+  if (sourceId) {
+    const imported = parseGuidOrNull(sourceId)
+    if (imported) {
+      const key = `${imported.sessionID}:${imported.localID}`
+      if (!assignedGuidValues.has(key)) {
+        assignedGuidValues.add(key)
+        return imported
+      }
+    }
+  }
+  return mintExportGuid(localIdCounter, assignedGuidValues)
+}
+
 function assignVariableGuids(
   graph: SceneGraph,
   localIdCounter: { value: number },
@@ -112,18 +146,16 @@ function assignVariableGuids(
   assignedGuidValues: Set<string>
 ): void {
   for (const [colId, col] of graph.variableCollections) {
-    const colGuid = { sessionID: 0, localID: localIdCounter.value++ }
+    const colGuid = reuseOrMintGuid(col.source?.id, localIdCounter, assignedGuidValues)
     varIdToGuid.set(colId, colGuid)
-    assignedGuidValues.add(`${colGuid.sessionID}:${colGuid.localID}`)
     for (const mode of col.modes) {
-      const modeGuid = { sessionID: 0, localID: localIdCounter.value++ }
+      const modeGuid = reuseOrMintGuid(mode.source?.id, localIdCounter, assignedGuidValues)
       modeIdToGuid.set(mode.modeId, modeGuid)
-      assignedGuidValues.add(`${modeGuid.sessionID}:${modeGuid.localID}`)
     }
     for (const varId of col.variableIds) {
-      const varGuid = { sessionID: 0, localID: localIdCounter.value++ }
+      const variable = graph.variables.get(varId)
+      const varGuid = reuseOrMintGuid(variable?.source?.id, localIdCounter, assignedGuidValues)
       varIdToGuid.set(varId, varGuid)
-      assignedGuidValues.add(`${varGuid.sessionID}:${varGuid.localID}`)
     }
   }
 }
@@ -212,8 +244,35 @@ function appendVariablesForCollection(
   }
 }
 
+/**
+ * Scan all imported node source.ids to find the max sessionID:0 and
+ * sessionID:1 localID values, then advance the counter past them.
+ * This guarantees the counter is past every imported GUID before any
+ * canvas, variable, or node claims a new counter-based GUID — preventing
+ * collisions.
+ */
+function advanceCounterPastImportedGuids(
+  graph: SceneGraph,
+  localIdCounter: { value: number }
+): void {
+  let maxLocalId0 = localIdCounter.value - 1
+  let maxLocalId1 = localIdCounter.value - 1
+  for (const node of graph.nodes.values()) {
+    if (node.source.format === 'fig' && node.source.id) {
+      const g = stringToGuid(node.source.id)
+      if (g.sessionID === 0 && g.localID > maxLocalId0) {
+        maxLocalId0 = g.localID
+      }
+      if (g.sessionID === 1 && g.localID > maxLocalId1) {
+        maxLocalId1 = g.localID
+      }
+    }
+  }
+  localIdCounter.value = Math.max(localIdCounter.value, maxLocalId0 + 1, maxLocalId1 + 1)
+}
+
 function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange): void {
-  if (!page.source.id) return
+  if (page.source.format !== 'fig') return
   if (!('pageType' in page.source.fig.rawNodeFields)) delete canvasNc.pageType
   if ('backgroundColor' in page.source.fig.rawNodeFields) {
     canvasNc.backgroundColor = structuredClone(page.source.fig.rawNodeFields.backgroundColor)
@@ -256,7 +315,7 @@ function buildCanvasEntries(
     })()
     // Advance counter past any source.id-derived GUID to prevent collisions
     // with subsequently generated variable/collection GUIDs.
-    if (page.source.id && canvasGuid.sessionID === 0) {
+    if (page.source.format === 'fig' && canvasGuid.sessionID === 0) {
       localIdCounter.value = Math.max(localIdCounter.value, canvasGuid.localID + 1)
     }
     nodeIdToGuid.set(page.id, canvasGuid)
@@ -351,20 +410,7 @@ export async function exportFigFile(
   // max sessionID:0 and sessionID:1 localID values. This guarantees the
   // counter is past every imported GUID before any canvas, variable, or
   // node claims a new counter-based GUID — preventing collisions.
-  let maxLocalId0 = localIdCounter.value - 1
-  let maxLocalId1 = localIdCounter.value - 1
-  for (const node of graph.nodes.values()) {
-    if (node.source.id) {
-      const g = stringToGuid(node.source.id)
-      if (g.sessionID === 0 && g.localID > maxLocalId0) {
-        maxLocalId0 = g.localID
-      }
-      if (g.sessionID === 1 && g.localID > maxLocalId1) {
-        maxLocalId1 = g.localID
-      }
-    }
-  }
-  localIdCounter.value = Math.max(localIdCounter.value, maxLocalId0 + 1, maxLocalId1 + 1)
+  advanceCounterPastImportedGuids(graph, localIdCounter)
 
   const { canvasEntries, internalCanvasGuid } = buildCanvasEntries(
     graph,

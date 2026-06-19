@@ -2,6 +2,13 @@ import { isNotNil } from 'es-toolkit/predicate'
 
 import { BLACK } from '#core/constants'
 import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '#core/kiwi/fig/codec'
+import { remapNodeChangeReferences } from '#core/kiwi/fig/guid-remap'
+import {
+  collectImportedRuntimeIds,
+  findDocumentId,
+  mintFigmaSourceMetadata,
+  stringToGuid
+} from '#core/kiwi/fig/identity'
 import { populateAndApplyOverrides } from '#core/kiwi/fig/instance-overrides'
 import type { InstanceNodeChange } from '#core/kiwi/fig/instance-overrides'
 import { setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
@@ -13,8 +20,8 @@ import {
   VARIABLE_BINDING_FIELDS_INVERSE
 } from '#core/kiwi/fig/node-change/convert'
 import { applyStyleRefsToFields } from '#core/kiwi/fig/node-change/style-refs'
-import { SceneGraph } from '#core/scene-graph'
-import type { VariableType, VariableValue } from '#core/scene-graph'
+import { createDefaultSource, SceneGraph } from '#core/scene-graph'
+import type { FigImportDiagnostics, Variable, VariableType, VariableValue } from '#core/scene-graph'
 
 type AssetRef = { key: string; version?: string }
 type AliasRef = { guid?: GUID; assetRef?: AssetRef }
@@ -130,26 +137,83 @@ interface ChangeMaps {
   childrenMap: Map<string, string[]>
 }
 
-function buildChangeMaps(nodeChanges: NodeChange[]): ChangeMaps {
+function buildChangeMaps(
+  graph: SceneGraph,
+  nodeChanges: NodeChange[],
+  importedRuntimeIds: ReadonlySet<string>
+): ChangeMaps & { diagnostics: FigImportDiagnostics } {
   const changeMap = new Map<string, NodeChange>()
   const parentMap = new Map<string, string>()
   const childrenMap = new Map<string, string[]>()
+  const diagnostics: FigImportDiagnostics = {
+    duplicateGuids: [],
+    missingGuidCount: 0,
+    reassignedGuids: []
+  }
+  const allocatedInThisImport = new Set<string>(importedRuntimeIds)
+  // Tracks GUID reassignments (old GUID string → synthetic GUID string).
+  // Updated each time a duplicate is found. Used to remap references in
+  // subsequent NodeChanges so children/instances/variables follow their
+  // remediated parent/component/collection.
+  const guidRemap = new Map<string, string>()
 
-  for (const nc of nodeChanges) {
-    if (!nc.guid) continue
-    if (nc.phase === 'REMOVED') continue
+  const reserveSyntheticGuid = (): string => {
+    return graph.generateImporterRemediationId(allocatedInThisImport)
+  }
+
+  for (const rawNc of nodeChanges) {
+    let nc = rawNc
+
+    if (!nc.guid) {
+      diagnostics.missingGuidCount++
+      const synthetic = reserveSyntheticGuid()
+      diagnostics.reassignedGuids.push({ original: null, assigned: synthetic })
+      allocatedInThisImport.add(synthetic)
+      nc = { ...nc, guid: stringToGuid(synthetic) }
+    }
+
+    if (!nc.guid || nc.phase === 'REMOVED') continue
+
     const id = guidToString(nc.guid)
+
+    if (changeMap.has(id)) {
+      const dup = diagnostics.duplicateGuids.find((d) => d.guid === id)
+      if (dup) dup.count++
+      else diagnostics.duplicateGuids.push({ guid: id, count: 2 })
+
+      const synthetic = reserveSyntheticGuid()
+      diagnostics.reassignedGuids.push({ original: id, assigned: synthetic })
+      allocatedInThisImport.add(synthetic)
+      guidRemap.set(id, synthetic)
+      const reassignedNc = { ...nc, guid: stringToGuid(synthetic) }
+      const syntheticId = guidToString(reassignedNc.guid)
+      // Remap references within the remediated node itself (it may
+      // reference earlier remediations).
+      const remappedNc = remapNodeChangeReferences(reassignedNc, guidRemap)
+      changeMap.set(syntheticId, remappedNc)
+
+      if (remappedNc.parentIndex?.guid) {
+        const pid = guidToString(remappedNc.parentIndex.guid)
+        parentMap.set(syntheticId, pid)
+        const siblings = childrenMap.get(pid) ?? []
+        siblings.push(syntheticId)
+        childrenMap.set(pid, siblings)
+      }
+      continue
+    }
+
+    // Remap references for non-duplicate nodes too — they may
+    // reference a GUID that was remediated earlier in this pass.
+    nc = remapNodeChangeReferences(nc, guidRemap)
+
     changeMap.set(id, nc)
 
     if (nc.parentIndex?.guid) {
       const pid = guidToString(nc.parentIndex.guid)
       parentMap.set(id, pid)
-      let siblings = childrenMap.get(pid)
-      if (!siblings) {
-        siblings = []
-        childrenMap.set(pid, siblings)
-      }
+      const siblings = childrenMap.get(pid) ?? []
       siblings.push(id)
+      childrenMap.set(pid, siblings)
     }
   }
 
@@ -158,7 +222,7 @@ function buildChangeMaps(nodeChanges: NodeChange[]): ChangeMaps {
     if (parentNc) sortChildren(children, parentNc, changeMap)
   }
 
-  return { changeMap, parentMap, childrenMap }
+  return { changeMap, parentMap, childrenMap, diagnostics }
 }
 
 function resolveVariableType(resolvedType: string | undefined): VariableType {
@@ -201,18 +265,27 @@ function importCollections(changeMap: Map<string, NodeChange>, graph: SceneGraph
   for (const [id, nc] of changeMap) {
     if (nc.type !== 'VARIABLE_SET') continue
 
+    const orderKey = nc.parentIndex?.position ?? null
     const modes = (nc.variableSetModes ?? []).map((m) => {
       const modeId = guidToString(m.id)
-      return { modeId, name: m.name }
+      return {
+        modeId,
+        name: m.name,
+        source: mintFigmaSourceMetadata(modeId, orderKey)
+      }
     })
-    if (modes.length === 0) modes.push({ modeId: 'default', name: 'Default' })
+    if (modes.length === 0) {
+      const modeId = graph.generateNodeId()
+      modes.push({ modeId, name: 'Default', source: mintFigmaSourceMetadata(modeId, orderKey) })
+    }
 
     graph.addCollection({
       id,
       name: nc.name ?? 'Variables',
       modes,
       defaultModeId: modes[0].modeId,
-      variableIds: []
+      variableIds: [],
+      source: mintFigmaSourceMetadata(id, orderKey)
     })
   }
 }
@@ -236,12 +309,14 @@ function addFallbackCollection(
 ): void {
   if (graph.variableCollections.has(collectionId)) return
   const parentNc = changeMap.get(collectionId)
+  const modeId = graph.generateNodeId()
   graph.addCollection({
     id: collectionId,
     name: parentNc?.name ?? 'Variables',
-    modes: [{ modeId: 'default', name: 'Default' }],
-    defaultModeId: 'default',
-    variableIds: []
+    modes: [{ modeId, name: 'Default', source: mintFigmaSourceMetadata(modeId, null) }],
+    defaultModeId: modeId,
+    variableIds: [],
+    source: mintFigmaSourceMetadata(collectionId, null)
   })
 }
 
@@ -275,7 +350,7 @@ function importVariableEntries(
       valuesByMode[defaultMode] = resolveDefaultValue(type)
     }
 
-    graph.addVariable({
+    const variable: Variable = {
       id,
       name: nc.name ?? 'Variable',
       type,
@@ -284,9 +359,21 @@ function importVariableEntries(
       description: '',
       hiddenFromPublishing: false,
       key: typeof nc.key === 'string' ? nc.key : undefined,
-      version: typeof nc.version === 'string' ? nc.version : undefined
-    })
+      version: typeof nc.version === 'string' ? nc.version : undefined,
+      source: mintFigmaSourceMetadata(id, nc.parentIndex?.position ?? null)
+    }
+    graph.addVariable(variable)
   }
+}
+
+function findDocumentIdInChangeMap(
+  graph: SceneGraph,
+  changeMap: Map<string, NodeChange>
+): string | null {
+  for (const [id, nc] of changeMap) {
+    if (nc.type === 'DOCUMENT' || id === graph.documentGuid) return id
+  }
+  return null
 }
 
 function importPages(
@@ -298,45 +385,38 @@ function importPages(
   canvasIdToPageId: Map<string, string>,
   createSceneNode: (ncId: string, graphParentId: string) => void
 ): void {
-  let docId: string | null = null
-  for (const [id, nc] of changeMap) {
-    if (nc.type === 'DOCUMENT' || id === '0:0') {
-      docId = id
-      break
-    }
-  }
+  const docId = findDocumentIdInChangeMap(graph, changeMap)
 
   if (docId) {
     applyImportedDocumentMetadata(graph, changeMap.get(docId))
+    const docChildren = (childrenMap.get(docId) ?? []).filter((id) => changeMap.has(id))
+    const canvasIds = docChildren.filter((id) => changeMap.get(id)?.type === 'CANVAS')
+    const orphanIds = docChildren.filter((id) => !canvasIds.includes(id))
 
-    for (const canvasId of childrenMap.get(docId) ?? []) {
+    for (const canvasId of canvasIds) {
       const canvasNc = changeMap.get(canvasId)
       if (!canvasNc) continue
-      if (canvasNc.type === 'CANVAS') {
-        const page = graph.addPage(canvasNc.name ?? 'Page')
-        page.source.id = canvasId
-        applyImportedCanvasMetadata(page, canvasNc)
-        canvasIdToPageId.set(canvasId, page.id)
-        if (canvasNc.internalOnly) page.internalOnly = true
-        created.add(canvasId)
-        for (const childId of childrenMap.get(canvasId) ?? []) {
-          createSceneNode(childId, page.id)
-        }
-      } else {
-        createSceneNode(canvasId, graph.getPages()[0]?.id ?? graph.rootId)
-      }
+      const source = mintFigmaSourceMetadata(canvasId, canvasNc.parentIndex?.position ?? null)
+      const page = graph.addPage(canvasNc.name ?? 'Page', canvasId, source)
+      applyImportedCanvasMetadata(page, canvasNc)
+      canvasIdToPageId.set(canvasId, page.id)
+      if (canvasNc.internalOnly) page.internalOnly = true
+      created.add(canvasId)
+      for (const childId of childrenMap.get(canvasId) ?? []) createSceneNode(childId, page.id)
     }
-  } else {
-    const roots: string[] = []
-    for (const [id] of changeMap) {
-      const pid = parentMap.get(id)
-      if (!pid || !changeMap.has(pid)) roots.push(id)
-    }
-    const page = graph.getPages()[0] ?? graph.addPage('Page 1')
-    for (const rootId of roots) {
-      createSceneNode(rootId, page.id)
-    }
+
+    const fallbackPageId = graph.getPages()[0]?.id ?? graph.rootId
+    for (const orphanId of orphanIds) createSceneNode(orphanId, fallbackPageId)
+    return
   }
+
+  const roots: string[] = []
+  for (const [id] of changeMap) {
+    const pid = parentMap.get(id)
+    if (!pid || !changeMap.has(pid)) roots.push(id)
+  }
+  const page = graph.getPages()[0] ?? graph.addPage('Page 1')
+  for (const rootId of roots) createSceneNode(rootId, page.id)
 }
 
 function importVariableBindings(
@@ -412,7 +492,12 @@ export function importNodeChanges(
   images?: Map<string, Uint8Array>,
   options: FigImportOptions = {}
 ): SceneGraph {
-  const graph = new SceneGraph()
+  const docId = findDocumentId(nodeChanges)
+  const graph = new SceneGraph(
+    docId
+      ? { rootId: docId, rootSource: mintFigmaSourceMetadata(docId, null), documentGuid: docId }
+      : undefined
+  )
   graph.documentColorSpace = parseDocumentColorSpace(nodeChanges)
 
   if (images) {
@@ -422,10 +507,18 @@ export function importNodeChanges(
   }
 
   for (const page of graph.getPages(true)) {
-    graph.deleteNode(page.id)
+    graph.deleteNode(page.id, { permanent: false })
   }
 
-  const { changeMap, parentMap, childrenMap } = buildChangeMaps(nodeChanges)
+  const importedRuntimeIds = new Set<string>(collectImportedRuntimeIds(nodeChanges))
+  const { changeMap, parentMap, childrenMap, diagnostics } = buildChangeMaps(
+    graph,
+    nodeChanges,
+    importedRuntimeIds
+  )
+  graph.importDiagnostics = diagnostics
+  graph.reserveRuntimeIds(importedRuntimeIds)
+
   applyStyleRefs(changeMap)
   const assetRefs = buildAssetRefMap(changeMap)
   setVariableColorResolver(buildVariableColorResolver(changeMap, assetRefs))
@@ -446,7 +539,13 @@ export function importNodeChanges(
     if (nodeType === 'DOCUMENT' || nodeType === 'VARIABLE' || nc.type === 'VARIABLE_SET') return
 
     const parentId = canvasIdToPageId.get(graphParentId) ?? graphParentId
-    const node = graph.createNode(nodeType, parentId, props)
+    const source = mintFigmaSourceMetadata(ncId, nc.parentIndex?.position ?? null)
+    const overrides = {
+      ...props,
+      id: ncId,
+      source: { ...createDefaultSource(), ...source, ...props.source }
+    }
+    const node = graph.createNode(nodeType, parentId, overrides, { mode: 'restore' })
     guidToNodeId.set(ncId, node.id)
 
     for (const childId of getChildren(ncId)) {
@@ -489,6 +588,7 @@ export function importNodeChanges(
     rememberLazyFigImportContext(graph, changeMap, guidToNodeId, blobs, activeRootIds)
 
   setVariableColorResolver(null)
+  graph.migrateLegacySourceIds()
 
   if (graph.getPages(true).length === 0) {
     graph.addPage('Page 1')

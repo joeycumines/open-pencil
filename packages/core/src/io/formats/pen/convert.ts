@@ -1,6 +1,5 @@
 import { parseColor } from '#core/color'
 import { BLACK } from '#core/constants'
-import { generateId } from '#core/scene-graph'
 import type {
   Color,
   Effect,
@@ -17,8 +16,6 @@ import type {
   StrokeJoin,
   TextAlignVertical,
   Variable,
-  VariableCollection,
-  VariableCollectionMode,
   VariableType,
   VariableValue
 } from '#core/scene-graph'
@@ -169,41 +166,32 @@ export function buildVarContext(
   penVars: Record<string, PenVariable>,
   themes: Record<string, string[]>
 ): VarContext {
-  const collectionId = generateId()
-  const modes: VariableCollectionMode[] = []
+  const collection = graph.createCollection('Variables')
   const themeKeys = Object.keys(themes)
-
-  if (themeKeys.length > 0) {
-    const themeKey = themeKeys[0]
-    for (const modeName of themes[themeKey]) {
-      modes.push({ modeId: generateId(), name: modeName })
-    }
-  }
-  if (modes.length === 0) {
-    modes.push({ modeId: generateId(), name: 'Default' })
-  }
-
-  const collection: VariableCollection = {
-    id: collectionId,
-    name: 'Variables',
-    modes,
-    defaultModeId: modes[0].modeId,
-    variableIds: []
-  }
-  graph.addCollection(collection)
 
   const modeByThemeValue = new Map<string, string>()
   if (themeKeys.length > 0) {
     const themeKey = themeKeys[0]
-    for (const mode of modes) {
-      modeByThemeValue.set(`${themeKey}:${mode.name}`, mode.modeId)
+    const themeNames = themes[themeKey]
+    collection.modes[0].name = themeNames[0] ?? 'Default'
+    modeByThemeValue.set(`${themeKey}:${collection.modes[0].name}`, collection.defaultModeId)
+    for (let i = 1; i < themeNames.length; i++) {
+      const modeName = themeNames[i]
+      if (!modeName) continue
+      const modeId = graph.generateNodeId()
+      graph.addMode(collection.id, modeId, modeName)
+      modeByThemeValue.set(`${themeKey}:${modeName}`, modeId)
     }
+  } else {
+    collection.modes[0].name = 'Default'
   }
+
+  const fallbackModeId = collection.defaultModeId
+  const collectionId = collection.id
 
   const byName = new Map<string, { id: string; variable: Variable }>()
 
   for (const [name, def] of Object.entries(penVars)) {
-    const varId = generateId()
     const varType = penVarTypeToSceneType(def.type)
     const valuesByMode: Record<string, VariableValue> = {}
 
@@ -214,33 +202,25 @@ export function buildVarContext(
           const modeId = modeByThemeValue.get(`${tKey}:${tVal}`)
           if (modeId) valuesByMode[modeId] = penValueToSceneValue(entry.value, varType)
         } else {
-          valuesByMode[modes[0].modeId] = penValueToSceneValue(entry.value, varType)
+          valuesByMode[fallbackModeId] = penValueToSceneValue(entry.value, varType)
         }
       }
     } else {
-      valuesByMode[modes[0].modeId] = penValueToSceneValue(def.value as string | number, varType)
+      valuesByMode[fallbackModeId] = penValueToSceneValue(def.value as string | number, varType)
     }
 
-    for (const mode of modes) {
+    for (const mode of collection.modes) {
       if (!(mode.modeId in valuesByMode)) {
-        valuesByMode[mode.modeId] = valuesByMode[modes[0].modeId] ?? defaultForType(varType)
+        valuesByMode[mode.modeId] = valuesByMode[fallbackModeId] ?? defaultForType(varType)
       }
     }
 
-    const variable: Variable = {
-      id: varId,
-      name,
-      type: varType,
-      collectionId,
-      valuesByMode,
-      description: '',
-      hiddenFromPublishing: false
-    }
-    graph.addVariable(variable)
-    byName.set(name, { id: varId, variable })
+    const variable = graph.createVariable(name, varType, collection.id)
+    variable.valuesByMode = valuesByMode
+    byName.set(name, { id: variable.id, variable })
   }
 
-  let activeModeId = modes[0].modeId
+  let activeModeId = fallbackModeId
 
   function resolveVal(ref: string): VariableValue | undefined {
     const entry = byName.get(ref.replace(/^\$/, ''))

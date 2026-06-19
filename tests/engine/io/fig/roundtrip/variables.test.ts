@@ -1,12 +1,15 @@
 import { describe, expect, setDefaultTimeout, test } from 'bun:test'
 
 import {
+  createDefaultSource,
   exportFigFile,
   FigmaAPI,
   initCodec,
   parseFigFile,
   SceneGraph,
-  type Color
+  type Color,
+  type Variable,
+  type VariableCollection
 } from '@open-pencil/core'
 
 import { expectDefined } from '#tests/helpers/assert'
@@ -14,6 +17,10 @@ import { parseFixture } from '#tests/helpers/fig-fixtures'
 import { runsHeavyTests } from '#tests/helpers/test-utils'
 
 setDefaultTimeout(60_000)
+
+function figSource(id: string) {
+  return { ...createDefaultSource(), format: 'fig' as const, id }
+}
 
 describe('variable roundtrip', () => {
   test('variables and collections survive export → re-import', async () => {
@@ -132,6 +139,98 @@ describe('variable roundtrip', () => {
     },
     120_000
   )
+
+  test('preserves explicit collection, mode, and variable source ids (KC-006)', async () => {
+    await initCodec()
+
+    const graph = new SceneGraph()
+    const collection: VariableCollection = {
+      id: '0:100',
+      name: 'Colors',
+      modes: [{ modeId: '0:101', name: 'Light', source: figSource('0:101') }],
+      defaultModeId: '0:101',
+      variableIds: [],
+      source: figSource('0:100')
+    }
+    const variable: Variable = {
+      id: '0:102',
+      name: 'Primary',
+      type: 'COLOR',
+      collectionId: '0:100',
+      valuesByMode: { '0:101': { r: 0.2, g: 0.4, b: 0.8, a: 1 } },
+      description: '',
+      hiddenFromPublishing: false,
+      source: figSource('0:102')
+    }
+    graph.addCollection(collection)
+    graph.addVariable(variable)
+
+    const exported = await exportFigFile(graph)
+    const reimported = await parseFigFile(exported.buffer as ArrayBuffer)
+
+    const collections = [...reimported.variableCollections.values()]
+    expect(collections).toHaveLength(1)
+    const reCollection = expectDefined(collections[0], 'reimported collection')
+    expect(reCollection.source.id).toBe('0:100')
+
+    expect(reCollection.modes).toHaveLength(1)
+    expect(reCollection.modes[0]?.modeId).toBe('0:101')
+    expect(reCollection.modes[0]?.source?.id).toBe('0:101')
+
+    const reVariables = [...reimported.variables.values()]
+    expect(reVariables).toHaveLength(1)
+    const reVariable = expectDefined(reVariables[0], 'reimported variable')
+    expect(reVariable.source.id).toBe('0:102')
+    expect(reVariable.id).toBe('0:102')
+  })
+
+  test('mints distinct guids when two variables share a source id (KC-006 collision)', async () => {
+    await initCodec()
+
+    const graph = new SceneGraph()
+    const collection: VariableCollection = {
+      id: '0:200',
+      name: 'Tokens',
+      modes: [{ modeId: '0:201', name: 'Default', source: figSource('0:201') }],
+      defaultModeId: '0:201',
+      variableIds: [],
+      source: figSource('0:200')
+    }
+    graph.addCollection(collection)
+
+    const sharedSourceId = '0:250'
+    const variableA: Variable = {
+      id: 'varA',
+      name: 'A',
+      type: 'COLOR',
+      collectionId: '0:200',
+      valuesByMode: { '0:201': { r: 1, g: 0, b: 0, a: 1 } },
+      description: '',
+      hiddenFromPublishing: false,
+      source: figSource(sharedSourceId)
+    }
+    const variableB: Variable = {
+      id: 'varB',
+      name: 'B',
+      type: 'COLOR',
+      collectionId: '0:200',
+      valuesByMode: { '0:201': { r: 0, g: 1, b: 0, a: 1 } },
+      description: '',
+      hiddenFromPublishing: false,
+      source: figSource(sharedSourceId)
+    }
+    graph.addVariable(structuredClone(variableA))
+    graph.addVariable(structuredClone(variableB))
+
+    const exported = await exportFigFile(graph)
+    const reimported = await parseFigFile(exported.buffer as ArrayBuffer)
+
+    const reVariables = [...reimported.variables.values()]
+    expect(reVariables).toHaveLength(2)
+    const sourceIds = reVariables.map((v) => v.source.id)
+    expect(new Set(sourceIds).size).toBe(2)
+    expect(sourceIds[0]).not.toBe(sourceIds[1])
+  })
 
   test('pluginID casing is consistent across full codec pipeline', async () => {
     await initCodec()

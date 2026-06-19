@@ -60,11 +60,13 @@ describe('export: GUID collision prevention', () => {
       source: { ...rect.source, id: '1:200', format: 'fig' }
     })
 
-    // Clone the node — cloneTree should clear source.id
+    // Clone the node — cloneTree clears the imported source id, and the
+    // identity layer mints a fresh stable id for the new local node.
     const clone = graph.cloneTree(rect.id, page.id)
     expect(clone).not.toBeNull()
     if (!clone) throw new Error('Expected clone to exist')
-    expect(clone.source.id).toBeNull()
+    expect(clone.source.id).toMatch(/^\d+:\d+$/)
+    expect(clone.source.id).not.toBe(rect.source.id)
 
     const figBytes = await exportFigFile(graph)
     const reimported = await parseFigFile(figBytes.buffer as ArrayBuffer)
