@@ -75,11 +75,16 @@ export function wrapSelectionInContainer(
   ctx.undo.push({
     label: `Create ${containerType.toLowerCase().replace('_', ' ')}`,
     forward: () => {
-      const c = ctx.graph.createNode(containerType, parentId, {
-        ...containerNode,
-        ...extraProps,
-        id: containerId
-      })
+      const c = ctx.graph.createNode(
+        containerType,
+        parentId,
+        {
+          ...containerNode,
+          ...extraProps,
+          id: containerId
+        },
+        { mode: 'restore' }
+      )
       ctx.graph.insertChildAt(c.id, parentId, firstIndex)
       for (const n of origPositions) ctx.graph.reparentNode(n.id, c.id)
       ctx.setSelectedIds(new Set([c.id]))
@@ -89,7 +94,7 @@ export function wrapSelectionInContainer(
         ctx.graph.reparentNode(orig.id, parentId)
         ctx.graph.updateNode(orig.id, { x: orig.x, y: orig.y })
       }
-      ctx.graph.deleteNode(containerId)
+      ctx.graph.deleteNode(containerId, { permanent: true })
       ctx.setSelectedIds(prevSelection)
     }
   })

@@ -130,7 +130,7 @@ describe('importClipboardNodes: undo redo', () => {
     expect(children[1].text).toBe('Hello')
   })
 
-  it('redo without childIds:[] causes duplicate children', () => {
+  it('createNode strips snapshot childIds to prevent duplicate children', () => {
     const { graph, pageId } = createClipboardGraph()
 
     const nodeChanges = [
@@ -172,14 +172,12 @@ describe('importClipboardNodes: undo redo', () => {
 
     for (const id of [...created].reverse()) graph.deleteNode(id)
 
-    // Recreate WITHOUT clearing childIds — demonstrates the bug
     for (const snapshot of allSnapshots) {
       graph.createNode(snapshot.type, snapshot.parentId ?? pageId, snapshot)
     }
 
     const restored = getNodeOrThrow(graph, parent.id)
-    // Bug: parent has duplicated childIds because snapshot already had [childId]
-    // and createNode appends childId again
-    expect(restored.childIds.length).toBeGreaterThan(1)
+    expect(restored.childIds).toHaveLength(1)
+    expect(graph.getChildren(restored.id)[0].name).toBe('Child')
   })
 })

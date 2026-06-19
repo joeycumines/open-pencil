@@ -145,4 +145,42 @@ describe('undo/redo multi-step sequences', () => {
     expect(editor.graph.getNode(child.id)).not.toBeUndefined()
     expect(getNodeOrThrow(editor.graph, frame.id).childIds).toContain(child.id)
   })
+
+  test('KC-002: restoring a deleted node does not overwrite an unrelated live node', () => {
+    const { editor, pageId } = setupEditorPage()
+
+    const deletedRect = editor.graph.createNode('RECTANGLE', pageId, {
+      name: 'Deleted',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10
+    })
+    const deletedId = deletedRect.id
+    const deletedStableId = deletedRect.source.id
+
+    editor.select([deletedId])
+    editor.deleteSelected()
+    expect(editor.graph.getNode(deletedId)).toBeUndefined()
+
+    const replacementRect = editor.graph.createNode('RECTANGLE', pageId, {
+      name: 'Replacement',
+      x: 100,
+      y: 100,
+      width: 20,
+      height: 20
+    })
+    const replacementId = replacementRect.id
+
+    editor.undo.undo()
+    const restoredDeleted = editor.graph.getNode(deletedId)
+    expect(restoredDeleted).toBeDefined()
+    if (!restoredDeleted) throw new Error('expected restored node')
+
+    expect(restoredDeleted.source.id).toBe(deletedStableId)
+
+    const liveReplacement = editor.graph.getNode(replacementId)
+    expect(liveReplacement?.id).toBe(replacementId)
+    expect(liveReplacement?.name).toBe('Replacement')
+  })
 })

@@ -22,7 +22,9 @@ export function restorePageFromSnapshot(ctx: EditorContext, snapshot: PageSnapsh
   const pageSnap = snapshot.get(pageId)
   if (!page || !pageSnap) return
 
-  for (const childId of page.childIds.slice()) ctx.graph.deleteNode(childId)
+  for (const childId of page.childIds.slice()) {
+    ctx.graph.deleteNode(childId, { permanent: false })
+  }
   restoreChildren(ctx.graph, snapshot, pageId, pageSnap.childIds)
 
   ctx.graph.clearAbsPosCache()
@@ -42,7 +44,7 @@ function restoreChildren(
     const snap = snapshot.get(childId)
     if (!snap) continue
     const { parentId: _snapParentId, childIds: snapChildIds, ...rest } = snap
-    graph.createNode(snap.type, parentId, { ...rest, childIds: [] })
+    graph.createNode(snap.type, parentId, { ...rest, childIds: [] }, { mode: 'restore' })
     graph.reorderChild(snap.id, parentId, childIds.indexOf(childId))
     restoreChildren(graph, snapshot, snap.id, snapChildIds)
   }

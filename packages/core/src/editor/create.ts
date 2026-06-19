@@ -20,7 +20,7 @@ import { createClipboardActions } from './clipboard'
 import { createColorSpaceActions } from './color-space'
 import { createComponentSyncScheduler } from './component-sync'
 import { createComponentActions } from './components'
-import { createGraphEventSubscription } from './graph-events'
+import { createGraphEventSubscription } from './events/graph'
 import { createGraphReadActions } from './graph-reads'
 import { createLayoutRunner } from './layout-runner'
 import { createNodeActions } from './nodes'
@@ -35,7 +35,8 @@ import type {
   EditorEventName,
   EditorEvents,
   EditorOptions,
-  EditorState
+  EditorState,
+  GraphReplacedPayload
 } from './types'
 import { createUndoActions } from './undo'
 import { createVariableActions } from './variables'
@@ -188,15 +189,38 @@ export function createEditor(options?: EditorOptions) {
     }
   }
 
+  function buildReplaceGraphTranslation(
+    oldGraph: SceneGraph,
+    newGraph: SceneGraph
+  ): Map<string, string> {
+    const translation = new Map<string, string>()
+    translation.set(oldGraph.rootId, newGraph.rootId)
+    for (const node of newGraph.nodes.values()) {
+      const sourceId = node.source.id
+      if (sourceId == null) continue
+      const oldRuntimeId = oldGraph.stableIdToRuntimeId(sourceId)
+      if (oldRuntimeId !== undefined && oldRuntimeId !== node.id) {
+        translation.set(oldRuntimeId, node.id)
+      }
+    }
+    return translation
+  }
+
   function replaceGraph(newGraph: SceneGraph) {
+    newGraph.migrateLegacySourceIds()
+    newGraph.recomputeReservedRuntimeIds()
+    const oldGraph = _graph
+    const translation = buildReplaceGraphTranslation(oldGraph, newGraph)
     _graph = newGraph
     subscribeToGraph()
     const previousPageId = state.currentPageId
-    state.currentPageId = _graph.getPages()[0]?.id ?? _graph.rootId
+    state.currentPageId = newGraph.getPages()[0]?.id ?? newGraph.rootId
     setSelectedIds(new Set())
     state.hoveredNodeId = null
     pages.clearPageViewports()
-    emitEditorEvent('graph:replaced', _graph)
+    undo.clear()
+    const payload: GraphReplacedPayload = { graph: newGraph, translation }
+    emitEditorEvent('graph:replaced', payload)
     if (previousPageId !== state.currentPageId) {
       emitEditorEvent('page:changed', state.currentPageId, previousPageId)
     }

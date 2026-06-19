@@ -1,0 +1,198 @@
+import * as Y from 'yjs'
+
+import { SceneGraph } from '@open-pencil/core'
+import type { EditorEvents } from '@open-pencil/core/editor'
+import type { SceneNode } from '@open-pencil/core/scene-graph'
+
+import {
+  applyYnodeToGraph,
+  createYjsGraphSync,
+  stableIdForNode,
+  yNodeToProps,
+  type ReconcileRootFn
+} from '@/app/collab/yjs-sync'
+import type { EditorStore } from '@/app/editor/active-store'
+
+export type TestStore = {
+  graph: SceneGraph
+  requestRender: () => void
+} & EditorStore
+
+export function createTestStore(graph?: SceneGraph): TestStore {
+  const g = graph ?? new SceneGraph()
+  // Bridge editor-event subscriptions to the SceneGraph emitter so tests can
+  // exercise bindCollabGraphEvents (which subscribes via store.onEditorEvent)
+  // against real graph mutations. Only graph-structure events are routed;
+  // other editor events are unused by the collab binding and resolve to a
+  // no-op unbind. This is additive: tests that never call bindCollabGraphEvents
+  // are unaffected.
+  return {
+    graph: g,
+    requestRender: () => {
+      // no-op render stub for collab tests
+    },
+    onEditorEvent: <K extends keyof EditorEvents>(event: K, handler: EditorEvents[K]) => {
+      switch (event) {
+        case 'node:created':
+          return g.onNodeEvents({ created: handler as (node: SceneNode) => void })
+        case 'node:updated':
+          return g.onNodeEvents({
+            updated: handler as (id: string, changes: Partial<SceneNode>) => void
+          })
+        case 'node:deleted':
+          return g.onNodeEvents({ deleted: handler as (id: string) => void })
+        case 'node:reparented':
+          return g.onNodeEvents({
+            reparented: handler as (
+              nodeId: string,
+              oldParentId: string,
+              newParentId: string
+            ) => void
+          })
+        case 'node:reordered':
+          return g.onNodeEvents({
+            reordered: handler as (nodeId: string, parentId: string, index: number) => void
+          })
+        default:
+          return () => undefined
+      }
+    }
+  } as TestStore
+}
+
+export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
+  let suppressYjsEvents = false
+  const ynodes = ydoc.getMap<Y.Map<unknown>>('nodes')
+  const yimages = ydoc.getMap<Uint8Array>('images')
+  const sync = createYjsGraphSync({
+    getStore: () => store,
+    getYdoc: () => ydoc,
+    getYnodes: () => ynodes,
+    getYimages: () => yimages,
+    setSuppressYjsEvents: (value) => {
+      suppressYjsEvents = value
+    }
+  })
+
+  function reconcileRoot(
+    targetStore: EditorStore,
+    remoteRootStableId: string,
+    hostRootYnode: Y.Map<unknown>
+  ): void {
+    const graph = targetStore.graph
+    const state = graph.getSyncState()
+    if (state.rootMapped) return
+    state.remoteRootStableId = remoteRootStableId
+    state.remoteToLocal.set(remoteRootStableId, graph.rootId)
+    state.localToRemote.set(graph.rootId, remoteRootStableId)
+    state.rootMapped = true
+    applyYnodeToGraph(graph, state, ynodes, remoteRootStableId, hostRootYnode)
+    for (const stableId of state.pendingUntilRoot) {
+      const ynode = ynodes.get(stableId)
+      if (ynode !== undefined) {
+        applyYnodeToGraph(graph, state, ynodes, stableId, ynode)
+      }
+    }
+    state.pendingUntilRoot.clear()
+  }
+
+  return {
+    ...sync,
+    ynodes,
+    yimages,
+    getSuppressYjsEvents: () => suppressYjsEvents,
+    setSuppressYjsEvents: (value: boolean) => {
+      suppressYjsEvents = value
+    },
+    reconcileRoot
+  }
+}
+
+export function makeHostRootState(store: TestStore): string {
+  const root = store.graph.getNode(store.graph.rootId)
+  if (root === undefined) {
+    throw new Error('host graph has no root')
+  }
+  const state = store.graph.getSyncState()
+  const hostRootStableId = stableIdForNode(root)
+  state.remoteRootStableId = hostRootStableId
+  state.remoteToLocal.set(hostRootStableId, store.graph.rootId)
+  state.localToRemote.set(store.graph.rootId, hostRootStableId)
+  state.rootMapped = true
+  return hostRootStableId
+}
+
+export function observeTargetDoc(
+  store: TestStore,
+  ydoc: Y.Doc,
+  applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void,
+  reconcileRemoteRoot?: ReconcileRootFn
+): () => void {
+  let suppressGraphSync = false
+  const ynodes = ydoc.getMap<Y.Map<unknown>>('nodes')
+  const unbind = ynodes.observeDeep((events) => {
+    if (suppressGraphSync) return
+    const state = store.graph.getSyncState()
+    if (state.remoteRootStableId === null && reconcileRemoteRoot !== undefined) {
+      for (const event of events) {
+        if (event.target === ynodes) {
+          for (const [remoteStableId, change] of event.changes.keys) {
+            if (change.action === 'add' || change.action === 'update') {
+              const ynode = ynodes.get(remoteStableId)
+              if (ynode === undefined) continue
+              const parentId = (ynode.get('parentId') as string | undefined) ?? null
+              if (parentId === remoteStableId) {
+                reconcileRemoteRoot(store, remoteStableId, ynode, ynodes)
+                break
+              }
+            }
+          }
+        }
+      }
+    }
+    suppressGraphSync = true
+    try {
+      applyYjsToGraph(events)
+    } finally {
+      suppressGraphSync = false
+    }
+    store.requestRender()
+  })
+  return unbind
+}
+
+export function encodeAndApply(fromDoc: Y.Doc, toDoc: Y.Doc): void {
+  const update = Y.encodeStateAsUpdate(fromDoc)
+  Y.applyUpdate(toDoc, update)
+}
+
+export function cloneYnode(
+  source: Y.Map<unknown>,
+  targetYn: Y.Map<Y.Map<unknown>>,
+  key: string
+): void {
+  const props = yNodeToProps(source)
+  const ynode = new Y.Map<unknown>()
+  for (const [k, v] of Object.entries(props)) {
+    ynode.set(k, v)
+  }
+  targetYn.set(key, ynode)
+}
+
+export const reconcileRemoteRoot: ReconcileRootFn = (store, remoteRootStableId, ynode, ynodes) => {
+  const graph = store.graph
+  const state = graph.getSyncState()
+  if (state.rootMapped) return
+  state.remoteRootStableId = remoteRootStableId
+  state.remoteToLocal.set(remoteRootStableId, graph.rootId)
+  state.localToRemote.set(graph.rootId, remoteRootStableId)
+  state.rootMapped = true
+  applyYnodeToGraph(graph, state, ynodes, remoteRootStableId, ynode)
+  for (const stableId of state.pendingUntilRoot) {
+    const pendingYnode = ynodes.get(stableId)
+    if (pendingYnode !== undefined) {
+      applyYnodeToGraph(graph, state, ynodes, stableId, pendingYnode)
+    }
+  }
+  state.pendingUntilRoot.clear()
+}

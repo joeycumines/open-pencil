@@ -45,7 +45,7 @@ export function flattenSelected(
   })
   const vectorSnapshot = structuredClone(vector)
   ctx.graph.insertChildAt(vector.id, parentId, firstIndex)
-  for (const id of childIds) ctx.graph.deleteNode(id)
+  for (const id of childIds) ctx.graph.deleteNode(id, { permanent: true })
   ctx.setSelectedIds(new Set([vector.id]))
 
   ctx.undo.push({
@@ -53,11 +53,11 @@ export function flattenSelected(
     forward: () => {
       const restored = ctx.graph.createNode('VECTOR', parentId, vectorSnapshot)
       ctx.graph.insertChildAt(restored.id, parentId, firstIndex)
-      for (const id of childIds) ctx.graph.deleteNode(id)
+      for (const id of childIds) ctx.graph.deleteNode(id, { permanent: true })
       ctx.setSelectedIds(new Set([restored.id]))
     },
     inverse: () => {
-      ctx.graph.deleteNode(vector.id)
+      ctx.graph.deleteNode(vector.id, { permanent: true })
       for (let i = 0; i < childSnapshots.length; i++) {
         const { id, subtree } = childSnapshots[i]
         const root = subtree.get(id)

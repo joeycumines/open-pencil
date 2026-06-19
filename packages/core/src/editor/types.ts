@@ -86,10 +86,15 @@ export interface EditorState {
   cursorCanvasY?: number | null
 }
 
+export interface GraphReplacedPayload {
+  graph: SceneGraph
+  translation: Map<string, string>
+}
+
 export interface EditorEvents extends SceneGraphEvents {
   'render:requested': (versions: { renderVersion: number; sceneVersion: number }) => void
   'repaint:requested': (versions: { renderVersion: number; sceneVersion: number }) => void
-  'graph:replaced': (graph: SceneGraph) => void
+  'graph:replaced': (payload: GraphReplacedPayload) => void
   'selection:changed': (selectedIds: string[], previousIds: string[]) => void
   'tool:changed': (tool: Tool, previousTool: Tool) => void
   'page:changed': (pageId: string, previousPageId: string) => void

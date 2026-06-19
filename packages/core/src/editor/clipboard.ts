@@ -4,7 +4,8 @@ import {
   parseOpenPencilClipboard
 } from '#core/clipboard'
 import { computeAllLayouts } from '#core/layout'
-import type { SceneNode } from '#core/scene-graph'
+import { createDefaultSource, splitOverrideKey } from '#core/scene-graph'
+import type { SceneNode, SourceMetadata } from '#core/scene-graph'
 import type { Vector } from '#core/types'
 
 import { createClipboardCopyActions } from './clipboard/copy'
@@ -58,7 +59,9 @@ export function createClipboardActions(ctx: EditorContext) {
           ctx.setSelectedIds(new Set(newRootIds))
         },
         inverse: () => {
-          for (const id of newRootIds.slice().reverse()) ctx.graph.deleteNode(id)
+          for (const id of newRootIds.slice().reverse()) {
+            ctx.graph.deleteNode(id, { permanent: true })
+          }
           ctx.setSelectedIds(prevSelection)
         }
       })
@@ -135,39 +138,107 @@ export function createClipboardActions(ctx: EditorContext) {
     const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
     for (const [hash, bytes] of images) ctx.graph.images.set(hash, bytes)
 
-    const created: string[] = []
-    const createNodeTree = (source: SceneNode & { children?: SceneNode[] }, parentId: string) => {
-      const { id: _id, childIds: _childIds, children = [], parentId: _parentId, ...rest } = source
-      const node = ctx.graph.createNode(source.type, parentId, {
-        ...structuredClone(rest),
-        x: source.x + 20,
-        y: source.y + 20,
-        childIds: []
-      })
-      for (const child of children) createNodeTree(child, node.id)
-      return node.id
+    const oldRuntimeToNew = new Map<string, string>()
+    const oldStableToNew = new Map<string, string>()
+    const createdRoots: string[] = []
+    const createdIds = new Set<string>()
+
+    const createWithFreshIds = (
+      snapshot: SceneNode & { children?: SceneNode[] },
+      parentId: string
+    ): SceneNode => {
+      const originalRuntimeId = snapshot.id
+      const originalStableId = snapshot.source.id ?? null
+
+      const sourceFromSnapshot: Partial<SourceMetadata> = {
+        ...structuredClone(snapshot.source),
+        id: null
+      }
+
+      const overrides: Partial<SceneNode> = {
+        ...structuredClone(snapshot),
+        id: undefined,
+        childIds: [],
+        source: { ...createDefaultSource(), ...sourceFromSnapshot }
+      }
+
+      const node = ctx.graph.createNode(snapshot.type, parentId, overrides, { mode: 'restore' })
+      oldRuntimeToNew.set(originalRuntimeId, node.id)
+      createdIds.add(node.id)
+      if (originalStableId !== null) {
+        oldStableToNew.set(originalStableId, node.id)
+      }
+
+      for (const child of snapshot.children ?? []) {
+        createWithFreshIds(child, node.id)
+      }
+
+      return node
+    }
+
+    const mapRef = (oldId: string | null | undefined): string | undefined => {
+      if (oldId === null || oldId === undefined) return undefined
+      return oldRuntimeToNew.get(oldId) ?? oldStableToNew.get(oldId)
     }
 
     const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
-    for (const node of nodes) created.push(createNodeTree(node, pasteTarget))
-    if (created.length === 0) return
+    for (const root of nodes) {
+      createdRoots.push(createWithFreshIds(root, pasteTarget).id)
+    }
+    if (createdRoots.length === 0) return
+
+    for (const id of createdIds) {
+      const node = ctx.graph.getNode(id)
+      if (!node) continue
+
+      const changes: Partial<SceneNode> = {}
+
+      if (node.componentId) {
+        const newComponentId = mapRef(node.componentId)
+        if (newComponentId) {
+          changes.componentId = newComponentId
+        } else if (!ctx.graph.getNode(node.componentId)) {
+          // The component is not in the pasted subtree AND does not exist
+          // in the destination graph (cross-document paste). Detach the
+          // instance. If the component already exists in the destination
+          // graph (same-document paste), keep the valid reference.
+          changes.componentId = null
+        }
+      }
+
+      if (node.type === 'INSTANCE') {
+        const remapped: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(node.overrides)) {
+          const { childId, prop } = splitOverrideKey(key)
+          const newChildId = mapRef(childId)
+          if (newChildId) {
+            remapped[`${newChildId}:${prop}`] = value
+          }
+        }
+        changes.overrides = remapped
+      }
+
+      if (Object.keys(changes).length > 0) {
+        ctx.graph.updateNode(id, changes)
+      }
+    }
 
     if (replacementTargets.length > 0) {
       replaceTargetsWithCreated(
         ctx,
         placementActions.centerNodesAt,
-        created,
+        createdRoots,
         replacementTargets,
         prevSelection
       )
       return
     }
 
-    if (cursorPos) placementActions.centerNodesAt(created, cursorPos.x, cursorPos.y)
+    if (cursorPos) placementActions.centerNodesAt(createdRoots, cursorPos.x, cursorPos.y)
     computeAllLayouts(ctx.graph, ctx.state.currentPageId)
-    ctx.setSelectedIds(new Set(created))
+    ctx.setSelectedIds(new Set(createdRoots))
 
-    pushPasteUndo(created, prevSelection)
+    pushPasteUndo(createdRoots, prevSelection)
   }
 
   function warnMissingImages(nodeIds: string[]) {
@@ -195,12 +266,12 @@ export function createClipboardActions(ctx: EditorContext) {
     if (entries.length === 0) return
 
     const prevSelection = new Set(ctx.state.selectedIds)
-    for (const { id } of entries) ctx.graph.deleteNode(id)
+    for (const { id } of entries) ctx.graph.deleteNode(id, { permanent: true })
 
     ctx.undo.push({
       label: 'Delete',
       forward: () => {
-        for (const { id } of entries) ctx.graph.deleteNode(id)
+        for (const { id } of entries) ctx.graph.deleteNode(id, { permanent: true })
         ctx.setSelectedIds(new Set())
       },
       inverse: () => {

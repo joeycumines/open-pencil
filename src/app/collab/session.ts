@@ -10,6 +10,7 @@ import { randomIndex } from '@open-pencil/core/random'
 import { connectCollabRoom } from '@/app/collab/room'
 import type { CollabState } from '@/app/collab/types'
 import { bindCollabGraphEvents, registerYjsObservers } from '@/app/collab/yjs-sync'
+import type { ReconcileRootFn } from '@/app/collab/yjs-sync'
 import type { EditorStore } from '@/app/editor/active-store'
 import { PEER_COLORS } from '@/constants'
 
@@ -38,6 +39,7 @@ type ConnectCollabSessionOptions = {
   broadcastAwareness: () => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
   syncNodeToYjs: (nodeId: string) => void
+  reconcileRemoteRoot?: ReconcileRootFn
 }
 
 type CollabConnectionActionsOptions = {
@@ -50,6 +52,7 @@ type CollabConnectionActionsOptions = {
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
   syncNodeToYjs: (nodeId: string) => void
   resetFollow: () => void
+  reconcileRemoteRoot?: ReconcileRootFn
 }
 
 type CollabSessionResources = {
@@ -98,7 +101,8 @@ export function createCollabConnectionActions({
   broadcastAwareness,
   applyYjsToGraph,
   syncNodeToYjs,
-  resetFollow
+  resetFollow,
+  reconcileRemoteRoot
 }: CollabConnectionActionsOptions) {
   function connect(roomId: string) {
     connectCollabSession({
@@ -111,7 +115,8 @@ export function createCollabConnectionActions({
       tickFollow,
       broadcastAwareness,
       applyYjsToGraph,
-      syncNodeToYjs
+      syncNodeToYjs,
+      reconcileRemoteRoot
     })
   }
 
@@ -157,7 +162,8 @@ export function connectCollabSession({
   tickFollow,
   broadcastAwareness,
   applyYjsToGraph,
-  syncNodeToYjs
+  syncNodeToYjs,
+  reconcileRemoteRoot
 }: ConnectCollabSessionOptions) {
   if (runtime.room) disconnect()
 
@@ -182,7 +188,8 @@ export function connectCollabSession({
     setSuppressGraphSync: (value) => {
       runtime.suppressGraphSync = value
     },
-    applyYjsToGraph
+    applyYjsToGraph,
+    reconcileRemoteRoot
   })
 
   const roomConnection = connectCollabRoom({

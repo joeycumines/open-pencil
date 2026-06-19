@@ -418,7 +418,7 @@ export class FigmaNodeProxy {
   }
 
   remove(): void {
-    this[INTERNAL_GRAPH].deleteNode(this[INTERNAL_ID])
+    this[INTERNAL_GRAPH].deleteNode(this[INTERNAL_ID], { permanent: true })
   }
 
   findAll(callback?: (node: FigmaNodeProxy) => boolean): FigmaNodeProxy[] {

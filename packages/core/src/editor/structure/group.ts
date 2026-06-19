@@ -25,7 +25,7 @@ export function ungroupSelected(ctx: EditorContext, selectedNode: SceneNode | un
     ctx.graph.insertChildAt(childIds[i], parentId, groupIndex + i)
   }
 
-  ctx.graph.deleteNode(node.id)
+  ctx.graph.deleteNode(node.id, { permanent: true })
   ctx.setSelectedIds(new Set(childIds))
 
   ctx.undo.push({
@@ -35,15 +35,20 @@ export function ungroupSelected(ctx: EditorContext, selectedNode: SceneNode | un
         ctx.graph.reparentNode(childIds[i], parentId)
         ctx.graph.insertChildAt(childIds[i], parentId, groupIndex + i)
       }
-      ctx.graph.deleteNode(groupId)
+      ctx.graph.deleteNode(groupId, { permanent: true })
       ctx.setSelectedIds(new Set(childIds))
     },
     inverse: () => {
-      const g = ctx.graph.createNode('GROUP', parentId, {
-        ...groupSnapshot,
-        childIds: [],
-        id: groupId
-      })
+      const g = ctx.graph.createNode(
+        'GROUP',
+        parentId,
+        {
+          ...groupSnapshot,
+          childIds: [],
+          id: groupId
+        },
+        { mode: 'restore' }
+      )
       ctx.graph.insertChildAt(g.id, parentId, groupIndex)
       for (const orig of origPositions) {
         ctx.graph.reparentNode(orig.id, g.id)

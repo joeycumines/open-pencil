@@ -3,8 +3,18 @@ import { FigmaAPI } from '@open-pencil/core/figma-api'
 import type { EditorStore } from '@/app/editor/active-store'
 import { listFonts } from '@/app/editor/fonts'
 
-export function makeFigmaFromStore(store: EditorStore): FigmaAPI {
+const storeApiCache = new WeakMap<EditorStore, FigmaAPI>()
+
+export function getStoreFigmaAPI(store: EditorStore): FigmaAPI {
+  const existing = storeApiCache.get(store)
+  if (existing) return existing
   const api = new FigmaAPI(store.graph)
+  storeApiCache.set(store, api)
+  return api
+}
+
+export function makeFigmaFromStore(store: EditorStore): FigmaAPI {
+  const api = getStoreFigmaAPI(store)
   api.setRenderer(store.renderer ?? null)
   api.currentPage = api.wrapNode(store.state.currentPageId)
   api.currentPage.selection = [...store.state.selectedIds]

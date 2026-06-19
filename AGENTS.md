@@ -75,7 +75,7 @@ The editor exposes a typed nanoevents emitter for lifecycle events. Defined in `
 |---|---|---|
 | `render:requested` | `{ renderVersion, sceneVersion }` | `requestRender()` |
 | `repaint:requested` | `{ renderVersion, sceneVersion }` | `requestRepaint()` |
-| `graph:replaced` | `SceneGraph` | `replaceGraph()` |
+| `graph:replaced` | `GraphReplacedPayload { graph: SceneGraph; translation: Map<string, string> }` | `replaceGraph()` |
 | `node:created` | `SceneNode` | SceneGraph emitter → `graph-events.ts` |
 | `node:updated` | `id, changes` | SceneGraph emitter → `graph-events.ts` |
 | `node:deleted` | `id` | SceneGraph emitter → `graph-events.ts` |
@@ -87,6 +87,8 @@ The editor exposes a typed nanoevents emitter for lifecycle events. Defined in `
 | `viewport:changed` | `{ panX, panY, zoom }, previous` | viewport actions |
 
 All selection mutations in core use `ctx.setSelectedIds()` and all tool changes use `ctx.setActiveTool()` so the event bus fires consistently. App-layer code uses `editor.clearSelection()`, `editor.select()`, or `editor.setTool()` — never direct `state.selectedIds =` or `state.activeTool =` assignments.
+
+> **Note on `graph:replaced` translation for legacy documents:** For graphs whose nodes predate `source.id`, the `translation` map only guarantees `oldRootId → newRootId`. Non-root legacy nodes receive fresh synthetic stable ids and are intentionally not included in the map; consumers must treat all non-root ids as invalidated after `replaceGraph`.
 
 Vue SDK provides `useEditorEvent(event, handler)` composable (`packages/vue/src/editor/events/use.ts`) that auto-disposes on scope cleanup.
 

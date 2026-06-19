@@ -95,19 +95,41 @@ export function computeImageHash(data: Uint8Array): string {
 // TODO(figma-api): Implement the full official PluginAPI interface once our compatibility
 // layer covers all required node-specific return types and unsupported APIs are modeled explicitly.
 export class FigmaAPI implements NodeProxyHost {
-  readonly graph: SceneGraph
+  private _graph: SceneGraph
   private _currentPageId: string
   private _selection: FigmaNodeProxy[] = []
   private _nodeCache = new Map<string, FigmaNodeProxy>()
   private _pageProxies = new WeakSet<FigmaNodeProxy>()
   private _renderer: SkiaRenderer | null = null
+  private _translation = new Map<string, string>()
 
   readonly mixed = MIXED
 
   constructor(graph: SceneGraph) {
-    this.graph = graph
+    this._graph = graph
     const pages = graph.getPages()
     this._currentPageId = pages[0]?.id ?? graph.rootId
+  }
+
+  get graph(): SceneGraph {
+    return this._graph
+  }
+
+  setGraph(graph: SceneGraph, translation?: Map<string, string>): void {
+    this._graph = graph
+    this._translation = translation ?? new Map()
+    this._nodeCache.clear()
+    this._pageProxies = new WeakSet<FigmaNodeProxy>()
+    this._currentPageId = graph.getPages()[0]?.id ?? graph.rootId
+    this._selection = []
+  }
+
+  clearNodeCache(): void {
+    this._nodeCache.clear()
+  }
+
+  __getNodeCacheForTest(): Map<string, FigmaNodeProxy> {
+    return this._nodeCache
   }
 
   setRenderer(renderer: SkiaRenderer | null): void {
@@ -119,10 +141,11 @@ export class FigmaAPI implements NodeProxyHost {
   }
 
   wrapNode(id: string): FigmaNodeProxy {
-    let proxy = this._nodeCache.get(id)
+    const translatedId = this._translateId(id)
+    let proxy = this._nodeCache.get(translatedId)
     if (!proxy) {
-      proxy = new FigmaNodeProxy(id, this.graph, this)
-      this._nodeCache.set(id, proxy)
+      proxy = new FigmaNodeProxy(translatedId, this.graph, this)
+      this._nodeCache.set(translatedId, proxy)
     }
     return proxy
   }
@@ -153,12 +176,21 @@ export class FigmaAPI implements NodeProxyHost {
   }
 
   set currentPage(page: FigmaNodeProxy) {
-    this._currentPageId = page[INTERNAL_ID]
+    this._currentPageId = this._translateId(page[INTERNAL_ID])
+  }
+
+  translateRuntimeId(id: string): string {
+    return this._translateId(id)
+  }
+
+  private _translateId(id: string): string {
+    return this._translation.get(id) ?? id
   }
 
   getNodeById(id: string): FigmaNodeProxy | null {
-    const node = this.graph.getNode(id)
-    return node ? this.wrapNode(id) : null
+    const translatedId = this._translateId(id)
+    const node = this.graph.getNode(translatedId)
+    return node ? this.wrapNode(translatedId) : null
   }
 
   // --- Node Creation ---
@@ -250,7 +282,7 @@ export class FigmaAPI implements NodeProxyHost {
     for (const childId of children) {
       this.graph.reparentNode(childId, parentId)
     }
-    this.graph.deleteNode(nodeId)
+    this.graph.deleteNode(nodeId, { permanent: true })
     return children.map((id) => this.wrapNode(id))
   }
 
@@ -289,7 +321,7 @@ export class FigmaAPI implements NodeProxyHost {
     for (const childId of raw.childIds) {
       this.graph.cloneTree(childId, comp.id)
     }
-    this.graph.deleteNode(node[INTERNAL_ID])
+    this.graph.deleteNode(node[INTERNAL_ID], { permanent: true })
     return this.wrapNode(comp.id)
   }
 
@@ -456,7 +488,7 @@ export class FigmaAPI implements NodeProxyHost {
       : this._flattenPlaceholder(sourceNodes, parentId)
     if (index != null) this.graph.reorderChild(vector.id, parentId, index)
     for (const node of nodes) {
-      this.graph.deleteNode(this._nodeId(node))
+      this.graph.deleteNode(this._nodeId(node), { permanent: true })
     }
     return this.wrapNode(vector.id) as FigmaVectorNode
   }

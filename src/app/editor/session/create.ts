@@ -1,9 +1,10 @@
-import { shallowReactive } from 'vue'
+import { onScopeDispose, shallowReactive } from 'vue'
 
 import { createEditor } from '@open-pencil/core/editor'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import { SceneGraph } from '@open-pencil/core/scene-graph'
 
+import { getStoreFigmaAPI } from '@/app/automation/bridge/figma-factory'
 import {
   getActiveEditorStore,
   setActiveEditorStore,
@@ -41,6 +42,19 @@ export function createEditorStore(initialGraph?: SceneGraph) {
   if (initialGraph) {
     editor.subscribeToGraph()
   }
+
+  const unbindGraphReplaced = editor.onEditorEvent('graph:replaced', ({ graph, translation }) => {
+    getStoreFigmaAPI(store).setGraph(graph, translation)
+  })
+
+  const unbindNodeDeleted = editor.onEditorEvent('node:deleted', () => {
+    getStoreFigmaAPI(store).clearNodeCache()
+  })
+
+  onScopeDispose(() => {
+    unbindGraphReplaced()
+    unbindNodeDeleted()
+  })
 
   const { selectedNodes, selectedNode, layerTree } = createEditorComputedRefs(editor, state)
 

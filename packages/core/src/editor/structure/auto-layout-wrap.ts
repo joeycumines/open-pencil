@@ -57,7 +57,12 @@ export function wrapInAutoLayout(
   ctx.undo.push({
     label: 'Wrap in auto layout',
     forward: () => {
-      const f = ctx.graph.createNode('FRAME', parentId, { ...frame, id: frameId })
+      const f = ctx.graph.createNode(
+        'FRAME',
+        parentId,
+        { ...frame, id: frameId },
+        { mode: 'restore' }
+      )
       for (const n of origPositions) ctx.graph.reparentNode(n.id, f.id)
       computeLayout(ctx.graph, f.id)
       ctx.runLayoutForNode(f.id)
@@ -68,7 +73,7 @@ export function wrapInAutoLayout(
         ctx.graph.reparentNode(orig.id, orig.parentId)
         ctx.graph.updateNode(orig.id, { x: orig.x, y: orig.y })
       }
-      ctx.graph.deleteNode(frameId)
+      ctx.graph.deleteNode(frameId, { permanent: true })
       ctx.setSelectedIds(prevSelection)
     }
   })
