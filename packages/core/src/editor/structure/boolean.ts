@@ -68,7 +68,7 @@ export function booleanOperationSelected(
         ctx.graph.insertChildAt(id, parentId, firstIndex + i)
         ctx.graph.updateNode(id, { x: pos.x, y: pos.y })
       }
-      ctx.graph.deleteNode(booleanId)
+      ctx.graph.deleteNode(booleanId, { permanent: true })
       ctx.setSelectedIds(prevSelection)
     }
   })

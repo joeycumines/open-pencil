@@ -1,6 +1,24 @@
 import { BLACK, DEFAULT_FONT_FAMILY, DEFAULT_STROKE_MITER_LIMIT } from '#core/constants'
+import type { NodeType, SceneNode, SourceMetadata } from '#core/scene-graph/types'
 
-import type { NodeType, SceneNode } from './types'
+export function createDefaultSource(): SourceMetadata {
+  return {
+    format: null,
+    id: null,
+    orderKey: null,
+    fig: {
+      rawSize: null,
+      rawTransform: null,
+      rawNodeFields: {},
+      layout: null,
+      symbolOverrides: [],
+      componentPropAssignments: [],
+      derivedSymbolData: [],
+      derivedSymbolDataLayoutVersion: null,
+      uniformScaleFactor: null
+    }
+  }
+}
 
 export function createDefaultNode(
   generateId: () => string,
@@ -18,22 +36,7 @@ export function createDefaultNode(
     width: 100,
     height: 100,
     rotation: 0,
-    source: {
-      format: null,
-      id: null,
-      orderKey: null,
-      fig: {
-        rawSize: null,
-        rawTransform: null,
-        rawNodeFields: {},
-        layout: null,
-        symbolOverrides: [],
-        componentPropAssignments: [],
-        derivedSymbolData: [],
-        derivedSymbolDataLayoutVersion: null,
-        uniformScaleFactor: null
-      }
-    },
+    source: createDefaultSource(),
     figmaDerivedLayout: null,
     fills:
       type === 'TEXT' ? [{ type: 'SOLID' as const, color: BLACK, opacity: 1, visible: true }] : [],

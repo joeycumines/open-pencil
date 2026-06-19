@@ -4,7 +4,7 @@ import type { Canvas } from 'canvaskit-wasm'
 
 import { renderShapeUncached } from '#core/canvas/scene'
 import type { SceneGraph } from '#core/scene-graph'
-import { createDefaultNode } from '#core/scene-graph/node-defaults'
+import { createDefaultNode } from '#core/scene-graph/node/defaults'
 
 import { createMockCanvas, createMockRenderer } from './helpers'
 

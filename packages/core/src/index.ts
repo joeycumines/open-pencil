@@ -25,6 +25,7 @@ export type {
 export {
   SceneGraph,
   generateId,
+  createDefaultSource,
   cloneVectorNetwork,
   normalizeVectorNetwork,
   validateVectorNetwork,
@@ -73,8 +74,10 @@ export {
   type CharacterStyleOverride,
   type StyleRun,
   type SceneGraphEvents,
-  type DocumentColorSpace
+  type DocumentColorSpace,
+  type GraphSyncState
 } from './scene-graph'
+export { createGraphSyncState, resetGraphSyncState } from './scene-graph'
 
 export { FigmaAPI, FigmaNodeProxy, computeImageHash, type FigmaFontName } from './figma-api'
 export {

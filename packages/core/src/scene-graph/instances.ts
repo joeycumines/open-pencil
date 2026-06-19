@@ -1,5 +1,17 @@
+import { clearInstanceOverrideCaches } from '#core/kiwi/fig/instance-overrides/cache'
+
 import type { SceneGraph, SceneNode } from './'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from './copy'
+
+export function registerInstanceIndex(graph: SceneGraph, node: SceneNode): void {
+  if (node.type !== 'INSTANCE' || !node.componentId) return
+  let set = graph.instanceIndex.get(node.componentId)
+  if (!set) {
+    set = new Set()
+    graph.instanceIndex.set(node.componentId, set)
+  }
+  set.add(node.id)
+}
 
 const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'width',
@@ -202,6 +214,8 @@ export function swapInstanceComponent(
   const component = graph.nodes.get(componentId)
   if (!instance || component?.type !== 'COMPONENT' || instance.type !== 'INSTANCE') return
 
+  clearInstanceOverrideCaches()
+
   const previousComponent = instance.componentId ? graph.nodes.get(instance.componentId) : undefined
   const updates: Partial<SceneNode> = { componentId }
   for (const key of INSTANCE_SYNC_PROPS) {
@@ -211,9 +225,11 @@ export function swapInstanceComponent(
   if (!previousComponent || instance.name === previousComponent.name) updates.name = component.name
 
   const childIds = Array.from(instance.childIds)
-  for (const childId of childIds) graph.deleteNode(childId)
+  for (const childId of childIds) graph.deleteNode(childId, { permanent: false })
   graph.updateNode(instanceId, updates)
   cloneChildrenWithMapping(graph, componentId, instanceId)
+
+  clearInstanceOverrideCaches()
 }
 
 export function syncInstances(graph: SceneGraph, componentId: string): void {

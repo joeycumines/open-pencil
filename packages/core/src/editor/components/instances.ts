@@ -36,7 +36,7 @@ export function createComponentInstanceActions(ctx: EditorContext) {
         ctx.setSelectedIds(new Set([instanceId]))
       },
       inverse: () => {
-        ctx.graph.deleteNode(instanceId)
+        ctx.graph.deleteNode(instanceId, { permanent: true })
         ctx.setSelectedIds(new Set(previousSelection))
       }
     })

@@ -4,6 +4,7 @@ import { BLACK } from '#core/constants'
 import type { Color } from '#core/types'
 
 import type { SceneGraph } from './index'
+import { createDefaultSource } from './node/defaults'
 import type { Variable, VariableCollection, VariableType, VariableValue } from './types'
 
 export function addVariable(graph: SceneGraph, variable: Variable): void {
@@ -72,7 +73,8 @@ export function createVariable(
     collectionId,
     valuesByMode,
     description: '',
-    hiddenFromPublishing: false
+    hiddenFromPublishing: false,
+    source: { ...createDefaultSource(), id }
   }
   addVariable(graph, variable)
   return variable
@@ -80,17 +82,25 @@ export function createVariable(
 
 export function createCollection(
   graph: SceneGraph,
-  generateId: () => string,
+  generateCollectionId: () => string,
+  generateModeId: () => string,
   name: string
 ): VariableCollection {
-  const id = generateId()
-  const modeId = generateId()
+  const id = generateCollectionId()
+  const modeId = generateModeId()
   const collection: VariableCollection = {
     id,
     name,
-    modes: [{ modeId, name: 'Mode 1' }],
+    modes: [
+      {
+        modeId,
+        name: 'Mode 1',
+        source: { ...createDefaultSource(), id: modeId }
+      }
+    ],
     defaultModeId: modeId,
-    variableIds: []
+    variableIds: [],
+    source: { ...createDefaultSource(), id }
   }
   addCollection(graph, collection)
   return collection
@@ -118,7 +128,7 @@ export function setActiveMode(graph: SceneGraph, collectionId: string, modeId: s
   graph.activeMode.set(collectionId, modeId)
 }
 
-export function addMode(
+export function addModeToCollection(
   graph: SceneGraph,
   collectionId: string,
   modeId: string,
@@ -127,7 +137,7 @@ export function addMode(
 ): void {
   const collection = graph.variableCollections.get(collectionId)
   if (!collection) return
-  collection.modes.push({ modeId, name })
+  collection.modes.push({ modeId, name, source: { ...createDefaultSource(), id: modeId } })
   const sourceModeId = sourceMode ?? collection.defaultModeId
   for (const varId of collection.variableIds) {
     const variable = graph.variables.get(varId)

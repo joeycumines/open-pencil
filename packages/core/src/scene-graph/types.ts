@@ -37,6 +37,24 @@ export interface SourceMetadata {
   fig: FigmaSourcePayload
 }
 
+export interface CreateNodeOptions {
+  mode?: 'default' | 'restore'
+}
+
+export interface SceneGraphOptions {
+  sessionID?: number
+  rootId?: string
+  rootSource?: SourceMetadata
+  documentGuid?: string
+  reservedRuntimeIds?: Iterable<string>
+}
+
+export interface FigImportDiagnostics {
+  duplicateGuids: Array<{ guid: string; count: number }>
+  missingGuidCount: number
+  reassignedGuids: Array<{ original: string | null; assigned: string }>
+}
+
 export type HandleMirroring = 'NONE' | 'ANGLE' | 'ANGLE_AND_LENGTH'
 export type WindingRule = 'NONZERO' | 'EVENODD'
 
@@ -501,11 +519,13 @@ export interface Variable {
   key?: string
   /** Published library version (from NodeChange.version). Used for assetRef resolution in colorVar. */
   version?: string
+  source?: SourceMetadata
 }
 
 export interface VariableCollectionMode {
   modeId: string
   name: string
+  source?: SourceMetadata
 }
 
 export interface VariableCollection {
@@ -514,4 +534,5 @@ export interface VariableCollection {
   modes: VariableCollectionMode[]
   defaultModeId: string
   variableIds: string[]
+  source?: SourceMetadata
 }

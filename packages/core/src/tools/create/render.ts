@@ -45,7 +45,7 @@ export const render = defineTool({
 
     if (args.replace_id && replaceIndex >= 0) {
       figma.graph.reorderChild(result.id, parentId, replaceIndex)
-      figma.graph.deleteNode(args.replace_id)
+      figma.graph.deleteNode(args.replace_id, { permanent: true })
     } else if (args.insert_index !== undefined) {
       figma.graph.reorderChild(result.id, parentId, args.insert_index)
     }

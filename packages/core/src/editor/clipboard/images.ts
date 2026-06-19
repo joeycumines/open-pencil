@@ -63,10 +63,10 @@ export function createClipboardImageActions(ctx: EditorContext) {
       label: 'Place image',
       forward: () => {
         ctx.graph.images.set(hash, bytes)
-        ctx.graph.createNode(snapshot.type, pid, snapshot)
+        ctx.graph.createNode(snapshot.type, pid, snapshot, { mode: 'restore' })
       },
       inverse: () => {
-        ctx.graph.deleteNode(id)
+        ctx.graph.deleteNode(id, { permanent: true })
         ctx.graph.images.delete(hash)
         const next = new Set(ctx.state.selectedIds)
         next.delete(id)

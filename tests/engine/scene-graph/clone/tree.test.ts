@@ -1,19 +1,20 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SceneGraph } from '@open-pencil/core'
+import { SceneGraph, createDefaultSource } from '@open-pencil/core'
 
 describe('SceneGraph.cloneTree', () => {
-  test('clone clears source.id from the clone', () => {
+  function figSource(id: string) {
+    return { ...createDefaultSource(), id, format: 'fig' as const }
+  }
+
+  test('clone mints a fresh stable source.id and preserves format', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
     const rect = graph.createNode('RECTANGLE', page.id, {
       name: 'Original',
       width: 100,
-      height: 50
-    })
-    // Simulate an imported node with a Figma source.id
-    graph.updateNode(rect.id, {
-      source: { ...rect.source, id: '1:42', orderKey: '!', format: 'fig' }
+      height: 50,
+      source: figSource('1:42')
     })
     const original = graph.getNode(rect.id)
     expect(original).toBeDefined()
@@ -21,30 +22,30 @@ describe('SceneGraph.cloneTree', () => {
 
     const clone = graph.cloneTree(rect.id, page.id)
     expect(clone).not.toBeNull()
-    // Clone must NOT carry the original's Figma GUID
-    expect(clone.source.id).toBeNull()
+    // Clone must NOT carry the original's Figma GUID, but must keep format
+    expect(clone.source.id).not.toBe('1:42')
+    expect(clone.source.id).toMatch(/^\d+:\d+$/)
     expect(clone.source.orderKey).toBeNull()
-    // But format should be preserved
     expect(clone.source.format).toBe('fig')
   })
 
-  test('clone of clone does not leak source.id', () => {
+  test('clone of clone mints another fresh source.id', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
     const rect = graph.createNode('RECTANGLE', page.id, {
       name: 'Original',
       width: 100,
-      height: 50
-    })
-    graph.updateNode(rect.id, {
-      source: { ...rect.source, id: '1:99', format: 'fig' }
+      height: 50,
+      source: figSource('1:99')
     })
 
     const clone1 = graph.cloneTree(rect.id, page.id)
     expect(clone1).not.toBeNull()
     const clone2 = graph.cloneTree(clone1.id, page.id)
     expect(clone2).not.toBeNull()
-    expect(clone2.source.id).toBeNull()
+    expect(clone2.source.id).not.toBe('1:99')
+    expect(clone2.source.id).toMatch(/^\d+:\d+$/)
+    expect(clone2.source.id).not.toBe(clone1.source.id)
   })
 
   test('clone preserves visual properties', () => {
@@ -53,10 +54,8 @@ describe('SceneGraph.cloneTree', () => {
     const rect = graph.createNode('RECTANGLE', page.id, {
       name: 'Original',
       width: 100,
-      height: 50
-    })
-    graph.updateNode(rect.id, {
-      source: { ...rect.source, id: '1:42', format: 'fig' },
+      height: 50,
+      source: figSource('1:42'),
       fills: [
         {
           type: 'SOLID',
@@ -75,43 +74,40 @@ describe('SceneGraph.cloneTree', () => {
     expect(clone.fills).toEqual(rect.fills)
   })
 
-  test('clone recursively clears source.id on children', () => {
+  test('clone recursively mints fresh source.id on children', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
     const frame = graph.createNode('FRAME', page.id, {
       name: 'Frame',
       width: 200,
-      height: 200
+      height: 200,
+      source: figSource('2:10')
     })
-    graph.updateNode(frame.id, {
-      source: { ...frame.source, id: '2:10', format: 'fig' }
-    })
-    const child = graph.createNode('RECTANGLE', frame.id, {
+    graph.createNode('RECTANGLE', frame.id, {
       name: 'Child',
       width: 50,
-      height: 50
-    })
-    graph.updateNode(child.id, {
-      source: { ...child.source, id: '2:11', format: 'fig' }
+      height: 50,
+      source: figSource('2:11')
     })
 
     const clone = graph.cloneTree(frame.id, page.id)
     expect(clone).not.toBeNull()
-    expect(clone.source.id).toBeNull()
+    expect(clone.source.id).not.toBe('2:10')
+    expect(clone.source.id).toMatch(/^\d+:\d+$/)
     const clonedChild = graph.getChildren(clone.id)[0]
-    expect(clonedChild.source.id).toBeNull()
+    expect(clonedChild.source.id).not.toBe('2:11')
+    expect(clonedChild.source.id).toMatch(/^\d+:\d+$/)
   })
+
   test('clone deep-copies source.fig so mutations do not affect original', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
     const rect = graph.createNode('RECTANGLE', page.id, {
       name: 'Original',
       width: 100,
-      height: 50
-    })
-    graph.updateNode(rect.id, {
+      height: 50,
       source: {
-        ...rect.source,
+        ...createDefaultSource(),
         id: '1:42',
         orderKey: '!',
         format: 'fig',

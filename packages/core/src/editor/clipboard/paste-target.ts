@@ -1,5 +1,5 @@
 import type { EditorContext } from '#core/editor/types'
-import { CONTAINER_TYPES } from '#core/scene-graph/node-defaults'
+import { CONTAINER_TYPES } from '#core/scene-graph/node/defaults'
 
 export function resolvePasteTarget(ctx: EditorContext): string {
   if (ctx.state.enteredContainerId) return ctx.state.enteredContainerId

@@ -65,10 +65,10 @@ export function createShapeActions(ctx: EditorContext) {
     ctx.undo.push({
       label: `Create ${type.toLowerCase()}`,
       forward: () => {
-        ctx.graph.createNode(snapshot.type, pid, snapshot)
+        ctx.graph.createNode(snapshot.type, pid, snapshot, { mode: 'restore' })
       },
       inverse: () => {
-        ctx.graph.deleteNode(id)
+        ctx.graph.deleteNode(id, { permanent: true })
         const next = new Set(ctx.state.selectedIds)
         next.delete(id)
         ctx.setSelectedIds(next)

@@ -40,7 +40,7 @@ function pushPasteReplaceUndo(
   ctx.undo.push({
     label: 'Paste to replace',
     forward: () => {
-      for (const { id } of deleted) ctx.graph.deleteNode(id)
+      for (const { id } of deleted) ctx.graph.deleteNode(id, { permanent: true })
       recreateSnapshots(ctx, createdSnapshots, pageId)
       reorderCreatedAtReplacementIndex(ctx, created, deleted)
       computeAllLayouts(ctx.graph, pageId)
@@ -81,7 +81,7 @@ export function replaceTargetsWithCreated(
     targetBounds.y + targetBounds.height / 2
   )
   reorderCreatedAtReplacementIndex(ctx, created, deleted)
-  for (const { id } of deleted) ctx.graph.deleteNode(id)
+  for (const { id } of deleted) ctx.graph.deleteNode(id, { permanent: true })
   computeAllLayouts(ctx.graph, ctx.state.currentPageId)
   ctx.setSelectedIds(new Set(created))
   pushPasteReplaceUndo(ctx, created, deleted, prevSelection)

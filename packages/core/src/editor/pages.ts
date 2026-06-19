@@ -50,7 +50,7 @@ export function createPageActions(ctx: EditorContext) {
     const pages = ctx.graph.getPages()
     if (pages.length <= 1) return
     const idx = pages.findIndex((p) => p.id === pageId)
-    ctx.graph.deleteNode(pageId)
+    ctx.graph.deleteNode(pageId, { permanent: true })
     pageViewportStore.deletePageViewport(pageId)
     if (ctx.state.currentPageId === pageId) {
       const newIdx = Math.min(idx, pages.length - 2)

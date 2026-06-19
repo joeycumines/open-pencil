@@ -278,7 +278,8 @@ export function importClipboardNodes(
 
   for (const figmaId of internalTopLevel) {
     const ourId = created.get(figmaId)
-    if (ourId) graph.deleteNode(ourId)
+    // Internal wrapper nodes are transient import scaffolding, not user deletions.
+    if (ourId) graph.deleteNode(ourId, { permanent: false })
   }
 
   detachOrphanedInstances(created, graph)
