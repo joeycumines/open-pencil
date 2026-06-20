@@ -57,8 +57,10 @@ export function useEditorSetup(url = '/') {
   })
 
   test.afterAll(async () => {
-    await page?.unrouteAll({ behavior: 'ignoreErrors' }).catch(() => undefined)
-    await page?.close()
+    if (page) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' }).catch(() => undefined)
+      await page.close()
+    }
   })
 
   return {
