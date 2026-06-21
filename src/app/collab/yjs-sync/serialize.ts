@@ -155,8 +155,31 @@ function remapOverridesToRemote(
   return remapped
 }
 
-function assumeFigmaPayload(value: unknown): SourceMetadata['fig'] {
-  return value as SourceMetadata['fig']
+function parseFigmaPayload(value: unknown): SourceMetadata['fig'] | undefined {
+  if (!isRecord(value)) return undefined
+  // Validate known fields — reject unexpected types to prevent type confusion
+  // from malformed or malicious remote peer data
+  if (value.rawSize !== null && typeof value.rawSize !== 'object') return undefined
+  if (value.rawTransform !== null && typeof value.rawTransform !== 'object') return undefined
+  if (value.rawNodeFields !== undefined && typeof value.rawNodeFields !== 'object') return undefined
+  if (value.layout !== null && typeof value.layout !== 'object') return undefined
+  if (value.symbolOverrides !== undefined && !Array.isArray(value.symbolOverrides)) return undefined
+  if (
+    value.componentPropAssignments !== undefined &&
+    !Array.isArray(value.componentPropAssignments)
+  )
+    return undefined
+  if (value.derivedSymbolData !== undefined && !Array.isArray(value.derivedSymbolData))
+    return undefined
+  if (
+    value.derivedSymbolDataLayoutVersion !== null &&
+    typeof value.derivedSymbolDataLayoutVersion !== 'number'
+  )
+    return undefined
+  if (value.uniformScaleFactor !== null && typeof value.uniformScaleFactor !== 'number')
+    return undefined
+  // Merge validated fields over defaults
+  return { ...createDefaultSource().fig, ...value } as SourceMetadata['fig']
 }
 
 function tryParseSourceFig(value: unknown): SourceMetadata['fig'] | undefined {
@@ -164,7 +187,7 @@ function tryParseSourceFig(value: unknown): SourceMetadata['fig'] | undefined {
   if (str === undefined) return undefined
   try {
     const parsed: unknown = JSON.parse(str)
-    return isRecord(parsed) ? assumeFigmaPayload(parsed) : undefined
+    return parseFigmaPayload(parsed)
   } catch {
     return undefined
   }

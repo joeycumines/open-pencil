@@ -37,14 +37,19 @@ export const INTERNAL_API = Symbol('api')
 export interface NodeProxyHost {
   wrapNode(id: string): FigmaNodeProxy
   readonly currentPageId: string
+  readonly graph: SceneGraph
 }
 
 export { MIXED }
 
 export class FigmaNodeProxy {
   [INTERNAL_ID]: string;
-  [INTERNAL_GRAPH]: SceneGraph;
   [INTERNAL_API]: NodeProxyHost
+
+  /** Returns the current graph from the API host (not a stored reference). */
+  get [INTERNAL_GRAPH](): SceneGraph {
+    return this[INTERNAL_API].graph
+  }
 
   declare readonly id: string
   declare readonly type: NodeType
@@ -103,9 +108,8 @@ export class FigmaNodeProxy {
   declare minHeight: number | null
   declare maxHeight: number | null
 
-  constructor(id: string, graph: SceneGraph, api: NodeProxyHost) {
+  constructor(id: string, api: NodeProxyHost) {
     this[INTERNAL_ID] = id
-    this[INTERNAL_GRAPH] = graph
     this[INTERNAL_API] = api
   }
 

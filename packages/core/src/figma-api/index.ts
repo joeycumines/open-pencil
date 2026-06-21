@@ -144,7 +144,7 @@ export class FigmaAPI implements NodeProxyHost {
     const translatedId = this._translateId(id)
     let proxy = this._nodeCache.get(translatedId)
     if (!proxy) {
-      proxy = new FigmaNodeProxy(translatedId, this.graph, this)
+      proxy = new FigmaNodeProxy(translatedId, this)
       this._nodeCache.set(translatedId, proxy)
     }
     return proxy
