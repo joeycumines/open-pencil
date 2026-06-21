@@ -42,7 +42,18 @@ function reconcileRemoteRoot(
 ): void {
   const graph = store.graph
   const state = graph.getSyncState()
-  if (state.rootMapped) return
+  if (state.rootMapped) {
+    // Already mapped to this root — nothing to do
+    if (state.remoteRootStableId === remoteRootStableId) return
+    // Split-brain: both peers called shareCurrentDoc. The peer with the
+    // lexicographically smaller root stable ID wins; the other yields.
+    if (state.remoteRootStableId! < remoteRootStableId) return
+    // We yield — reset root mapping and adopt the remote root
+    state.remoteToLocal.delete(state.remoteRootStableId!)
+    state.localToRemote.delete(graph.rootId)
+    state.rootMapped = false
+    state.remoteRootStableId = null
+  }
 
   state.remoteRootStableId = remoteRootStableId
   state.remoteToLocal.set(remoteRootStableId, graph.rootId)

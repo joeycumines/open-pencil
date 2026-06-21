@@ -94,7 +94,14 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
   ): void {
     const graph = targetStore.graph
     const state = graph.getSyncState()
-    if (state.rootMapped) return
+    if (state.rootMapped) {
+      if (state.remoteRootStableId === remoteRootStableId) return
+      if (state.remoteRootStableId! < remoteRootStableId) return
+      state.remoteToLocal.delete(state.remoteRootStableId!)
+      state.localToRemote.delete(graph.rootId)
+      state.rootMapped = false
+      state.remoteRootStableId = null
+    }
     state.remoteRootStableId = remoteRootStableId
     state.remoteToLocal.set(remoteRootStableId, graph.rootId)
     state.localToRemote.set(graph.rootId, remoteRootStableId)
@@ -146,7 +153,7 @@ export function observeTargetDoc(
   const unbind = ynodes.observeDeep((events) => {
     if (suppressGraphSync) return
     const state = store.graph.getSyncState()
-    if (state.remoteRootStableId === null && reconcileRemoteRoot !== undefined) {
+    if (reconcileRemoteRoot !== undefined) {
       for (const event of events) {
         if (event.target === ynodes) {
           for (const [remoteStableId, change] of event.changes.keys) {
@@ -155,7 +162,11 @@ export function observeTargetDoc(
               if (ynode === undefined) continue
               const parentId = (ynode.get('parentId') as string | undefined) ?? null
               if (parentId === remoteStableId) {
-                reconcileRemoteRoot(store, remoteStableId, ynode, ynodes)
+                // Root candidate found — reconcile even if we already have a root
+                // (handles split-brain when both peers called shareCurrentDoc)
+                if (state.remoteRootStableId !== remoteStableId) {
+                  reconcileRemoteRoot(store, remoteStableId, ynode, ynodes)
+                }
                 break
               }
             }
@@ -195,7 +206,14 @@ export function cloneYnode(
 export const reconcileRemoteRoot: ReconcileRootFn = (store, remoteRootStableId, ynode, ynodes) => {
   const graph = store.graph
   const state = graph.getSyncState()
-  if (state.rootMapped) return
+  if (state.rootMapped) {
+    if (state.remoteRootStableId === remoteRootStableId) return
+    if (state.remoteRootStableId! < remoteRootStableId) return
+    state.remoteToLocal.delete(state.remoteRootStableId!)
+    state.localToRemote.delete(graph.rootId)
+    state.rootMapped = false
+    state.remoteRootStableId = null
+  }
   state.remoteRootStableId = remoteRootStableId
   state.remoteToLocal.set(remoteRootStableId, graph.rootId)
   state.localToRemote.set(graph.rootId, remoteRootStableId)
