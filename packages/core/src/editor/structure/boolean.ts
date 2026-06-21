@@ -46,11 +46,15 @@ export function booleanOperationSelected(
   ctx.undo.push({
     label: operationLabel(operation),
     forward: () => {
-      const restored = ctx.graph.createNode('BOOLEAN_OPERATION', parentId, {
-        ...booleanNode,
-        childIds: [],
-        id: booleanId
-      })
+      // M-17: Use structuredClone to deep-copy the boolean node snapshot,
+      // preventing shared mutable references with the original node.
+      // M-07: Use mode: 'restore' so the undo can reuse the same runtime ID.
+      const restored = ctx.graph.createNode(
+        'BOOLEAN_OPERATION',
+        parentId,
+        structuredClone({ ...booleanNode, childIds: [], id: booleanId }),
+        { mode: 'restore' }
+      )
       ctx.graph.insertChildAt(restored.id, parentId, firstIndex)
       for (const id of childIds) ctx.graph.reparentNode(id, restored.id)
       ctx.setSelectedIds(new Set([restored.id]))

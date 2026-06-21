@@ -4,7 +4,7 @@ import type { NodeChange, Paint } from '#core/kiwi/fig/codec'
 import type { SceneGraph, SceneNode } from '#core/scene-graph'
 import type { Color, GUID, Matrix, Vector } from '#core/types'
 
-import { stringToGuid } from './guid'
+import { parseGuidOrNull, stringToGuid } from './guid'
 import {
   applyExportSettingsPluginData,
   mergePluginData,
@@ -122,10 +122,6 @@ function componentPropertyTypeForKiwi(type: string) {
   if (type === 'BOOLEAN') return 'BOOL'
   if (type === 'VARIANT') return 'TEXT'
   return type
-}
-
-function parseGuidOrNull(value: string) {
-  return /^\d+:\d+$/.test(value) ? stringToGuid(value) : null
 }
 
 const FIGMA_PAYLOAD_VARIABLE_MAP_FIELDS = new Set([

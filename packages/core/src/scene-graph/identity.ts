@@ -16,13 +16,7 @@ export interface SceneGraphIdentityHost {
   variableCollections: Map<string, VariableCollection>
 }
 
-let fallbackLocalID = 1
 let documentLocalID = 1
-
-/** @deprecated Use SceneGraph.generateNodeId instead. */
-export function generateId(): string {
-  return `0:${fallbackLocalID++}`
-}
 
 function allocateSessionID(): number {
   const buf = new Uint32Array(1)

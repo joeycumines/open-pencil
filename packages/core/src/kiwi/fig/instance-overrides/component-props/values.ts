@@ -11,8 +11,11 @@ export function normalizePropName(value: string): string {
 }
 
 export function stringToGuidParts(value: string): GUID {
-  const [sessionID, localID] = value.split(':').map(Number)
-  return { sessionID, localID }
+  const match = value.match(/^(\d+):(\d+)$/)
+  if (!match) {
+    return { sessionID: 0, localID: 0 }
+  }
+  return { sessionID: Number.parseInt(match[1], 10), localID: Number.parseInt(match[2], 10) }
 }
 
 export function propTextCharacters(value: ComponentPropValue): string | undefined {

@@ -51,7 +51,8 @@ export function flattenSelected(
   ctx.undo.push({
     label,
     forward: () => {
-      const restored = ctx.graph.createNode('VECTOR', parentId, vectorSnapshot)
+      // M-07: Use mode: 'restore' so the undo can reuse the same runtime ID
+      const restored = ctx.graph.createNode('VECTOR', parentId, vectorSnapshot, { mode: 'restore' })
       ctx.graph.insertChildAt(restored.id, parentId, firstIndex)
       for (const id of childIds) ctx.graph.deleteNode(id, { permanent: true })
       ctx.setSelectedIds(new Set([restored.id]))

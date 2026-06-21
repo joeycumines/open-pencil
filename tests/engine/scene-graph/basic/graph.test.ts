@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { generateId, SceneGraph } from '@open-pencil/core'
+import { SceneGraph } from '@open-pencil/core'
 
 import { expectDefined } from '#tests/helpers/assert'
 
@@ -20,8 +20,9 @@ describe('SceneGraph', () => {
   test('create node skips imported ids that collide with the local generator', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)
-    const probe = generateId()
-    const nextLocalId = `0:${Number(probe.split(':')[1]) + 1}`
+    const probe = graph.generateNodeId()
+    const parts = probe.split(':')
+    const nextLocalId = `${parts[0]}:${Number(parts[1]) + 1}`
     const imported = graph.createNode('RECTANGLE', page, {
       id: nextLocalId,
       name: 'Imported node'

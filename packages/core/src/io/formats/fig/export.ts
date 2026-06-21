@@ -7,7 +7,11 @@ import { renderThumbnail } from '#core/io/formats/raster'
 import { initCodec, getCompiledSchema, getSchemaBytes } from '#core/kiwi/fig/codec'
 import type { NodeChange } from '#core/kiwi/fig/codec'
 import { populateAllLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
-import { stringToGuid } from '#core/kiwi/fig/node-change/convert'
+import {
+  FIGMA_SESSION_IMPORTED,
+  stringToGuid,
+  parseGuidOrNull
+} from '#core/kiwi/fig/node-change/guid'
 import {
   sceneNodeToKiwi,
   fractionalPosition,
@@ -100,13 +104,9 @@ async function renderFigThumbnail(
     THUMBNAIL_1X1
   )
 }
-function parseGuidOrNull(value: string | null | undefined): GUID | null {
-  if (typeof value !== 'string' || !/^\d+:\d+$/.test(value)) return null
-  return stringToGuid(value)
-}
 function mintExportGuid(localIdCounter: { value: number }, assignedGuidValues: Set<string>): GUID {
   for (;;) {
-    const guid = { sessionID: 0, localID: localIdCounter.value++ }
+    const guid = { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
     const key = `${guid.sessionID}:${guid.localID}`
     if (!assignedGuidValues.has(key)) {
       assignedGuidValues.add(key)
@@ -201,7 +201,6 @@ function appendVariableNodeChanges(
         return { id: mGuid, name: m.name, sortPosition: fractionalPosition(i) }
       })
     })
-
     appendVariablesForCollection(
       graph,
       nodeChanges,
@@ -226,7 +225,6 @@ function appendVariablesForCollection(
   for (const varId of variableIds) {
     const variable = graph.variables.get(varId)
     if (!variable) continue
-
     const varGuid = varIdToGuid.get(varId) ?? stringToGuid(varId)
     const typeMap: Record<string, string> = {
       COLOR: 'COLOR',
@@ -239,7 +237,6 @@ function appendVariablesForCollection(
       modeID: modeIdToGuid.get(modeId) ?? stringToGuid(modeId),
       variableData: variableValueToKiwi(value, variable.type, varIdToGuid)
     }))
-
     const nc: KiwiNodeChange = {
       guid: varGuid,
       parentIndex: { guid: parentGuid, position: fractionalPosition(varIdx++) },
@@ -319,14 +316,15 @@ function buildCanvasEntries(
   for (let p = 0; p < pages.length; p++) {
     const page = pages[p]
     const canvasGuid = (() => {
-      if (page.source.id === null) return { sessionID: 0, localID: localIdCounter.value++ }
+      if (page.source.id === null)
+        return { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
 
       const importedGuid = stringToGuid(page.source.id)
       const key = `${importedGuid.sessionID}:${importedGuid.localID}`
 
       if (!assignedGuidValues.has(key)) return importedGuid
 
-      return { sessionID: 0, localID: localIdCounter.value++ }
+      return { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
     })()
     // Advance counter past any source.id-derived GUID to prevent collisions
     // with subsequently generated variable/collection GUIDs.
@@ -353,7 +351,7 @@ function buildCanvasEntries(
     canvasEntries.push({ page, canvasGuid, canvasNc })
   }
   if (graph.variableCollections.size > 0 && internalCanvasGuid === null) {
-    internalCanvasGuid = { sessionID: 0, localID: localIdCounter.value++ }
+    internalCanvasGuid = { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
     assignedGuidValues.add(`${internalCanvasGuid.sessionID}:${internalCanvasGuid.localID}`)
     canvasEntries.push({
       page: { id: '', name: 'Internal Only Canvas', internalOnly: true } as FigExportPage,
@@ -367,10 +365,8 @@ function buildCanvasEntries(
       )
     })
   }
-
   return { canvasEntries, internalCanvasGuid }
 }
-
 export async function exportFigFile(
   graph: SceneGraph,
   ck?: CanvasKit,
@@ -403,7 +399,7 @@ export async function exportFigFile(
     compiled = getCompiledSchema()
     schemaDeflated = deflateSync(getSchemaBytes())
   }
-  const docGuid = { sessionID: 0, localID: 0 }
+  const docGuid = { sessionID: FIGMA_SESSION_IMPORTED, localID: 0 }
   const localIdCounter = { value: 2 }
   const documentNc = makeDocumentNodeChange(docGuid, graph.documentColorSpace)
   const rootNode = graph.getNode(graph.rootId)
@@ -486,7 +482,7 @@ export async function exportFigFile(
   }
   const msg: Record<string, unknown> = {
     type: 'NODE_CHANGES',
-    sessionID: 0,
+    sessionID: FIGMA_SESSION_IMPORTED,
     ackID: 0,
     nodeChanges
   }

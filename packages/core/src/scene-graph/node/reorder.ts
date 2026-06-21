@@ -31,5 +31,13 @@ export function reorderChild(
   const idx = Math.min(insertIndex, newParent.childIds.length)
   newParent.childIds.splice(idx, 0, nodeId)
 
+  // M-03: Clear absPosCache on cross-parent moves — the node's absolute
+  // position changes when it moves to a different parent. Same-parent
+  // reorders don't affect position, but clearing is cheap and consistent
+  // with insertChildAt.
+  if (oldParent?.id !== parentId) {
+    graph.clearAbsPosCache()
+  }
+
   graph.emitter.emit('node:reordered', nodeId, parentId, idx)
 }

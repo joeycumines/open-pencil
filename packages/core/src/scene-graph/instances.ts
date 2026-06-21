@@ -277,6 +277,18 @@ export function detachInstance(graph: SceneGraph, instanceId: string): void {
   node.type = 'FRAME'
   node.componentId = null
   node.overrides = {}
+
+  // L-19: Null componentId on all descendant instance children — after
+  // detaching, the subtree is no longer linked to the original component.
+  // Leaving child componentId references would cause syncInstances to
+  // incorrectly propagate component changes to the detached subtree.
+  for (const childId of node.childIds) {
+    const child = graph.nodes.get(childId)
+    if (child?.componentId) {
+      graph.instanceIndex.get(child.componentId)?.delete(childId)
+      child.componentId = null
+    }
+  }
 }
 
 export function getMainComponent(graph: SceneGraph, instanceId: string): SceneNode | undefined {

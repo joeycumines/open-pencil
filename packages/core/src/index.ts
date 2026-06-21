@@ -24,7 +24,6 @@ export type {
 
 export {
   SceneGraph,
-  generateId,
   createDefaultSource,
   cloneVectorNetwork,
   normalizeVectorNetwork,
