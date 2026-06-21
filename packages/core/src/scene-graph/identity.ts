@@ -43,6 +43,7 @@ export class SceneGraphIdentity {
   private nextLocalID = 1
   private importerCounter = 1
   private reservedRuntimeIds = new Set<string>()
+  private modeIds = new Set<string>()
   private sourceIdsMigrated = false
 
   constructor(host: SceneGraphIdentityHost, options?: SceneGraphOptions) {
@@ -51,6 +52,11 @@ export class SceneGraphIdentity {
     this.documentGuid = options?.documentGuid ?? allocateDocumentGuid()
     for (const id of options?.reservedRuntimeIds ?? []) {
       this.reservedRuntimeIds.add(id)
+    }
+    for (const collection of this.host.variableCollections.values()) {
+      for (const mode of collection.modes) {
+        this.modeIds.add(mode.modeId)
+      }
     }
   }
 
@@ -66,12 +72,7 @@ export class SceneGraphIdentity {
   }
 
   private hasModeId(id: string): boolean {
-    for (const collection of this.host.variableCollections.values()) {
-      for (const mode of collection.modes) {
-        if (mode.modeId === id) return true
-      }
-    }
-    return false
+    return this.modeIds.has(id)
   }
 
   generateStableId(): string {
@@ -143,6 +144,7 @@ export class SceneGraphIdentity {
 
   recomputeReservedRuntimeIds(): void {
     this.reservedRuntimeIds.clear()
+    this.modeIds.clear()
     const reserve = (source: SourceMetadata | undefined): void => {
       if (source?.format === 'fig' && source.id !== null) {
         this.reservedRuntimeIds.add(source.id)
@@ -152,7 +154,10 @@ export class SceneGraphIdentity {
     for (const variable of this.host.variables.values()) reserve(variable.source)
     for (const collection of this.host.variableCollections.values()) {
       reserve(collection.source)
-      for (const mode of collection.modes) reserve(mode.source)
+      for (const mode of collection.modes) {
+        reserve(mode.source)
+        this.modeIds.add(mode.modeId)
+      }
     }
   }
 
@@ -225,7 +230,31 @@ export class SceneGraphIdentity {
     ) {
       return requestedRuntimeId
     }
-    if (mode !== 'restore' && existing === undefined && !reserved) return requestedRuntimeId
+    // Restore mode: reuse a freed runtime ID if it doesn't collide with any
+    // namespace. This handles nodes whose runtime ID differs from their stable
+    // ID (e.g. fig-imported nodes with GUID collision that got a generated
+    // runtime ID). Without this, undo of such a node would get a new runtime
+    // ID, breaking selection references and componentId links.
+    if (
+      mode === 'restore' &&
+      existing === undefined &&
+      !reserved &&
+      !this.host.variables.has(requestedRuntimeId) &&
+      !this.host.variableCollections.has(requestedRuntimeId) &&
+      !this.hasModeId(requestedRuntimeId)
+    ) {
+      return requestedRuntimeId
+    }
+    if (
+      mode !== 'restore' &&
+      existing === undefined &&
+      !reserved &&
+      !this.host.variables.has(requestedRuntimeId) &&
+      !this.host.variableCollections.has(requestedRuntimeId) &&
+      !this.hasModeId(requestedRuntimeId)
+    ) {
+      return requestedRuntimeId
+    }
     return this.generateNodeId(stableId)
   }
 
@@ -233,7 +262,20 @@ export class SceneGraphIdentity {
     if (options?.permanent === false) return
     const importedId = this.isReservedImportedId(node)
     if (importedId !== null) {
-      this.unreserveRuntimeId(importedId)
+      // Check if any other node still references this imported source.id.
+      // Multiple nodes can share the same Figma GUID (multi-document import);
+      // unreserving when one is deleted would break undo for the others.
+      let stillReferenced = false
+      for (const other of this.host.nodes.values()) {
+        if (other === node) continue
+        if (other.source.format === 'fig' && other.source.id === importedId) {
+          stillReferenced = true
+          break
+        }
+      }
+      if (!stillReferenced) {
+        this.unreserveRuntimeId(importedId)
+      }
     }
   }
 }
