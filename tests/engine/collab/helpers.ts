@@ -2,10 +2,12 @@ import * as Y from 'yjs'
 
 import { SceneGraph } from '@open-pencil/core'
 import type { EditorEvents } from '@open-pencil/core/editor'
-import type { SceneNode } from '@open-pencil/core/scene-graph'
+import type { SceneNode, Variable, VariableCollection } from '@open-pencil/core/scene-graph'
 
 import {
   applyYnodeToGraph,
+  applyYjsCollectionsToGraph,
+  applyYjsVariablesToGraph,
   createYjsGraphSync,
   stableIdForNode,
   yNodeToProps,
@@ -56,6 +58,16 @@ function createNodeEventBridge(graph: SceneGraph) {
         return graph.onNodeEvents({
           reordered: handler as (nodeId: string, parentId: string, index: number) => void
         })
+      case 'variable:created':
+        return graph.onNodeEvents({ variableCreated: handler as (v: Variable) => void })
+      case 'variable:deleted':
+        return graph.onNodeEvents({ variableDeleted: handler as (id: string) => void })
+      case 'collection:created':
+        return graph.onNodeEvents({ collectionCreated: handler as (c: VariableCollection) => void })
+      case 'collection:updated':
+        return graph.onNodeEvents({ collectionUpdated: handler as (c: VariableCollection) => void })
+      case 'collection:deleted':
+        return graph.onNodeEvents({ collectionDeleted: handler as (id: string) => void })
       default:
         return () => undefined
     }
@@ -77,11 +89,15 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
   let suppressYjsEvents = false
   const ynodes = ydoc.getMap<Y.Map<unknown>>('nodes')
   const yimages = ydoc.getMap<Uint8Array>('images')
+  const yvariables = ydoc.getMap<Y.Map<unknown>>('variables')
+  const ycollections = ydoc.getMap<Y.Map<unknown>>('collections')
   const sync = createYjsGraphSync({
     getStore: () => store,
     getYdoc: () => ydoc,
     getYnodes: () => ynodes,
     getYimages: () => yimages,
+    getYvariables: () => yvariables,
+    getYcollections: () => ycollections,
     setSuppressYjsEvents: (value) => {
       suppressYjsEvents = value
     }
@@ -95,9 +111,10 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
     const graph = targetStore.graph
     const state = graph.getSyncState()
     if (state.rootMapped) {
-      if (state.remoteRootStableId === remoteRootStableId) return
-      if (state.remoteRootStableId! < remoteRootStableId) return
-      state.remoteToLocal.delete(state.remoteRootStableId!)
+      const currentRemote = state.remoteRootStableId
+      if (currentRemote === remoteRootStableId) return
+      if (currentRemote !== null && currentRemote < remoteRootStableId) return
+      if (currentRemote !== null) state.remoteToLocal.delete(currentRemote)
       state.localToRemote.delete(graph.rootId)
       state.rootMapped = false
       state.remoteRootStableId = null
@@ -120,6 +137,8 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
     ...sync,
     ynodes,
     yimages,
+    yvariables,
+    ycollections,
     getSuppressYjsEvents: () => suppressYjsEvents,
     setSuppressYjsEvents: (value: boolean) => {
       suppressYjsEvents = value
@@ -150,7 +169,10 @@ export function observeTargetDoc(
 ): () => void {
   let suppressGraphSync = false
   const ynodes = ydoc.getMap<Y.Map<unknown>>('nodes')
-  const unbind = ynodes.observeDeep((events) => {
+  const yvariables = ydoc.getMap<Y.Map<unknown>>('variables')
+  const ycollections = ydoc.getMap<Y.Map<unknown>>('collections')
+
+  const unbindNodes = ynodes.observeDeep((events) => {
     if (suppressGraphSync) return
     const state = store.graph.getSyncState()
     if (reconcileRemoteRoot !== undefined) {
@@ -182,7 +204,38 @@ export function observeTargetDoc(
     }
     store.requestRender()
   })
-  return unbind
+
+  const unbindVariables = yvariables.observeDeep((events) => {
+    if (suppressGraphSync) return
+    const graph = store.graph
+    const state = graph.getSyncState()
+    suppressGraphSync = true
+    try {
+      applyYjsVariablesToGraph(graph, state, yvariables, events)
+    } finally {
+      suppressGraphSync = false
+    }
+    store.requestRender()
+  })
+
+  const unbindCollections = ycollections.observeDeep((events) => {
+    if (suppressGraphSync) return
+    const graph = store.graph
+    const state = graph.getSyncState()
+    suppressGraphSync = true
+    try {
+      applyYjsCollectionsToGraph(graph, state, ycollections, events)
+    } finally {
+      suppressGraphSync = false
+    }
+    store.requestRender()
+  })
+
+  return () => {
+    unbindNodes()
+    unbindVariables()
+    unbindCollections()
+  }
 }
 
 export function encodeAndApply(fromDoc: Y.Doc, toDoc: Y.Doc): void {
@@ -207,9 +260,10 @@ export const reconcileRemoteRoot: ReconcileRootFn = (store, remoteRootStableId, 
   const graph = store.graph
   const state = graph.getSyncState()
   if (state.rootMapped) {
-    if (state.remoteRootStableId === remoteRootStableId) return
-    if (state.remoteRootStableId! < remoteRootStableId) return
-    state.remoteToLocal.delete(state.remoteRootStableId!)
+    const currentRemote = state.remoteRootStableId
+    if (currentRemote === remoteRootStableId) return
+    if (currentRemote !== null && currentRemote < remoteRootStableId) return
+    if (currentRemote !== null) state.remoteToLocal.delete(currentRemote)
     state.localToRemote.delete(graph.rootId)
     state.rootMapped = false
     state.remoteRootStableId = null

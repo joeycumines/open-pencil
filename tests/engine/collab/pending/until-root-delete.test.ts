@@ -12,12 +12,16 @@ describe('pendingUntilRoot cleanup', () => {
     const ydoc = new Y.Doc()
     const ynodes = ydoc.getMap<Y.Map<unknown>>('nodes')
     const yimages = ydoc.getMap<Uint8Array>('images')
+    const yvariables = ydoc.getMap<Y.Map<unknown>>('variables')
+    const ycollections = ydoc.getMap<Y.Map<unknown>>('collections')
     const sync = createTestYjsSync(store, ydoc)
 
     registerYjsObservers({
       store,
       ynodes,
       yimages,
+      yvariables,
+      ycollections,
       getSuppressYjsEvents: sync.getSuppressYjsEvents,
       setSuppressGraphSync: () => {
         /* no-op: graph sync suppression is not needed for this test */

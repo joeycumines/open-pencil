@@ -61,7 +61,7 @@ describe('C-08: Stale FigmaNodeProxy uses detached graph', () => {
     expect(() => {
       // Accessing the proxy's name should either throw (node removed)
       // or return undefined — NOT the stale value from graph1
-      proxy.name
+      void proxy.name
     }).toThrow() // FAILS: no throw, returns stale 'Node in graph1'
   })
 

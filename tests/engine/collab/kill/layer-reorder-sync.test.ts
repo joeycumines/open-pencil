@@ -2,8 +2,6 @@ import { describe, expect, test } from 'bun:test'
 
 import * as Y from 'yjs'
 
-import { bindCollabGraphEvents } from '@/app/collab/yjs-sync'
-
 import {
   createTestStore,
   createTestYjsSync,
@@ -59,7 +57,9 @@ describe('C-03: Layer reordering not synced to joiner', () => {
     })
 
     // Verify initial order [A, B, C]
-    const hostFrame = hostStore.graph.getNode(frame.id)!
+    const hostFrame = hostStore.graph.getNode(frame.id)
+    expect(hostFrame).toBeDefined()
+    if (!hostFrame) return
     expect(hostFrame.childIds).toEqual([childA.id, childB.id, childC.id])
 
     // Setup collab
@@ -93,7 +93,9 @@ describe('C-03: Layer reordering not synced to joiner', () => {
     encodeAndApply(hostYdoc, joinerYdoc)
 
     // Joiner should see [C, A, B]
-    const joinerFrameAfter = joinerStore.graph.getNode(frame.source.id ?? frame.id)!
+    const joinerFrameAfter = joinerStore.graph.getNode(frame.source.id ?? frame.id)
+    expect(joinerFrameAfter).toBeDefined()
+    if (!joinerFrameAfter) return
     const joinerChildNames = joinerFrameAfter.childIds.map(
       (id) => joinerStore.graph.getNode(id)?.name
     )

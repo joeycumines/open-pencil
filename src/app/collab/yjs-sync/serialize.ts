@@ -16,6 +16,7 @@ import {
   type YNodes
 } from './constants'
 import { ensureRemoteMapping, stableIdForNode, stableIdForRuntimeId, toRuntimeId } from './mapping'
+import { remapBoundVariablesToLocal, remapBoundVariablesToRemote } from './variables'
 
 export function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
@@ -129,6 +130,13 @@ export function syncNodePropsToYMap(
         })
         .filter((id): id is string => id !== null)
       ynode.set('childIds', JSON.stringify(childStableIds))
+      continue
+    }
+    if (key === 'boundVariables') {
+      // Remap variable runtime IDs to stable IDs so bindings survive across
+      // peers with different runtime IDs
+      const remapped = remapBoundVariablesToRemote(graph, state, value as Record<string, string>)
+      ynode.set('boundVariables', JSON.stringify(remapped))
       continue
     }
     if (EXCLUDED_SYNC_KEYS.has(key)) continue
@@ -256,6 +264,18 @@ export function buildCreateProps(
     fig: sourceFig ?? createDefaultSource().fig
   }
 
+  // Remap boundVariables variable IDs from stable IDs to local runtime IDs.
+  // Unresolved bindings (variable not yet arrived) are queued as pending
+  // and resolved when the variable arrives via yvariables sync.
+  if (createProps.boundVariables && typeof createProps.boundVariables === 'object') {
+    createProps.boundVariables = remapBoundVariablesToLocal(
+      graph,
+      state,
+      createProps.boundVariables as Record<string, string>,
+      remoteStableId
+    )
+  }
+
   return {
     ...createProps,
     id: undefined,
@@ -311,6 +331,18 @@ export function buildUpdateProps(
       graph,
       state,
       overridesValue,
+      stableIdForNode(existing)
+    )
+  }
+
+  // Remap boundVariables variable IDs from stable IDs to local runtime IDs.
+  // Unresolved bindings (variable not yet arrived) are queued as pending
+  // and resolved when the variable arrives via yvariables sync.
+  if (update.boundVariables && typeof update.boundVariables === 'object') {
+    update.boundVariables = remapBoundVariablesToLocal(
+      graph,
+      state,
+      update.boundVariables as Record<string, string>,
       stableIdForNode(existing)
     )
   }

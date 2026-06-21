@@ -46,7 +46,9 @@ describe('C-05: Remote delete during text edit loses edit silently', () => {
       width: 100,
       height: 20
     })
-    const textStableId = textNode.source.id!
+    const textStableId = textNode.source.id
+    expect(textStableId).toBeDefined()
+    if (textStableId === undefined) return
 
     const hostYdoc = new Y.Doc()
     const hostSync = createTestYjsSync(hostStore, hostYdoc)

@@ -229,7 +229,7 @@ export function removeFromPendingQueues(state: GraphSyncState, remoteStableId: s
   state.pendingComponents.delete(remoteStableId)
   state.pendingOverrideKeys.delete(remoteStableId)
   state.pendingUntilRoot.delete(remoteStableId)
-  // Clean up pending overrides that reference this node as the owning
+  // Clean up pending override entries that reference this node as the owning
   // instance. pendingOverrideKeys is keyed by CHILD stable id, but each
   // entry's remoteStableId is the INSTANCE's stable id. When an instance is
   // deleted, its pending overrides (for children that may never arrive
@@ -242,6 +242,19 @@ export function removeFromPendingQueues(state: GraphSyncState, remoteStableId: s
       state.pendingOverrideKeys.delete(childStableId)
     } else {
       state.pendingOverrideKeys.set(childStableId, new Set(remaining))
+    }
+  }
+  // Clean up pending variable bindings that reference this node.
+  // pendingVariableBindings is keyed by VARIABLE stable id, but each entry's
+  // nodeStableId is the NODE's stable id. When a node is deleted, its pending
+  // bindings would otherwise leak until session end.
+  for (const [varStableId, entries] of state.pendingVariableBindings) {
+    const remaining = [...entries].filter((e) => e.nodeStableId !== remoteStableId)
+    if (remaining.length === entries.size) continue
+    if (remaining.length === 0) {
+      state.pendingVariableBindings.delete(varStableId)
+    } else {
+      state.pendingVariableBindings.set(varStableId, new Set(remaining))
     }
   }
 }

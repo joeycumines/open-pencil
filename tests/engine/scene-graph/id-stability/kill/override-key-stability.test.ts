@@ -91,7 +91,10 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
 
     // Simulate user override: change the child's fills to blue
     graph.updateNode(instChild.id, { fills: blueFill })
-    expect(graph.getNode(instChild.id)!.fills).toEqual(blueFill)
+    const updatedChild = graph.getNode(instChild.id)
+    expect(updatedChild).toBeDefined()
+    if (!updatedChild) return
+    expect(updatedChild.fills).toEqual(blueFill)
 
     // Set override using STABLE ID (the correct format after the fix)
     // This tells syncChildren "don't overwrite fills from component"
@@ -149,7 +152,9 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
 
     const instChild = graph.getChildren(instance.id)[0]
     const oldRuntimeId = instChild.id
-    const stableId = instChild.source.id!
+    const stableId = instChild.source.id
+    expect(stableId).toBeDefined()
+    if (stableId === undefined) return
 
     // Simulate user override: change child's fills to blue
     graph.updateNode(instChild.id, { fills: blueFill })

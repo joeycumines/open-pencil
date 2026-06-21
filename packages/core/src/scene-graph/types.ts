@@ -6,6 +6,11 @@ export interface SceneGraphEvents {
   'node:deleted': (id: string) => void
   'node:reparented': (nodeId: string, oldParentId: string | null, newParentId: string) => void
   'node:reordered': (nodeId: string, parentId: string, index: number) => void
+  'variable:created': (variable: Variable) => void
+  'variable:deleted': (id: string) => void
+  'collection:created': (collection: VariableCollection) => void
+  'collection:updated': (collection: VariableCollection) => void
+  'collection:deleted': (id: string) => void
 }
 
 export type SceneGraphEventHandlers = Partial<{
@@ -14,6 +19,11 @@ export type SceneGraphEventHandlers = Partial<{
   deleted: (id: string) => void
   reparented: (nodeId: string, oldParentId: string | null, newParentId: string) => void
   reordered: (nodeId: string, parentId: string, index: number) => void
+  variableCreated: (variable: Variable) => void
+  variableDeleted: (id: string) => void
+  collectionCreated: (collection: VariableCollection) => void
+  collectionUpdated: (collection: VariableCollection) => void
+  collectionDeleted: (id: string) => void
 }>
 
 export type DocumentColorSpace = 'srgb' | 'display-p3'

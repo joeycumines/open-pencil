@@ -5,6 +5,8 @@ import { YJS_JSON_FIELDS } from '@/constants'
 
 export type YNodes = Y.Map<Y.Map<unknown>>
 export type YImages = Y.Map<Uint8Array>
+export type YVariables = Y.Map<Y.Map<unknown>>
+export type YCollections = Y.Map<Y.Map<unknown>>
 
 export type NodeProps = Record<string, unknown>
 
@@ -15,6 +17,8 @@ export type GraphBindingOptions = {
   getSuppressGraphSync: () => boolean
   setSuppressYjsEvents: (value: boolean) => void
   syncNodeToYjs: (nodeId: string) => void
+  syncVariableToYjs: (variableId: string) => void
+  syncCollectionToYjs: (collectionId: string) => void
 }
 
 export type ReconcileRootFn = (
@@ -28,6 +32,8 @@ export type YjsObserverOptions = {
   store: EditorStore
   ynodes: Y.Map<Y.Map<unknown>>
   yimages: Y.Map<Uint8Array>
+  yvariables: YVariables
+  ycollections: YCollections
   getSuppressYjsEvents: () => boolean
   setSuppressGraphSync: (value: boolean) => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
@@ -39,6 +45,8 @@ export type YjsGraphSyncOptions = {
   getYdoc: () => Y.Doc | null
   getYnodes: () => YNodes | null
   getYimages: () => YImages | null
+  getYvariables: () => YVariables | null
+  getYcollections: () => YCollections | null
   setSuppressYjsEvents: (value: boolean) => void
 }
 
@@ -197,5 +205,6 @@ export const JSON_PROPERTY_KEYS = new Set<string>([
   'exportSettings',
   'dashPattern',
   'overrides',
-  'childIds'
+  'childIds',
+  'boundVariables'
 ])

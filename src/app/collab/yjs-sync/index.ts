@@ -22,3 +22,25 @@ export {
 } from './serialize'
 export { applyYnodeToGraph } from './graph-apply'
 export { bindCollabGraphEvents, registerYjsObservers, createYjsGraphSync } from './sync'
+export {
+  stableIdForVariable,
+  stableIdForCollection,
+  stableIdForMode,
+  ensureVariableMapping,
+  ensureCollectionMapping,
+  toVariableRuntimeId,
+  toCollectionRuntimeId,
+  toModeRuntimeId,
+  syncVariableToYjs,
+  syncCollectionToYjs,
+  syncAllVariablesToYjs,
+  remapBoundVariablesToRemote,
+  remapBoundVariablesToLocal
+} from './variables'
+export {
+  applyVariableToGraph,
+  applyCollectionToGraph,
+  applyYjsVariablesToGraph,
+  applyYjsCollectionsToGraph,
+  releasePendingVariableBindings
+} from './variable-apply'

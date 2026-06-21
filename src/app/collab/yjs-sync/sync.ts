@@ -1,14 +1,20 @@
 import * as Y from 'yjs'
 
-import {
-  type GraphBindingOptions,
-  type YjsGraphSyncOptions,
-  type YjsObserverOptions,
-  type YNodes
+import type {
+  GraphBindingOptions,
+  YjsGraphSyncOptions,
+  YjsObserverOptions,
+  YNodes
 } from './constants'
 import { applyYnodeToGraph, removeFromPendingQueues } from './graph-apply'
 import { addedOrUpdatedYnodes, ensureRemoteMapping, findStableIdForYMap } from './mapping'
 import { asString, syncLocalRootToYjs, syncNodePropsToYMap } from './serialize'
+import { applyYjsCollectionsToGraph, applyYjsVariablesToGraph } from './variable-apply'
+import {
+  syncAllVariablesToYjs as syncAllVariablesToYMap,
+  syncCollectionToYjs as syncCollectionToYMap,
+  syncVariableToYjs as syncVariableToYMap
+} from './variables'
 
 export function bindCollabGraphEvents({
   store,
@@ -16,11 +22,44 @@ export function bindCollabGraphEvents({
   getYnodes,
   getSuppressGraphSync,
   setSuppressYjsEvents,
-  syncNodeToYjs
+  syncNodeToYjs,
+  syncVariableToYjs,
+  syncCollectionToYjs
 }: GraphBindingOptions) {
   function onGraphMutation(nodeId: string) {
     if (!getSuppressGraphSync() && getYdoc() && getYnodes()) {
       syncNodeToYjs(nodeId)
+    }
+  }
+
+  function onVariableMutation(variableId: string) {
+    if (!getSuppressGraphSync() && getYdoc() && getYnodes()) {
+      syncVariableToYjs(variableId)
+    }
+  }
+
+  function onCollectionMutation(collectionId: string) {
+    if (!getSuppressGraphSync() && getYdoc() && getYnodes()) {
+      syncCollectionToYjs(collectionId)
+    }
+  }
+
+  function deleteFromYjsMap(
+    mapName: string,
+    localToRemote: Map<string, string> | undefined,
+    id: string
+  ) {
+    const ydoc = getYdoc()
+    const ynodes = getYnodes()
+    if (!getSuppressGraphSync() && ydoc && ynodes) {
+      const remoteStableId = localToRemote?.get(id)
+      if (remoteStableId === undefined) return
+      setSuppressYjsEvents(true)
+      ydoc.transact(() => {
+        const ymap = ydoc.getMap<Y.Map<unknown>>(mapName)
+        ymap.delete(remoteStableId)
+      })
+      setSuppressYjsEvents(false)
     }
   }
 
@@ -46,6 +85,15 @@ export function bindCollabGraphEvents({
         })
         setSuppressYjsEvents(false)
       }
+    }),
+    store.onEditorEvent('variable:created', (variable) => onVariableMutation(variable.id)),
+    store.onEditorEvent('variable:deleted', (id) => {
+      deleteFromYjsMap('variables', store.graph.getSyncState().localToVariable, id)
+    }),
+    store.onEditorEvent('collection:created', (collection) => onCollectionMutation(collection.id)),
+    store.onEditorEvent('collection:updated', (collection) => onCollectionMutation(collection.id)),
+    store.onEditorEvent('collection:deleted', (id) => {
+      deleteFromYjsMap('collections', store.graph.getSyncState().localToCollection, id)
     })
   ]
   return () => {
@@ -70,6 +118,8 @@ export function registerYjsObservers({
   store,
   ynodes,
   yimages,
+  yvariables,
+  ycollections,
   getSuppressYjsEvents,
   setSuppressGraphSync,
   applyYjsToGraph,
@@ -105,6 +155,32 @@ export function registerYjsObservers({
     }
     store.requestRender()
   })
+
+  yvariables.observeDeep((events) => {
+    if (getSuppressYjsEvents()) return
+    const graph = store.graph
+    const state = graph.getSyncState()
+    setSuppressGraphSync(true)
+    try {
+      applyYjsVariablesToGraph(graph, state, yvariables, events)
+    } finally {
+      setSuppressGraphSync(false)
+    }
+    store.requestRender()
+  })
+
+  ycollections.observeDeep((events) => {
+    if (getSuppressYjsEvents()) return
+    const graph = store.graph
+    const state = graph.getSyncState()
+    setSuppressGraphSync(true)
+    try {
+      applyYjsCollectionsToGraph(graph, state, ycollections, events)
+    } finally {
+      setSuppressGraphSync(false)
+    }
+    store.requestRender()
+  })
 }
 
 export function createYjsGraphSync({
@@ -112,6 +188,8 @@ export function createYjsGraphSync({
   getYdoc,
   getYnodes,
   getYimages,
+  getYvariables,
+  getYcollections,
   setSuppressYjsEvents
 }: YjsGraphSyncOptions) {
   function syncNodeToYjs(nodeId: string) {
@@ -159,6 +237,44 @@ export function createYjsGraphSync({
     setSuppressYjsEvents(false)
   }
 
+  function syncVariableToYjs(variableId: string) {
+    const store = getStore()
+    const ydoc = getYdoc()
+    const yvariables = getYvariables()
+    if (!ydoc || !yvariables) return
+    const variable = store.graph.variables.get(variableId)
+    if (!variable) return
+
+    const graph = store.graph
+    const state = graph.getSyncState()
+    if (state.remoteRootStableId === null) return
+
+    setSuppressYjsEvents(true)
+    ydoc.transact(() => {
+      syncVariableToYMap(graph, state, yvariables, variable)
+    })
+    setSuppressYjsEvents(false)
+  }
+
+  function syncCollectionToYjs(collectionId: string) {
+    const store = getStore()
+    const ydoc = getYdoc()
+    const ycollections = getYcollections()
+    if (!ydoc || !ycollections) return
+    const collection = store.graph.variableCollections.get(collectionId)
+    if (!collection) return
+
+    const graph = store.graph
+    const state = graph.getSyncState()
+    if (state.remoteRootStableId === null) return
+
+    setSuppressYjsEvents(true)
+    ydoc.transact(() => {
+      syncCollectionToYMap(graph, state, ycollections, collection)
+    })
+    setSuppressYjsEvents(false)
+  }
+
   function syncAllNodesToYjs() {
     const store = getStore()
     const ydoc = getYdoc()
@@ -191,6 +307,15 @@ export function createYjsGraphSync({
             localYimages.set(hash, data)
           }
         }
+      })
+    }
+
+    // Sync all variables and collections
+    const yvariables = getYvariables()
+    const ycollections = getYcollections()
+    if (yvariables && ycollections) {
+      ydoc.transact(() => {
+        syncAllVariablesToYMap(graph, state, yvariables, ycollections)
       })
     }
     setSuppressYjsEvents(false)
@@ -232,5 +357,11 @@ export function createYjsGraphSync({
     }
   }
 
-  return { syncNodeToYjs, syncAllNodesToYjs, applyYjsToGraph }
+  return {
+    syncNodeToYjs,
+    syncVariableToYjs,
+    syncCollectionToYjs,
+    syncAllNodesToYjs,
+    applyYjsToGraph
+  }
 }

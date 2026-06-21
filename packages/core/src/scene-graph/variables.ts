@@ -13,6 +13,7 @@ export function addVariable(graph: SceneGraph, variable: Variable): void {
   if (collection && !collection.variableIds.includes(variable.id)) {
     collection.variableIds.push(variable.id)
   }
+  graph.emitter.emit('variable:created', variable)
 }
 
 export function removeVariable(graph: SceneGraph, id: string): void {
@@ -33,6 +34,7 @@ export function removeVariable(graph: SceneGraph, id: string): void {
     graph.emitter.emit('node:updated', node.id, { boundVariables: { ...node.boundVariables } })
     markBoundVariablesOverrideOnInstance(graph, node.id)
   }
+  graph.emitter.emit('variable:deleted', id)
 }
 
 export function addCollection(graph: SceneGraph, collection: VariableCollection): void {
@@ -40,6 +42,7 @@ export function addCollection(graph: SceneGraph, collection: VariableCollection)
   if (!graph.activeMode.has(collection.id)) {
     graph.activeMode.set(collection.id, collection.defaultModeId)
   }
+  graph.emitter.emit('collection:created', collection)
 }
 
 function defaultVariableValue(type: VariableType, value?: VariableValue): VariableValue {
@@ -115,6 +118,7 @@ export function removeCollection(graph: SceneGraph, id: string): void {
   }
   graph.variableCollections.delete(id)
   graph.activeMode.delete(id)
+  graph.emitter.emit('collection:deleted', id)
 }
 
 export function getActiveModeId(graph: SceneGraph, collectionId: string): string {
@@ -146,6 +150,7 @@ export function addModeToCollection(
       variable.valuesByMode[sourceModeId] ?? Object.values(variable.valuesByMode)[0]
     )
   }
+  graph.emitter.emit('collection:updated', collection)
 }
 
 export function removeMode(graph: SceneGraph, collectionId: string, modeId: string): void {
@@ -162,6 +167,7 @@ export function removeMode(graph: SceneGraph, collectionId: string, modeId: stri
   if (graph.activeMode.get(collectionId) === modeId) {
     graph.activeMode.set(collectionId, collection.defaultModeId)
   }
+  graph.emitter.emit('collection:updated', collection)
 }
 
 export function renameMode(

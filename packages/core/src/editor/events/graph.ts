@@ -1,5 +1,11 @@
 import type { SkiaRenderer } from '#core/canvas/renderer'
-import type { SceneGraph, SceneGraphEvents, SceneNode } from '#core/scene-graph'
+import type {
+  SceneGraph,
+  SceneGraphEvents,
+  SceneNode,
+  Variable,
+  VariableCollection
+} from '#core/scene-graph'
 
 type GraphEventOptions = {
   getGraph: () => SceneGraph
@@ -49,6 +55,21 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       reordered: (nodeId, parentId, index) => {
         options.emitEditorEvent('node:reordered', nodeId, parentId, index)
         onNodeStructureChanged(nodeId)
+      },
+      variableCreated: (variable: Variable) => {
+        options.emitEditorEvent('variable:created', variable)
+      },
+      variableDeleted: (id: string) => {
+        options.emitEditorEvent('variable:deleted', id)
+      },
+      collectionCreated: (collection: VariableCollection) => {
+        options.emitEditorEvent('collection:created', collection)
+      },
+      collectionUpdated: (collection: VariableCollection) => {
+        options.emitEditorEvent('collection:updated', collection)
+      },
+      collectionDeleted: (id: string) => {
+        options.emitEditorEvent('collection:deleted', id)
       }
     })
   }

@@ -90,7 +90,7 @@ describe('C-06: maybeUnreserveImportedId unconditionally unreserves shared GUIDs
     const page = pageId(graph)
 
     // Create two nodes sharing GUID '0:88'
-    const nodeA = graph.createNode('RECTANGLE', page, {
+    graph.createNode('RECTANGLE', page, {
       name: 'A',
       width: 50,
       height: 50,
@@ -108,7 +108,9 @@ describe('C-06: maybeUnreserveImportedId unconditionally unreserves shared GUIDs
     graph.identity.recomputeReservedRuntimeIds()
 
     const nodeBRuntimeId = nodeB.id
-    const nodeBStableId = nodeB.source.id!
+    const nodeBStableId = nodeB.source.id
+    expect(nodeBStableId).toBeDefined()
+    if (nodeBStableId === undefined) return
 
     // Delete node B permanently
     graph.deleteNode(nodeB.id, { permanent: true })

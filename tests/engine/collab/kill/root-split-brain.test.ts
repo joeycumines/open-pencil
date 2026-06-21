@@ -2,8 +2,6 @@ import { describe, expect, test } from 'bun:test'
 
 import * as Y from 'yjs'
 
-import { bindCollabGraphEvents } from '@/app/collab/yjs-sync'
-
 import {
   createTestStore,
   createTestYjsSync,

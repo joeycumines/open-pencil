@@ -106,6 +106,25 @@ function cloneChildrenWithMapping(
   }
 }
 
+function getMatchKey(graph: SceneGraph, childId: string): string {
+  const child = graph.nodes.get(childId)
+  return child ? graph.identity.getStableId(child) : childId
+}
+
+function syncOverrideProps(
+  instChild: SceneNode,
+  compChild: SceneNode,
+  instChildStableId: string,
+  overrides: Record<string, unknown>,
+  props: readonly (keyof SceneNode)[]
+): void {
+  for (const key of props) {
+    const overrideKey = `${instChildStableId}:${key}`
+    if (overrideKey in overrides) continue
+    copyProp(instChild, compChild, key)
+  }
+}
+
 function syncChildren(
   graph: SceneGraph,
   compParentId: string,
@@ -129,7 +148,7 @@ function syncChildren(
 
   for (const compChildId of compParent.childIds) {
     const compChild = graph.nodes.get(compChildId)
-    const matchKey = compChild ? graph.identity.getStableId(compChild) : compChildId
+    const matchKey = getMatchKey(graph, compChildId)
     if (!instChildMap.has(matchKey)) {
       const src = compChild
       if (!src) continue
@@ -141,32 +160,25 @@ function syncChildren(
     }
   }
 
+  const EXTRA_SYNC_PROPS = [
+    'name',
+    'text',
+    'fontSize',
+    'fontWeight',
+    'fontFamily',
+    'textDirection'
+  ] as const
+
   for (const compChildId of compParent.childIds) {
     const compChild = graph.nodes.get(compChildId)
-    const matchKey = compChild ? graph.identity.getStableId(compChild) : compChildId
+    const matchKey = getMatchKey(graph, compChildId)
     const instChild = instChildMap.get(matchKey)
     if (!compChild || !instChild) continue
 
     // C-01: Use stable ID for override keys so they survive runtime ID changes
     const instChildStableId = graph.identity.getStableId(instChild)
-    for (const key of INSTANCE_SYNC_PROPS) {
-      const overrideKey = `${instChildStableId}:${key}`
-      if (overrideKey in overrides) continue
-      copyProp(instChild, compChild, key)
-    }
-
-    for (const key of [
-      'name',
-      'text',
-      'fontSize',
-      'fontWeight',
-      'fontFamily',
-      'textDirection'
-    ] as const) {
-      const overrideKey = `${instChildStableId}:${key}`
-      if (overrideKey in overrides) continue
-      copyProp(instChild, compChild, key)
-    }
+    syncOverrideProps(instChild, compChild, instChildStableId, overrides, INSTANCE_SYNC_PROPS)
+    syncOverrideProps(instChild, compChild, instChildStableId, overrides, EXTRA_SYNC_PROPS)
 
     if (compChild.childIds.length > 0) {
       syncChildren(graph, compChildId, instChild.id, overrides)

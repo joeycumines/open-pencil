@@ -66,7 +66,9 @@ describe('C-04: Variable bindings stripped on fills update', () => {
 
     // The whole-array binding should be preserved
     // FAILS: removeStaleBindings stripped it because k === 'fills' returns true
-    const updated = graph.getNode(node.id)!
+    const updated = graph.getNode(node.id)
+    expect(updated).toBeDefined()
+    if (!updated) return
     expect(updated.boundVariables.fills).toBe(variable.id)
   })
 
@@ -129,7 +131,9 @@ describe('C-04: Variable bindings stripped on fills update', () => {
     })
 
     // Out-of-range indexed binding SHOULD be stripped (correct behavior)
-    const updated = graph.getNode(node.id)!
+    const updated = graph.getNode(node.id)
+    expect(updated).toBeDefined()
+    if (!updated) return
     expect(updated.boundVariables['fills/2']).toBeUndefined()
   })
 })

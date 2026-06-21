@@ -34,6 +34,28 @@ export interface GraphSyncState {
   rootMapped: boolean
   /** Authoritative root stable id for the current room. */
   remoteRootStableId: string | null
+  /** Remote variable stable id -> local variable runtime id. */
+  variableToLocal: Map<string, string>
+  /** Local variable runtime id -> remote variable stable id. */
+  localToVariable: Map<string, string>
+  /** Remote collection stable id -> local collection runtime id. */
+  collectionToLocal: Map<string, string>
+  /** Local collection runtime id -> remote collection stable id. */
+  localToCollection: Map<string, string>
+  /** Remote mode stable id -> local mode runtime id. */
+  modeToLocal: Map<string, string>
+  /** Collection stable id -> set of waiting variable stable ids. */
+  pendingVariableCollections: Map<string, Set<string>>
+  /** Variable stable id -> set of pending boundVariables bindings waiting for that variable. */
+  pendingVariableBindings: Map<
+    string,
+    Set<{
+      /** Stable id of the node that owns the pending binding. */
+      nodeStableId: string
+      /** Field name in boundVariables (e.g., 'fills', 'opacity'). */
+      field: string
+    }>
+  >
 }
 
 export function createGraphSyncState(): GraphSyncState {
@@ -45,7 +67,14 @@ export function createGraphSyncState(): GraphSyncState {
     pendingOverrideKeys: new Map(),
     pendingUntilRoot: new Set(),
     rootMapped: false,
-    remoteRootStableId: null
+    remoteRootStableId: null,
+    variableToLocal: new Map(),
+    localToVariable: new Map(),
+    collectionToLocal: new Map(),
+    localToCollection: new Map(),
+    modeToLocal: new Map(),
+    pendingVariableCollections: new Map(),
+    pendingVariableBindings: new Map()
   }
 }
 
@@ -58,4 +87,11 @@ export function resetGraphSyncState(state: GraphSyncState): void {
   state.pendingUntilRoot.clear()
   state.rootMapped = false
   state.remoteRootStableId = null
+  state.variableToLocal.clear()
+  state.localToVariable.clear()
+  state.collectionToLocal.clear()
+  state.localToCollection.clear()
+  state.modeToLocal.clear()
+  state.pendingVariableCollections.clear()
+  state.pendingVariableBindings.clear()
 }

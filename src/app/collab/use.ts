@@ -47,10 +47,13 @@ function reconcileRemoteRoot(
     if (state.remoteRootStableId === remoteRootStableId) return
     // Split-brain: both peers called shareCurrentDoc. The peer with the
     // lexicographically smaller root stable ID wins; the other yields.
-    if (state.remoteRootStableId! < remoteRootStableId) return
+    const prevRootStableId = state.remoteRootStableId
+    if (prevRootStableId !== null && prevRootStableId < remoteRootStableId) return
     // We yield — reset root mapping and adopt the remote root
-    state.remoteToLocal.delete(state.remoteRootStableId!)
-    state.localToRemote.delete(graph.rootId)
+    if (prevRootStableId !== null) {
+      state.remoteToLocal.delete(prevRootStableId)
+      state.localToRemote.delete(graph.rootId)
+    }
     state.rootMapped = false
     state.remoteRootStableId = null
   }
@@ -92,11 +95,19 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
       getAwareness: () => runtime.awareness
     })
 
-  const { syncNodeToYjs, syncAllNodesToYjs, applyYjsToGraph } = createYjsGraphSync({
+  const {
+    syncNodeToYjs,
+    syncVariableToYjs,
+    syncCollectionToYjs,
+    syncAllNodesToYjs,
+    applyYjsToGraph
+  } = createYjsGraphSync({
     getStore: getActiveStore,
     getYdoc: () => runtime.ydoc,
     getYnodes: () => runtime.ynodes,
     getYimages: () => runtime.yimages,
+    getYvariables: () => runtime.yvariables,
+    getYcollections: () => runtime.ycollections,
     setSuppressYjsEvents: (value) => {
       runtime.suppressYjsEvents = value
     }
@@ -110,6 +121,8 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     broadcastAwareness,
     applyYjsToGraph,
     syncNodeToYjs,
+    syncVariableToYjs,
+    syncCollectionToYjs,
     resetFollow,
     reconcileRemoteRoot
   })

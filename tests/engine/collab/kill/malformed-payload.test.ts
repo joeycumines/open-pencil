@@ -36,7 +36,9 @@ describe('C-09: Malformed sourceFig payload accepted without validation', () => 
       width: 100,
       height: 100
     })
-    const nodeStableId = node.source.id!
+    const nodeStableId = node.source.id
+    expect(nodeStableId).toBeDefined()
+    if (nodeStableId === undefined) return
 
     const hostYdoc = new Y.Doc()
     const hostSync = createTestYjsSync(hostStore, hostYdoc)

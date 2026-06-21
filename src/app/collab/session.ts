@@ -19,6 +19,8 @@ export type CollabRuntime = {
   awareness: awarenessProtocol.Awareness | null
   ynodes: Y.Map<Y.Map<unknown>> | null
   yimages: Y.Map<Uint8Array> | null
+  yvariables: Y.Map<Y.Map<unknown>> | null
+  ycollections: Y.Map<Y.Map<unknown>> | null
   room: Room | null
   persistence: IndexeddbPersistence | null
   connectedStore: EditorStore | null
@@ -28,32 +30,31 @@ export type CollabRuntime = {
   stopZoomWatch: (() => void) | null
 }
 
+type CollabSyncCallbacks = {
+  updatePeersList: () => void
+  tickFollow: () => void
+  broadcastAwareness: () => void
+  applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
+  syncNodeToYjs: (nodeId: string) => void
+  syncVariableToYjs: (variableId: string) => void
+  syncCollectionToYjs: (collectionId: string) => void
+  reconcileRemoteRoot?: ReconcileRootFn
+}
+
 type ConnectCollabSessionOptions = {
   roomId: string
   runtime: CollabRuntime
   state: Ref<CollabState>
   store: EditorStore
   disconnect: () => void
-  updatePeersList: () => void
-  tickFollow: () => void
-  broadcastAwareness: () => void
-  applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
-  syncNodeToYjs: (nodeId: string) => void
-  reconcileRemoteRoot?: ReconcileRootFn
-}
+} & CollabSyncCallbacks
 
 type CollabConnectionActionsOptions = {
   runtime: CollabRuntime
   state: Ref<CollabState>
   getStore: () => EditorStore
-  updatePeersList: () => void
-  tickFollow: () => void
-  broadcastAwareness: () => void
-  applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
-  syncNodeToYjs: (nodeId: string) => void
   resetFollow: () => void
-  reconcileRemoteRoot?: ReconcileRootFn
-}
+} & CollabSyncCallbacks
 
 type CollabSessionResources = {
   store: EditorStore
@@ -72,6 +73,8 @@ export function createCollabRuntime(): CollabRuntime {
     awareness: null,
     ynodes: null,
     yimages: null,
+    yvariables: null,
+    ycollections: null,
     room: null,
     persistence: null,
     connectedStore: null,
@@ -101,6 +104,8 @@ export function createCollabConnectionActions({
   broadcastAwareness,
   applyYjsToGraph,
   syncNodeToYjs,
+  syncVariableToYjs,
+  syncCollectionToYjs,
   resetFollow,
   reconcileRemoteRoot
 }: CollabConnectionActionsOptions) {
@@ -116,6 +121,8 @@ export function createCollabConnectionActions({
       broadcastAwareness,
       applyYjsToGraph,
       syncNodeToYjs,
+      syncVariableToYjs,
+      syncCollectionToYjs,
       reconcileRemoteRoot
     })
   }
@@ -163,6 +170,8 @@ export function connectCollabSession({
   broadcastAwareness,
   applyYjsToGraph,
   syncNodeToYjs,
+  syncVariableToYjs,
+  syncCollectionToYjs,
   reconcileRemoteRoot
 }: ConnectCollabSessionOptions) {
   if (runtime.room) disconnect()
@@ -173,6 +182,8 @@ export function connectCollabSession({
   runtime.awareness = new awarenessProtocol.Awareness(runtime.ydoc)
   runtime.ynodes = runtime.ydoc.getMap('nodes')
   runtime.yimages = runtime.ydoc.getMap('images')
+  runtime.yvariables = runtime.ydoc.getMap('variables')
+  runtime.ycollections = runtime.ydoc.getMap('collections')
   runtime.persistence = new IndexeddbPersistence(`op-room-${roomId}`, runtime.ydoc)
 
   runtime.awareness.on('change', () => {
@@ -184,6 +195,8 @@ export function connectCollabSession({
     store,
     ynodes: runtime.ynodes,
     yimages: runtime.yimages,
+    yvariables: runtime.yvariables,
+    ycollections: runtime.ycollections,
     getSuppressYjsEvents: () => runtime.suppressYjsEvents,
     setSuppressGraphSync: (value) => {
       runtime.suppressGraphSync = value
@@ -215,7 +228,9 @@ export function connectCollabSession({
     setSuppressYjsEvents: (value) => {
       runtime.suppressYjsEvents = value
     },
-    syncNodeToYjs
+    syncNodeToYjs,
+    syncVariableToYjs,
+    syncCollectionToYjs
   })
 }
 
@@ -228,6 +243,8 @@ export function resetCollabRuntime(runtime: CollabRuntime) {
   runtime.ydoc = null
   runtime.ynodes = null
   runtime.yimages = null
+  runtime.yvariables = null
+  runtime.ycollections = null
   runtime.connectedStore = null
 }
 

@@ -97,7 +97,6 @@ const LAYOUT_AFFECTING_KEYS: ReadonlySet<string> = new Set([
   'minHeight',
   'maxHeight'
 ])
-
 export class SceneGraph {
   readonly identity: SceneGraphIdentity
   readonly sessionID: number
@@ -217,19 +216,24 @@ export class SceneGraph {
     return this.nodes.get(id)
   }
   onNodeEvents(handlers: SceneGraphEventHandlers): () => void {
-    const unbinds = [
-      handlers.created ? this.emitter.on('node:created', handlers.created) : null,
-      handlers.updated ? this.emitter.on('node:updated', handlers.updated) : null,
-      handlers.deleted ? this.emitter.on('node:deleted', handlers.deleted) : null,
-      handlers.reparented ? this.emitter.on('node:reparented', handlers.reparented) : null,
-      handlers.reordered ? this.emitter.on('node:reordered', handlers.reordered) : null
-    ].filter((unbind): unbind is () => void => !!unbind)
-
-    return () => {
-      for (const unbind of unbinds) unbind()
-    }
+    const u: Array<() => void> = []
+    if (handlers.created) u.push(this.emitter.on('node:created', handlers.created))
+    if (handlers.updated) u.push(this.emitter.on('node:updated', handlers.updated))
+    if (handlers.deleted) u.push(this.emitter.on('node:deleted', handlers.deleted))
+    if (handlers.reparented) u.push(this.emitter.on('node:reparented', handlers.reparented))
+    if (handlers.reordered) u.push(this.emitter.on('node:reordered', handlers.reordered))
+    if (handlers.variableCreated)
+      u.push(this.emitter.on('variable:created', handlers.variableCreated))
+    if (handlers.variableDeleted)
+      u.push(this.emitter.on('variable:deleted', handlers.variableDeleted))
+    if (handlers.collectionCreated)
+      u.push(this.emitter.on('collection:created', handlers.collectionCreated))
+    if (handlers.collectionUpdated)
+      u.push(this.emitter.on('collection:updated', handlers.collectionUpdated))
+    if (handlers.collectionDeleted)
+      u.push(this.emitter.on('collection:deleted', handlers.collectionDeleted))
+    return () => u.forEach((fn) => fn())
   }
-
   countDescendants(nodeId: string): number {
     return countNodeDescendants(this, nodeId)
   }
@@ -258,7 +262,6 @@ export class SceneGraph {
       value
     )
   }
-
   createCollection(name: string): VariableCollection {
     return Variables.createCollection(
       this,
@@ -267,15 +270,12 @@ export class SceneGraph {
       name
     )
   }
-
   removeCollection(id: string): void {
     Variables.removeCollection(this, id)
   }
-
   getActiveModeId(collectionId: string): string {
     return Variables.getActiveModeId(this, collectionId)
   }
-
   setActiveMode(collectionId: string, modeId: string): void {
     Variables.setActiveMode(this, collectionId, modeId)
   }

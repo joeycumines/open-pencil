@@ -249,6 +249,17 @@ export class SceneGraphIdentity {
     }
   }
 
+  /**
+   * Returns true if `id` is free across all runtime namespaces (nodes,
+   * variables, collections, modes). Used by pickRuntimeId to determine
+   * whether a requested runtime ID can be safely reused.
+   */
+  private isNamespaceFree(id: string): boolean {
+    return (
+      !this.host.variables.has(id) && !this.host.variableCollections.has(id) && !this.hasModeId(id)
+    )
+  }
+
   pickRuntimeId(
     type: NodeType,
     stableId: string,
@@ -273,29 +284,12 @@ export class SceneGraphIdentity {
     ) {
       return requestedRuntimeId
     }
-    // Restore mode: reuse a freed runtime ID if it doesn't collide with any
-    // namespace. This handles nodes whose runtime ID differs from their stable
-    // ID (e.g. fig-imported nodes with GUID collision that got a generated
-    // runtime ID). Without this, undo of such a node would get a new runtime
-    // ID, breaking selection references and componentId links.
-    if (
-      mode === 'restore' &&
-      existing === undefined &&
-      !reserved &&
-      !this.host.variables.has(requestedRuntimeId) &&
-      !this.host.variableCollections.has(requestedRuntimeId) &&
-      !this.hasModeId(requestedRuntimeId)
-    ) {
-      return requestedRuntimeId
-    }
-    if (
-      mode !== 'restore' &&
-      existing === undefined &&
-      !reserved &&
-      !this.host.variables.has(requestedRuntimeId) &&
-      !this.host.variableCollections.has(requestedRuntimeId) &&
-      !this.hasModeId(requestedRuntimeId)
-    ) {
+    // Reuse a freed runtime ID if it doesn't collide with any namespace.
+    // Both 'restore' and 'default' modes share this check — the mode-specific
+    // branches above handle the cases where mode matters (sameIdentity,
+    // reserved+stableId match). This covers nodes whose runtime ID differs
+    // from their stable ID (e.g. fig-imported nodes with GUID collision).
+    if (existing === undefined && !reserved && this.isNamespaceFree(requestedRuntimeId)) {
       return requestedRuntimeId
     }
     return this.generateNodeId(stableId)
