@@ -65,29 +65,53 @@ export class SceneGraphIdentity {
     return null
   }
 
-  private allKnownIds(): ReadonlySet<string> {
-    const ids = new Set<string>()
-    for (const id of this.host.nodes.keys()) ids.add(id)
-    for (const id of this.host.variables.keys()) ids.add(id)
-    for (const id of this.host.variableCollections.keys()) ids.add(id)
+  private hasModeId(id: string): boolean {
     for (const collection of this.host.variableCollections.values()) {
-      for (const mode of collection.modes) ids.add(mode.modeId)
+      for (const mode of collection.modes) {
+        if (mode.modeId === id) return true
+      }
     }
-    return ids
+    return false
   }
 
   generateStableId(): string {
     return this.makeId(this.nextLocalID++)
   }
 
+  /**
+   * Allocate a runtime node id, optionally preferring a caller-supplied value.
+   *
+   * Uses direct O(1) `Map.has` lookups instead of building a full known-id Set
+   * every call. The previous implementation called `allKnownIds()` (which
+   * iterated every node, variable, collection, and mode) on every invocation —
+   * O(n) per `createNode`. During .fig import, `populateInstanceChildren`
+   * clones thousands of component children, each calling `createNode`, making
+   * the total cost O(n²) and hanging on large files (e.g. material3.fig,
+   * ~87k nodes, went from ~12s on main to >150s).
+   *
+   * Generated ids (`makeId`) combine a random session id (> 1, allocated by
+   * `allocateSessionID`) with a monotonic counter, so they can never collide
+   * with each other or with imported ids (which use Figma session 0 or 1).
+   * The collision check therefore only matters for caller-supplied `preferred`
+   * ids (e.g. Figma GUIDs), and the fallback while-loop is a defensive net that
+   * essentially never executes for generated ids.
+   */
   generateNodeId(preferred?: string | null): string {
-    const known = this.allKnownIds()
-    const collision = (id: string): boolean => known.has(id) || this.reservedRuntimeIds.has(id)
-    if (preferred !== undefined && preferred !== null && !collision(preferred)) {
-      return preferred
+    if (preferred !== undefined && preferred !== null) {
+      if (
+        !this.host.nodes.has(preferred) &&
+        !this.host.variables.has(preferred) &&
+        !this.host.variableCollections.has(preferred) &&
+        !this.reservedRuntimeIds.has(preferred) &&
+        !this.hasModeId(preferred)
+      ) {
+        return preferred
+      }
     }
     let id = this.makeId(this.nextLocalID++)
-    while (collision(id)) id = this.makeId(this.nextLocalID++)
+    while (this.host.nodes.has(id) || this.reservedRuntimeIds.has(id)) {
+      id = this.makeId(this.nextLocalID++)
+    }
     return id
   }
 

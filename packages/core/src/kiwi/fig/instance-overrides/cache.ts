@@ -19,6 +19,19 @@ export function clearInstanceOverrideCaches(ctx?: OverrideContext): void {
   componentFindCache = new WeakMap()
 }
 
+/**
+ * Clear only the lookup caches that depend on the live tree structure
+ * (candidate paths and component-find results). The sibling-group and
+ * sibling-index caches are keyed by source identity and remain valid across
+ * an instance repopulation, so preserving them avoids an O(n) rebuild per
+ * repopulateInstance — critical for large files where instance swaps happen
+ * thousands of times during override application.
+ */
+export function clearLookupCaches(ctx: OverrideContext): void {
+  candidateCache.delete(ctx)
+  componentFindCache.delete(ctx)
+}
+
 export function getSiblingIndexCache(ctx: OverrideContext): Map<string, number | null> | undefined {
   return siblingIndexCache.get(ctx)
 }

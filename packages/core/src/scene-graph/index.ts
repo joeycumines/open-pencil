@@ -457,9 +457,13 @@ export class SceneGraph {
     const node = this.nodes.get(id)
     if (!node) return
 
-    let guardedChanges: Partial<SceneNode> = structuredClone(changes)
-
-    guardedChanges = guardSourceChanges(node, omit(guardedChanges, ['id']))
+    // Shallow-merge (no structuredClone): the hot import/override paths pass
+    // already-copied arrays (copyFills/copyStyleRuns), so a per-call deep clone
+    // was pure overhead — it made large-file import (1M+ nodes) exceed the test
+    // timeout. guardSourceChanges below still produces a fresh `source` object,
+    // and the filter/reassign steps create fresh containers, so the caller's
+    // `changes` is never mutated. This matches the pre-identity behavior.
+    let guardedChanges: Partial<SceneNode> = guardSourceChanges(node, omit(changes, ['id']))
 
     // Only clear absPosCache when layout-affecting properties change.
     // Fills, strokes, effects, plugin data changes do NOT affect absolute position.

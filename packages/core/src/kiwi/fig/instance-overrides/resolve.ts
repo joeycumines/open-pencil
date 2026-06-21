@@ -5,6 +5,7 @@ import { copyStrokes } from '#core/scene-graph/copy'
 
 import {
   clearInstanceOverrideCaches,
+  clearLookupCaches,
   getCandidateCache,
   getComponentFindCache,
   getSiblingGroupCache,
@@ -375,8 +376,6 @@ export function repopulateInstance(ctx: OverrideContext, nodeId: string, compId:
   const node = ctx.graph.getNode(nodeId)
   if (node?.type !== 'INSTANCE') return
 
-  clearInstanceOverrideCaches(ctx)
-
   const previousStrokes = collectStyledStrokeDescendants(ctx, nodeId)
   const rootCompId = node.componentId ? getComponentRoot(ctx, node.componentId) : undefined
   const rootComp = rootCompId ? ctx.graph.getNode(rootCompId) : undefined
@@ -395,5 +394,8 @@ export function repopulateInstance(ctx: OverrideContext, nodeId: string, compId:
   }
   ctx.swappedInstances.add(nodeId)
   ctx.componentIdRoot.clear()
-  clearInstanceOverrideCaches(ctx)
+  // Only the tree-structure-dependent lookup caches are stale here;
+  // the source-keyed sibling caches remain valid (preserving them avoids
+  // an O(n) rebuild on every instance swap).
+  clearLookupCaches(ctx)
 }
