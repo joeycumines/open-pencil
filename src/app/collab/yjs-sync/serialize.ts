@@ -82,6 +82,17 @@ function stringifyIfObject(value: unknown): unknown {
   return value
 }
 
+/**
+ * Only write to the Yjs map if the serialized value differs from the current
+ * value. This avoids unnecessary Yjs operations during high-frequency updates
+ * (e.g., 60fps drag) where most properties don't change between frames.
+ */
+function setIfChanged(ynode: Y.Map<unknown>, key: string, value: unknown): void {
+  if (ynode.get(key) !== value) {
+    ynode.set(key, value)
+  }
+}
+
 export function syncNodePropsToYMap(
   node: SceneNode,
   ynode: Y.Map<unknown>,
@@ -90,21 +101,21 @@ export function syncNodePropsToYMap(
 ): void {
   const remoteStableId =
     node.id === graph.rootId ? stableIdForNode(node) : ensureRemoteMapping(state, node)
-  ynode.set('id', remoteStableId)
+  setIfChanged(ynode, 'id', remoteStableId)
 
   const parentStableId =
     node.id === graph.rootId
       ? state.remoteRootStableId
       : stableIdForRuntimeId(graph, state, node.parentId)
-  ynode.set('parentId', parentStableId)
+  setIfChanged(ynode, 'parentId', parentStableId)
 
   const componentStableId = stableIdForRuntimeId(graph, state, node.componentId)
-  ynode.set('componentId', componentStableId)
+  setIfChanged(ynode, 'componentId', componentStableId)
 
   if (node.type === 'INSTANCE' && Object.keys(node.overrides).length > 0) {
     const remapped = remapOverridesToRemote(graph, state, node.overrides)
     if (Object.keys(remapped).length > 0) {
-      ynode.set('overrides', remapped)
+      setIfChanged(ynode, 'overrides', remapped)
     } else {
       ynode.delete('overrides')
     }
@@ -115,33 +126,29 @@ export function syncNodePropsToYMap(
   for (const [key, value] of Object.entries(node)) {
     if (key === 'id' || key === 'parentId' || key === 'componentId' || key === 'overrides') continue
     if (key === 'source') {
-      ynode.set('sourceId', node.source.id)
-      ynode.set('sourceFormat', node.source.format)
-      ynode.set('sourceFig', JSON.stringify(node.source.fig))
+      setIfChanged(ynode, 'sourceId', node.source.id)
+      setIfChanged(ynode, 'sourceFormat', node.source.format)
+      setIfChanged(ynode, 'sourceFig', JSON.stringify(node.source.fig))
       continue
     }
     if (key === 'childIds') {
-      // Serialize childIds as stable IDs (not runtime IDs) so that
-      // layer ordering survives across peers with different runtime IDs
       const childStableIds = (value as string[])
         .map((id) => {
           const child = graph.getNode(id)
           return child ? stableIdForNode(child) : null
         })
         .filter((id): id is string => id !== null)
-      ynode.set('childIds', JSON.stringify(childStableIds))
+      setIfChanged(ynode, 'childIds', JSON.stringify(childStableIds))
       continue
     }
     if (key === 'boundVariables') {
-      // Remap variable runtime IDs to stable IDs so bindings survive across
-      // peers with different runtime IDs
       const remapped = remapBoundVariablesToRemote(graph, state, value as Record<string, string>)
-      ynode.set('boundVariables', JSON.stringify(remapped))
+      setIfChanged(ynode, 'boundVariables', JSON.stringify(remapped))
       continue
     }
     if (EXCLUDED_SYNC_KEYS.has(key)) continue
     if (!YJS_NODE_PROPERTY_KEYS.has(key)) continue
-    ynode.set(key, stringifyIfObject(value))
+    setIfChanged(ynode, key, stringifyIfObject(value))
   }
 
   // Allow-list keys that are absent on this node are intentionally left as-is;
