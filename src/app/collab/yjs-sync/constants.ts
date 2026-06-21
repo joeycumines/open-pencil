@@ -43,7 +43,6 @@ export type YjsGraphSyncOptions = {
 }
 
 export const EXCLUDED_SYNC_KEYS = new Set<string>([
-  'childIds',
   'source',
   'fillGeometry',
   'strokeGeometry',
@@ -57,6 +56,7 @@ export const YJS_NODE_PROPERTY_KEYS = new Set<string>([
   'type',
   'name',
   'parentId',
+  'childIds',
   'x',
   'y',
   'width',
@@ -196,5 +196,6 @@ export const JSON_PROPERTY_KEYS = new Set<string>([
   'variantPropSpecs',
   'exportSettings',
   'dashPattern',
-  'overrides'
+  'overrides',
+  'childIds'
 ])

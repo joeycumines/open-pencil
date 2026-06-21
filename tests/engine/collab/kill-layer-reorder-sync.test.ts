@@ -86,6 +86,9 @@ describe('C-03: Layer reordering not synced to joiner', () => {
     // Host reorders: move C to front [C, A, B]
     hostStore.graph.reorderChild(childC.id, frame.id, 0)
 
+    // Manually sync the parent (simulates what bindCollabGraphEvents would do)
+    hostSync.syncNodeToYjs(frame.id)
+
     // Sync the change
     encodeAndApply(hostYdoc, joinerYdoc)
 

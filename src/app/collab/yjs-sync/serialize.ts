@@ -55,7 +55,7 @@ export function yNodeToProps(ynode: Y.Map<unknown>): NodeProps {
   const props: NodeProps = {}
 
   function parseValue(key: string, value: unknown): unknown {
-    if (typeof value !== 'string' || key === 'sourceFig' || key === 'childIds') return value
+    if (typeof value !== 'string' || key === 'sourceFig') return value
     if (!JSON_PROPERTY_KEYS.has(key)) return value
     try {
       return JSON.parse(value)
@@ -117,6 +117,18 @@ export function syncNodePropsToYMap(
       ynode.set('sourceId', node.source.id)
       ynode.set('sourceFormat', node.source.format)
       ynode.set('sourceFig', JSON.stringify(node.source.fig))
+      continue
+    }
+    if (key === 'childIds') {
+      // Serialize childIds as stable IDs (not runtime IDs) so that
+      // layer ordering survives across peers with different runtime IDs
+      const childStableIds = (value as string[])
+        .map((id) => {
+          const child = graph.getNode(id)
+          return child ? stableIdForNode(child) : null
+        })
+        .filter((id): id is string => id !== null)
+      ynode.set('childIds', JSON.stringify(childStableIds))
       continue
     }
     if (EXCLUDED_SYNC_KEYS.has(key)) continue
@@ -259,7 +271,7 @@ export function buildUpdateProps(
   props: NodeProps,
   existing: SceneNode
 ): Partial<SceneNode> {
-  const exclude: string[] = ['type']
+  const exclude: string[] = ['type', 'childIds']
   let parentId: string | undefined
   let componentId: string | null | undefined
 

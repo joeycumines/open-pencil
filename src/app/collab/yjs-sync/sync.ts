@@ -28,7 +28,10 @@ export function bindCollabGraphEvents({
     store.onEditorEvent('node:updated', (id) => onGraphMutation(id)),
     store.onEditorEvent('node:created', (node) => onGraphMutation(node.id)),
     store.onEditorEvent('node:reparented', (nodeId) => onGraphMutation(nodeId)),
-    store.onEditorEvent('node:reordered', (nodeId) => onGraphMutation(nodeId)),
+    store.onEditorEvent('node:reordered', (nodeId, parentId) => {
+      onGraphMutation(nodeId)
+      onGraphMutation(parentId)
+    }),
     store.onEditorEvent('node:deleted', (id) => {
       const ydoc = getYdoc()
       const ynodes = getYnodes()

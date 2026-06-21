@@ -171,6 +171,25 @@ function applyExistingNodeUpdate(
   }
   graph.updateNode(existing.id, updateProps)
 
+  // Handle child ordering from remote — childIds contains stable IDs
+  const remoteChildIds = props.childIds
+  if (Array.isArray(remoteChildIds)) {
+    const targetOrder = remoteChildIds
+      .map((stableId) => toRuntimeId(graph, state, stableId as string))
+      .filter((id): id is string => id !== undefined)
+    // Only reorder if all children exist locally and the set matches
+    if (targetOrder.length === existing.childIds.length) {
+      const localSet = new Set(existing.childIds)
+      if (targetOrder.every((id) => localSet.has(id))) {
+        for (let i = 0; i < targetOrder.length; i++) {
+          if (existing.childIds[i] !== targetOrder[i]) {
+            graph.reorderChild(targetOrder[i], existing.id, i)
+          }
+        }
+      }
+    }
+  }
+
   const updatedNode = graph.getNode(existing.id)
   if (
     updatedNode?.type === 'INSTANCE' &&
