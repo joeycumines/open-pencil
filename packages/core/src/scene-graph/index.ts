@@ -414,6 +414,7 @@ export class SceneGraph {
     node.childIds = []
     node.parentId = parentId
     this.nodes.set(node.id, node)
+    this.identity.registerStableId(node.id, stableId)
 
     const parent = this.nodes.get(parentId)
     if (parent) parent.childIds.push(node.id)

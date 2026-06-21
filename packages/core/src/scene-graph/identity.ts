@@ -44,6 +44,7 @@ export class SceneGraphIdentity {
   private importerCounter = 1
   private reservedRuntimeIds = new Set<string>()
   private modeIds = new Set<string>()
+  private stableIdToRuntimeIdMap = new Map<string, string>()
   private sourceIdsMigrated = false
 
   constructor(host: SceneGraphIdentityHost, options?: SceneGraphOptions) {
@@ -159,17 +160,58 @@ export class SceneGraphIdentity {
         this.modeIds.add(mode.modeId)
       }
     }
+    this.rebuildStableIdMap()
   }
 
   getStableId(node: SceneNode): string {
     return node.source.id ?? node.id
   }
 
-  stableIdToRuntimeId(stableId: string): string | undefined {
+  /** Register a stable→runtime ID mapping. Called from createNode. */
+  registerStableId(runtimeId: string, stableId: string): void {
+    if (!this.stableIdToRuntimeIdMap.has(stableId)) {
+      this.stableIdToRuntimeIdMap.set(stableId, runtimeId)
+    }
+  }
+
+  /** Rebuild the stable→runtime ID map from all nodes. */
+  rebuildStableIdMap(): void {
+    this.stableIdToRuntimeIdMap.clear()
     for (const node of this.host.nodes.values()) {
-      if (node.source.id === stableId) return node.id
+      if (node.source.id !== null) {
+        if (!this.stableIdToRuntimeIdMap.has(node.source.id)) {
+          this.stableIdToRuntimeIdMap.set(node.source.id, node.id)
+        }
+      }
+    }
+  }
+
+  /**
+   * Look up a runtime ID by stable ID. Uses the O(1) index when available,
+   * falls back to linear scan for cache misses.
+   * @deprecated Use findRuntimeIdByStableId() for new code.
+   */
+  stableIdToRuntimeId(stableId: string): string | undefined {
+    const cached = this.stableIdToRuntimeIdMap.get(stableId)
+    if (cached !== undefined) {
+      // Verify the cached entry is still valid
+      if (this.host.nodes.has(cached)) return cached
+      // Stale entry — clean up
+      this.stableIdToRuntimeIdMap.delete(stableId)
+    }
+    // Fallback: linear scan for nodes not in the index
+    for (const node of this.host.nodes.values()) {
+      if (node.source.id === stableId) {
+        this.stableIdToRuntimeIdMap.set(stableId, node.id)
+        return node.id
+      }
     }
     return undefined
+  }
+
+  /** O(1) stable→runtime ID lookup using the index. */
+  findRuntimeIdByStableId(stableId: string): string | undefined {
+    return this.stableIdToRuntimeId(stableId)
   }
 
   migrateLegacySourceIds(): void {
@@ -187,6 +229,7 @@ export class SceneGraphIdentity {
       const stableId = this.generateStableId()
       node.source = { ...node.source, id: stableId }
     }
+    this.rebuildStableIdMap()
   }
 
   readRequestedStableId(overrides: Partial<SceneNode>): string {

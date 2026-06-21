@@ -72,6 +72,12 @@ export function stableIdForRuntimeId(
 }
 
 export function findNodeByStableId(graph: SceneGraph, stableId: string): SceneNode | undefined {
+  // Use the O(1) stable ID index when available
+  const runtimeId = graph.identity.stableIdToRuntimeId(stableId)
+  if (runtimeId !== undefined) {
+    return graph.getNode(runtimeId)
+  }
+  // Fallback: linear scan for graphs without identity (e.g., test stubs)
   for (const node of graph.getAllNodes()) {
     if (stableIdForNode(node) === stableId) return node
   }
