@@ -9,7 +9,7 @@ export function removeStaleBindings(
 ): void {
   const len = node[field].length
   const stale = Object.keys(node.boundVariables).filter((k) => {
-    if (k === field) return true
+    if (k === field) return false
     if (!k.startsWith(`${field}/`)) return false
     const i = Number.parseInt(k.split('/')[1] ?? '', 10)
     return Number.isNaN(i) || i < 0 || i >= len

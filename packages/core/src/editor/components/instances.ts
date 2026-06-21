@@ -47,6 +47,7 @@ export function createComponentInstanceActions(ctx: EditorContext) {
     if (selectedNode?.type !== 'INSTANCE') return
 
     const prevComponentId = selectedNode.componentId
+    const prevOverrides = { ...selectedNode.overrides }
 
     ctx.graph.detachInstance(selectedNode.id)
     ctx.setSelectedIds(new Set([selectedNode.id]))
@@ -61,7 +62,7 @@ export function createComponentInstanceActions(ctx: EditorContext) {
         ctx.graph.updateNode(selectedNode.id, {
           type: 'INSTANCE',
           componentId: prevComponentId,
-          overrides: {}
+          overrides: prevOverrides
         })
       }
     })

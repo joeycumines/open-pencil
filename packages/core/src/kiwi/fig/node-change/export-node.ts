@@ -294,7 +294,8 @@ function getOrCreateNodeGuid(
   if (!node) return undefined
   const existing = context.nodeIdToGuid?.get(nodeId)
   if (existing) return existing
-  const importedGuid = node.source.id ? parseGuidOrNull(node.source.id) : null
+  const importedGuid =
+    node.source.format === 'fig' && node.source.id ? parseGuidOrNull(node.source.id) : null
 
   // When source.id maps to a GUID value that is already assigned to a
   // different node (e.g. two nodes from different canvases with the same

@@ -42,6 +42,16 @@ export function createTextActions(ctx: EditorContext) {
     const result = { nodeId: textState.nodeId, text: textState.text }
     const before = activeSession?.before ?? { text: '', styleRuns: [], size: {} }
     const node = ctx.graph.getNode(result.nodeId)
+    if (!node) {
+      // Node was deleted by a remote peer while editing. Abort the edit
+      // session without committing — the text editor's local state is
+      // discarded gracefully.
+      te.stop()
+      ctx.state.editingTextId = null
+      activeSession = null
+      ctx.requestRender()
+      return
+    }
     const after = snapshotTextNode(node, result.text)
     after.text = result.text
     const sizeChanges =

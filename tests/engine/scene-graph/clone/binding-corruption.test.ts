@@ -312,12 +312,12 @@ describe('set_fill/set_stroke clean up stale bindings', () => {
     expect(n.boundVariables['fills/1/color']).toBeUndefined()
   })
 
-  test('set_fill removes top-level fills binding (dead data)', () => {
+  test('set_fill preserves top-level fills binding (collab-safe)', () => {
     const graph = new SceneGraph()
     const node = graph.createNode('RECTANGLE', pageId(graph), { name: 'Rect' })
     const n = graph.getNode(node.id)
 
-    // Set a top-level 'fills' binding (dead data — renderer never reads this)
+    // Set a top-level 'fills' binding
     n.boundVariables['fills'] = 'v1'
 
     // Replace fills via updateNode (same path tools use)
@@ -325,8 +325,11 @@ describe('set_fill/set_stroke clean up stale bindings', () => {
       fills: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0, a: 1 }, visible: true, opacity: 1 }]
     })
 
-    // Top-level 'fills' binding should be cleaned up
-    expect(n.boundVariables['fills']).toBeUndefined()
+    // Top-level 'fills' binding is preserved — only out-of-range indexed
+    // bindings (e.g. fills/5 when there are 3 fills) are stripped.
+    // This prevents collab sync from silently dropping variable bindings
+    // when it brings updated fills arrays.
+    expect(n.boundVariables['fills']).toBe('v1')
   })
 })
 

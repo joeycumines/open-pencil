@@ -70,7 +70,7 @@ describe('SceneGraph identity layer', () => {
     expect(withReservedRuntime.source.id).toBe(stableId)
   })
 
-  test('updateNode ignores id changes, locks source.id, and locks source.format only after it is set', () => {
+  test('updateNode ignores id changes, locks source.id, and prevents setting source.format from null', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)
     const node = graph.createNode('RECTANGLE', page, { name: 'Box' })
@@ -109,7 +109,7 @@ describe('SceneGraph identity layer', () => {
 
     expect(node.id).toBe(originalId)
     expect(node.source.id).toBe(originalSourceId)
-    expect(node.source.format).toBe('fig')
+    expect(node.source.format).toBe(null)
     expect(node.name).toBe('Renamed')
     expect(emitted.length).toBe(1)
     expect('id' in emitted[0].changes).toBe(false)
@@ -117,7 +117,7 @@ describe('SceneGraph identity layer', () => {
     graph.updateNode(node.id, {
       source: { ...node.source, format: 'pen' }
     })
-    expect(node.source.format).toBe('fig')
+    expect(node.source.format).toBe(null)
   })
 
   test('permanent delete of imported node unreserves its source id', () => {

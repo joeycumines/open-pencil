@@ -17,6 +17,10 @@ export function guardSourceChanges(
   }
   if (node.source.format !== null) {
     updatedSource = { ...updatedSource, format: node.source.format }
+  } else if (updatedSource.format !== null && updatedSource.format !== node.source.format) {
+    // Prevent transitioning source.format from null to non-null on
+    // locally-created nodes — only import should set format to 'fig'.
+    updatedSource = { ...updatedSource, format: node.source.format }
   }
   return { ...changes, source: updatedSource }
 }

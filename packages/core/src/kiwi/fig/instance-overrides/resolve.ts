@@ -394,6 +394,7 @@ export function repopulateInstance(ctx: OverrideContext, nodeId: string, compId:
   }
   ctx.swappedInstances.add(nodeId)
   ctx.componentIdRoot.clear()
+  ctx.preComputedRoot.clear()
   // Only the tree-structure-dependent lookup caches are stale here;
   // the source-keyed sibling caches remain valid (preserving them avoids
   // an O(n) rebuild on every instance swap).
