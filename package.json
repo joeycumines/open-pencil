@@ -113,6 +113,7 @@
     "@typescript/native-preview": "^7.0.0-dev.20260228.1",
     "@vitejs/plugin-vue": "^6.0.5",
     "esbuild": "^0.27.3",
+    "fast-check": "^4.8.0",
     "hono": "^4.12.5",
     "jscpd": "^4.0.8",
     "mitata": "^1.0.34",
