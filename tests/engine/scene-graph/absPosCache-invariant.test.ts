@@ -142,7 +142,13 @@ describe('absPosCache invariant', () => {
       width: 50,
       height: 50
     }).id
-    const c2 = graph.createNode('RECTANGLE', parent, { name: 'C2', x: 70, y: 10, width: 50, height: 50 })
+    const c2 = graph.createNode('RECTANGLE', parent, {
+      name: 'C2',
+      x: 70,
+      y: 10,
+      width: 50,
+      height: 50
+    })
     void c2
 
     // Cache abs pos
