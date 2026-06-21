@@ -4,6 +4,17 @@
 
 ### Added
 
+- Stable node identity system: every node has a `source.id` that survives graph rebuilds, runtime ID changes, and undo/redo cycles. Instance override keys use stable IDs, not runtime IDs, so overrides survive `replaceGraph()` and component re-population.
+- GUID remediation during .fig import: duplicate or missing Figma GUIDs are detected and assigned synthetic GUIDs with full reference remapping. Import diagnostics track duplicates, missing GUIDs, and reassignments.
+- Collaboration sync for variables and collections: design variables, collections, and modes are synced across peers via separate Yjs maps (`yvariables`, `ycollections`). Variable bindings (`boundVariables`) are remapped to stable IDs on sync and resolved on the joiner with pending queue for unresolved variables.
+- Delta-based collab property sync: only changed properties are written to Yjs, reducing a 60fps drag from ~100 Yjs ops to ~2 per frame.
+- Collab layer ordering sync: child ordering is synced via `childIds` as a stable-ID JSON array, so layer reordering propagates to joiners.
+- Collab root split-brain fix: when two peers both call `shareCurrentDoc`, the peer with the lexicographically smaller root stable ID wins and the other yields, ensuring convergence.
+- O(1) stable ID lookup index: `findRuntimeIdByStableId()` uses a lazy-built `stableIdToRuntimeIdMap` for constant-time lookup, eliminating O(n) linear scans.
+- FigmaAPI hardening: `FigmaNodeProxy` uses a live graph reference (not a stale snapshot), and `parseFigmaPayload()` validates the shape of remote `sourceFig` data before merging.
+- Pen import format tag: pen-imported nodes have `source.format = 'pen'`, distinguishing them from never-imported (`null`) and fig-imported (`'fig'`) nodes.
+- Export diagnostics: `FigExportDiagnostics` tracks reused vs. minted GUIDs during .fig export, attached to `graph.exportDiagnostics`.
+- SceneGraph events for variable lifecycle: `variable:created`, `variable:deleted`, `collection:created`, `collection:updated`, `collection:deleted` events on the graph emitter.
 - MCP server uses Unix domain socket as the primary transport on macOS/Linux, with optional TCP fallback for browser connections; Windows uses TCP exclusively
 - Discovery file (`mcp.json`) for stdio bridge and CLI auto-connection, stored with `0o600` permissions at the platform-default path
 - `OPENPENCIL_MCP_SOCKET` environment variable overrides the socket path in the discovery file; TCP is controlled by `PORT` (>0 = on, 0 = off)
@@ -24,6 +35,12 @@
 
 ### Changed
 
+- `replaceGraph()` now clears the undo stack. Consumers relying on undo history surviving graph replacement must capture undo state before calling `replaceGraph()`.
+- `graph:replaced` event payload changed from `(graph: SceneGraph)` to `(payload: GraphReplacedPayload { graph, translation })`. Use `graphReplacedPayloadGraph()` compat helper for migration.
+- `SceneGraphEvents` now includes `variable:created`, `variable:deleted`, `collection:created`, `collection:updated`, `collection:deleted` events. `onNodeEvents()` accepts handlers for these via `variableCreated`, `variableDeleted`, `collectionCreated`, `collectionUpdated`, `collectionDeleted` fields.
+- `SourceMetadata.format` type widened from `'fig' | null` to `'fig' | 'pen' | null`.
+- `GraphSyncState` extended with `variableToLocal`, `localToVariable`, `collectionToLocal`, `localToCollection`, `modeToLocal`, `pendingVariableCollections`, `pendingVariableBindings` fields for collab variable sync.
+- `CollabRuntime` extended with `yvariables` and `ycollections` Yjs maps.
 - Stdio bridge connects via HTTP-over-socket instead of WebSocket
 - WebSocket upgrades happen on the same HTTP port (no separate WS_PORT)
 - Discovery file checks if the recorded PID is still running to detect stale entries (note: PID recycling may cause false positives on long-running systems)

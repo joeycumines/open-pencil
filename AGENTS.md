@@ -76,11 +76,16 @@ The editor exposes a typed nanoevents emitter for lifecycle events. Defined in `
 | `render:requested` | `{ renderVersion, sceneVersion }` | `requestRender()` |
 | `repaint:requested` | `{ renderVersion, sceneVersion }` | `requestRepaint()` |
 | `graph:replaced` | `GraphReplacedPayload { graph: SceneGraph; translation: Map<string, string> }` | `replaceGraph()` |
-| `node:created` | `SceneNode` | SceneGraph emitter → `graph-events.ts` |
-| `node:updated` | `id, changes` | SceneGraph emitter → `graph-events.ts` |
-| `node:deleted` | `id` | SceneGraph emitter → `graph-events.ts` |
-| `node:reparented` | `nodeId, oldParentId, newParentId` | SceneGraph emitter → `graph-events.ts` |
-| `node:reordered` | `nodeId, parentId, index` | SceneGraph emitter → `graph-events.ts` |
+| `node:created` | `SceneNode` | SceneGraph emitter → `events/graph.ts` |
+| `node:updated` | `id, changes` | SceneGraph emitter → `events/graph.ts` |
+| `node:deleted` | `id` | SceneGraph emitter → `events/graph.ts` |
+| `node:reparented` | `nodeId, oldParentId, newParentId` | SceneGraph emitter → `events/graph.ts` |
+| `node:reordered` | `nodeId, parentId, index` | SceneGraph emitter → `events/graph.ts` |
+| `variable:created` | `Variable` | SceneGraph emitter → `events/graph.ts` |
+| `variable:deleted` | `id` | SceneGraph emitter → `events/graph.ts` |
+| `collection:created` | `VariableCollection` | SceneGraph emitter → `events/graph.ts` |
+| `collection:updated` | `VariableCollection` | SceneGraph emitter → `events/graph.ts` |
+| `collection:deleted` | `id` | SceneGraph emitter → `events/graph.ts` |
 | `selection:changed` | `selectedIds[], previousIds[]` | `setSelectedIds()` |
 | `tool:changed` | `tool, previousTool` | `setActiveTool()` |
 | `page:changed` | `pageId, previousPageId` | `switchPage()`, `replaceGraph()` |
