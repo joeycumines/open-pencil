@@ -217,6 +217,19 @@ function applyNewNodeCreate(
   if (props.overrides !== undefined && isRecord(props.overrides)) {
     node.overrides = remapOverridesToLocal(graph, state, props.overrides, remoteStableId)
   }
+
+  // Auto-populate instance children when a new instance arrives from a remote
+  // peer. Instance children share the same stable ID as their component
+  // counterparts (by design — for override mapping), so they MUST NOT be
+  // synced via Yjs (the stable ID collision would overwrite the component's
+  // original child in the Yjs nodes map). Each peer creates them locally.
+  if (
+    node.type === 'INSTANCE' &&
+    typeof node.componentId === 'string' &&
+    node.childIds.length === 0
+  ) {
+    graph.populateInstanceChildren(node.id, node.componentId)
+  }
 }
 
 export function removeFromPendingQueues(state: GraphSyncState, remoteStableId: string): void {

@@ -169,10 +169,11 @@ export function observeTargetDoc(
 ): () => void {
   let suppressGraphSync = false
   const ynodes = ydoc.getMap<Y.Map<unknown>>('nodes')
+  const yimages = ydoc.getMap<Uint8Array>('images')
   const yvariables = ydoc.getMap<Y.Map<unknown>>('variables')
   const ycollections = ydoc.getMap<Y.Map<unknown>>('collections')
 
-  const unbindNodes = ynodes.observeDeep((events) => {
+  const nodesHandler = (events: Y.YEvent<Y.Map<unknown>>[]): void => {
     if (suppressGraphSync) return
     const state = store.graph.getSyncState()
     if (reconcileRemoteRoot !== undefined) {
@@ -203,9 +204,24 @@ export function observeTargetDoc(
       suppressGraphSync = false
     }
     store.requestRender()
-  })
+  }
+  ynodes.observeDeep(nodesHandler)
 
-  const unbindVariables = yvariables.observeDeep((events) => {
+  const imagesHandler = (event: Y.YMapEvent<Uint8Array>): void => {
+    if (suppressGraphSync) return
+    for (const [key, change] of event.changes.keys) {
+      if (change.action === 'add' || change.action === 'update') {
+        const data = yimages.get(key)
+        if (data) store.graph.images.set(key, new Uint8Array(data))
+      } else {
+        store.graph.images.delete(key)
+      }
+    }
+    store.requestRender()
+  }
+  yimages.observe(imagesHandler)
+
+  const variablesHandler = (events: Y.YEvent<Y.Map<unknown>>[]): void => {
     if (suppressGraphSync) return
     const graph = store.graph
     const state = graph.getSyncState()
@@ -216,9 +232,10 @@ export function observeTargetDoc(
       suppressGraphSync = false
     }
     store.requestRender()
-  })
+  }
+  yvariables.observeDeep(variablesHandler)
 
-  const unbindCollections = ycollections.observeDeep((events) => {
+  const collectionsHandler = (events: Y.YEvent<Y.Map<unknown>>[]): void => {
     if (suppressGraphSync) return
     const graph = store.graph
     const state = graph.getSyncState()
@@ -229,12 +246,14 @@ export function observeTargetDoc(
       suppressGraphSync = false
     }
     store.requestRender()
-  })
+  }
+  ycollections.observeDeep(collectionsHandler)
 
   return () => {
-    unbindNodes()
-    unbindVariables()
-    unbindCollections()
+    ynodes.unobserveDeep(nodesHandler)
+    yimages.unobserve(imagesHandler)
+    yvariables.unobserveDeep(variablesHandler)
+    ycollections.unobserveDeep(collectionsHandler)
   }
 }
 
