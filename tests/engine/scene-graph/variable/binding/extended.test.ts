@@ -156,7 +156,7 @@ describe('INSTANCE_SYNC_PROPS includes boundVariables', () => {
     const instanceChild = graph.getChildren(instance.id)[0]
 
     // Set an override to block boundVariables sync
-    instance.overrides[`${instanceChild.id}:boundVariables`] = true
+    instance.overrides[`${instanceChild.source.id}:boundVariables`] = true
 
     // Change component child's binding
     graph.bindVariable(child.id, 'fills/0/color', 'v2')

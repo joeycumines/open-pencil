@@ -7,6 +7,7 @@ import { prefetchFigmaSchema } from '#core/clipboard'
 import { IS_BROWSER } from '#core/constants'
 import { setTextMeasurer } from '#core/layout'
 import { SceneGraph } from '#core/scene-graph'
+import { migrateOverrideKeys } from '#core/scene-graph/override-key-migrate'
 import { UndoManager } from '#core/scene-graph/undo'
 import { TextEditor } from '#core/text/editor'
 import { fontManager } from '#core/text/fonts'
@@ -221,6 +222,7 @@ export function createEditor(options?: EditorOptions) {
   function replaceGraph(newGraph: SceneGraph) {
     newGraph.migrateLegacySourceIds()
     newGraph.recomputeReservedRuntimeIds()
+    migrateOverrideKeys(newGraph)
     const oldGraph = _graph
     const translation = buildReplaceGraphTranslation(oldGraph, newGraph)
     _graph = newGraph

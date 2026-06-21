@@ -5,6 +5,7 @@ export { CONTAINER_TYPES, createDefaultNode, createDefaultSource } from './node/
 export { SceneGraphIdentity, type SceneGraphIdentityHost } from './identity'
 export { generateId } from './identity'
 export { splitOverrideKey, joinOverrideKey } from './override-key'
+export { migrateOverrideKeys } from './override-key-migrate'
 export { createGraphSyncState, resetGraphSyncState, type GraphSyncState } from './sync-state'
 
 import { omit } from 'es-toolkit/object'

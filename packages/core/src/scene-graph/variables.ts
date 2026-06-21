@@ -364,7 +364,7 @@ function markBoundVariablesOverrideOnInstance(graph: SceneGraph, nodeId: string)
     const parent = graph.nodes.get(current.parentId)
     if (!parent) break
     if (parent.type === 'INSTANCE') {
-      parent.overrides[`${nodeId}:boundVariables`] = true
+      parent.overrides[`${graph.identity.getStableId(node)}:boundVariables`] = true
       break
     }
     current = parent

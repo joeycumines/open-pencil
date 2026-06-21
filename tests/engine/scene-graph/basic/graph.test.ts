@@ -397,7 +397,7 @@ describe('SceneGraph', () => {
 
     // Override the text on the instance child
     graph.updateNode(instLabel.id, { text: 'Custom' })
-    instance.overrides[`${instLabel.id}:text`] = 'Custom'
+    instance.overrides[`${instLabel.source.id}:text`] = 'Custom'
 
     // Change component
     graph.updateNode(graph.getChildren(comp.id)[0].id, { text: 'New Default', fontSize: 20 })

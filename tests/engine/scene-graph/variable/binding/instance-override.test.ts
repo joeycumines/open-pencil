@@ -78,7 +78,7 @@ describe('bindVariable on instance child sets override flag', () => {
 
     graph.bindVariable(instanceChild.id, 'fills/0/color', 'v2')
 
-    expect(instance.overrides[`${instanceChild.id}:boundVariables`]).toBe(true)
+    expect(instance.overrides[`${instanceChild.source.id}:boundVariables`]).toBe(true)
   })
 
   test('binding on instance child survives syncInstances', () => {
@@ -223,7 +223,7 @@ describe('removeVariable emits events and sets overrides', () => {
 
     graph.removeVariable('v1')
 
-    expect(instance.overrides[`${instanceChild.id}:boundVariables`]).toBe(true)
+    expect(instance.overrides[`${instanceChild.source.id}:boundVariables`]).toBe(true)
   })
 
   test('removeVariable does not emit for unaffected nodes', () => {

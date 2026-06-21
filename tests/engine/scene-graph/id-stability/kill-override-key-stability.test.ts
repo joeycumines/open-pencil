@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SceneGraph } from '@open-pencil/core'
+import { migrateOverrideKeys, SceneGraph } from '@open-pencil/core'
 
 function pageId(graph: SceneGraph): string {
   return graph.getPages()[0].id
@@ -28,27 +28,22 @@ function figSource(id: string) {
 /**
  * C-01: Override keys use runtime IDs, not stable IDs.
  *
- * When a component child is fig-imported (source.id !== node.id), the
- * instance child cloned from it also has source.id !== node.id. The
- * syncChildren function constructs override keys as `${instChild.id}:${key}`
- * (runtime ID), but the correct format should use `${instChild.source.id}:${key}`
- * (stable ID). After a graph rebuild that changes runtime IDs, override keys
- * with old runtime IDs become stale and overrides are silently lost.
+ * syncChildren constructs override keys as `${instChild.id}:${key}` (runtime ID).
+ * When a component child is fig-imported (source.id !== node.id), the instance
+ * child's runtime ID differs from its stable ID. An override set with the
+ * STABLE ID won't be found by syncChildren (which looks up with runtime ID),
+ * causing the component's property to overwrite the user's override.
  *
- * This test sets an override using the STABLE ID and verifies that
- * syncChildren fails to find it (because it constructs keys using the
- * runtime ID).
- *
- * How it fails: syncChildren constructs `${instChild.id}:visible` (runtime ID)
- * but the override was set as `${instChild.source.id}:visible` (stable ID).
+ * How it fails: syncChildren constructs `${instChild.id}:fills` (runtime ID)
+ * but the override was set as `${instChild.source.id}:fills` (stable ID).
  * These are different strings for fig-imported nodes, so the override is
- * not found and the component's property overwrites the user's override.
+ * not found and copyProp overwrites the child's property.
  *
- * Fix that makes it pass: syncChildren uses `graph.identity.getStableId(instChild)`
- * instead of `instChild.id` when constructing override keys.
+ * Fix that makes it pass: syncChildren uses graph.identity.getStableId(instChild)
+ * instead of instChild.id when constructing override keys.
  */
 describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
-  test('override set with stable ID is lost because syncChildren uses runtime ID', () => {
+  test('override set with stable ID prevents syncChildren from overwriting', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)
 
@@ -94,20 +89,24 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
     expect(instChild.source.id).toBe('0:50')
     expect(instChild.id).not.toBe('0:50')
 
+    // Simulate user override: change the child's fills to blue
+    graph.updateNode(instChild.id, { fills: blueFill })
+    expect(graph.getNode(instChild.id)!.fills).toEqual(blueFill)
+
     // Set override using STABLE ID (the correct format after the fix)
-    // 'fills' IS in INSTANCE_SYNC_PROPS, so syncChildren will check this key
+    // This tells syncChildren "don't overwrite fills from component"
     const stableOverrideKey = `${instChild.source.id}:fills`
     instance.overrides[stableOverrideKey] = blueFill
 
-    // Run syncInstances — syncChildren constructs override keys using
-    // instChild.id (runtime ID), which doesn't match the stable-ID key
+    // Run syncInstances — syncChildren should find the override key
+    // and NOT overwrite the child's fills with the component's red fills
     graph.syncInstances(component.id)
 
-    // The instance child's fills should be blue (from override),
-    // but syncChildren copied red from the component because the override
-    // key didn't match (runtime ID vs stable ID)
+    // The child's fills should still be blue (override preserved)
+    // FAILS on old code: syncChildren constructs key with runtime ID,
+    // doesn't find the stable-ID override, copies red from component
     const refreshedInstChild = graph.getChildren(instance.id)[0]
-    expect(refreshedInstChild.fills).toEqual(blueFill) // FAILS: fills is redFill
+    expect(refreshedInstChild.fills).toEqual(blueFill)
   })
 
   test('override set with runtime ID is lost after simulated runtime ID change', () => {
@@ -152,10 +151,17 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
     const oldRuntimeId = instChild.id
     const stableId = instChild.source.id!
 
-    // Set override using RUNTIME ID (current behavior)
+    // Simulate user override: change child's fills to blue
+    graph.updateNode(instChild.id, { fills: blueFill })
+
+    // Set override using RUNTIME ID (current/old behavior)
     instance.overrides[`${oldRuntimeId}:fills`] = blueFill
 
-    // Verify override works before runtime ID change
+    // Migrate override keys from runtime-ID format to stable-ID format
+    // (as replaceGraph does in production — before any sync)
+    migrateOverrideKeys(graph)
+
+    // Verify override works after migration (before runtime ID change)
     graph.syncInstances(component.id)
     expect(graph.getChildren(instance.id)[0].fills).toEqual(blueFill)
 
@@ -163,7 +169,6 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
     // with same stable ID but different runtime ID
     graph.deleteNode(instChild.id, { permanent: false })
 
-    // Recreate the instance child with restore mode (same stable ID)
     graph.createNode(
       'RECTANGLE',
       instance.id,
@@ -171,7 +176,7 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
         name: 'Child',
         width: 100,
         height: 100,
-        fills: redFill,
+        fills: blueFill,
         componentId: component.childIds[0],
         source: figSource(stableId)
       },
@@ -182,11 +187,11 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
     expect(newInstChild.source.id).toBe(stableId)
     expect(newInstChild.id).not.toBe(oldRuntimeId) // runtime ID changed
 
-    // Run syncInstances — constructs key using NEW runtime ID
-    // Override key has OLD runtime ID → doesn't match → override lost
+    // Run syncInstances — constructs key using stable ID (with fix)
+    // The migrated override key matches → override preserved
     graph.syncInstances(component.id)
 
-    // Override should be preserved (fills = blueFill), but it's lost
-    expect(graph.getChildren(instance.id)[0].fills).toEqual(blueFill) // FAILS: fills is redFill
+    // Override should be preserved (fills = blueFill)
+    expect(graph.getChildren(instance.id)[0].fills).toEqual(blueFill)
   })
 })

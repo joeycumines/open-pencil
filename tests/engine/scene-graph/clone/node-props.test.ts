@@ -119,7 +119,7 @@ describe('cloneNodeProps deep-copies overrides values', () => {
     const instance = graph.createInstance(component.id, page)
     if (!instance) throw new Error('instance failed')
     const instanceChild = graph.getChildren(instance.id)[0]
-    instance.overrides[`${instanceChild.id}:fills`] = [
+    instance.overrides[`${instanceChild.source.id}:fills`] = [
       { type: 'SOLID', color: { r: 0, g: 0, b: 1, a: 1 }, visible: true, opacity: 1 }
     ]
 

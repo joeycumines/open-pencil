@@ -78,6 +78,7 @@ export {
   type GraphSyncState
 } from './scene-graph'
 export { createGraphSyncState, resetGraphSyncState } from './scene-graph'
+export { migrateOverrideKeys } from './scene-graph'
 
 export { FigmaAPI, FigmaNodeProxy, computeImageHash, type FigmaFontName } from './figma-api'
 export {
