@@ -44,6 +44,7 @@ import type { Color, Rect, Vector } from '#core/types'
 import type {
   CreateNodeOptions,
   DocumentColorSpace,
+  FigExportDiagnostics,
   FigImportDiagnostics,
   NodeType,
   SceneGraphEventHandlers,
@@ -112,6 +113,7 @@ export class SceneGraph {
   figSchemaDeflated: Uint8Array | null = null
   documentColorSpace: DocumentColorSpace = 'display-p3'
   importDiagnostics: FigImportDiagnostics | undefined = undefined
+  exportDiagnostics: FigExportDiagnostics | undefined = undefined
   readonly emitter: Emitter<SceneGraphEvents> = createNanoEvents()
   private absPosCache = new Map<string, Vector>()
   private previewMutationDepth = 0
@@ -119,7 +121,6 @@ export class SceneGraph {
   positionPreviewVersion = 0
   instanceIndex = new Map<string, Set<string>>()
   private syncState: GraphSyncState | null = null
-
   constructor(options?: SceneGraphOptions) {
     this.identity = new SceneGraphIdentity(this, options)
     this.sessionID = this.identity.sessionID
@@ -148,7 +149,6 @@ export class SceneGraph {
 
     this.rootId = root.id
     this.nodes.set(root.id, root)
-
     this.addPage('Page 1')
   }
 

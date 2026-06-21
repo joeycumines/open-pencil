@@ -17,7 +17,7 @@ import {
   makeCanvasNodeChange
 } from '#core/kiwi/fig/node-change/serialize'
 import { decodeBinarySchema, compileSchema, ByteBuffer } from '#core/kiwi/schema-runtime'
-import type { SceneGraph, VariableValue } from '#core/scene-graph'
+import type { FigExportDiagnostics, SceneGraph, VariableValue } from '#core/scene-graph'
 import type { GUID } from '#core/types'
 
 import { compressFigDataSync } from './compress'
@@ -37,7 +37,6 @@ interface CanvasExportEntry {
   canvasGuid: GUID
   canvasNc: KiwiNodeChange
 }
-
 function variableValueToKiwi(
   value: VariableValue,
   type: string,
@@ -70,7 +69,6 @@ function variableValueToKiwi(
   }
   return { value: { floatValue: Number(value) }, dataType: 'FLOAT', resolvedDataType: 'FLOAT' }
 }
-
 function collectImageEntries(graph: SceneGraph): Array<{ name: string; data: Uint8Array }> {
   const entries: Array<{ name: string; data: Uint8Array }> = []
   for (const [hash, data] of graph.images) {
@@ -78,7 +76,6 @@ function collectImageEntries(graph: SceneGraph): Array<{ name: string; data: Uin
   }
   return entries
 }
-
 const THUMBNAIL_WIDTH = 400
 const THUMBNAIL_HEIGHT = 225
 
@@ -103,12 +100,10 @@ async function renderFigThumbnail(
     THUMBNAIL_1X1
   )
 }
-
 function parseGuidOrNull(value: string | null | undefined): GUID | null {
   if (typeof value !== 'string' || !/^\d+:\d+$/.test(value)) return null
   return stringToGuid(value)
 }
-
 function mintExportGuid(localIdCounter: { value: number }, assignedGuidValues: Set<string>): GUID {
   for (;;) {
     const guid = { sessionID: 0, localID: localIdCounter.value++ }
@@ -119,11 +114,11 @@ function mintExportGuid(localIdCounter: { value: number }, assignedGuidValues: S
     }
   }
 }
-
 function reuseOrMintGuid(
   sourceId: string | null | undefined,
   localIdCounter: { value: number },
-  assignedGuidValues: Set<string>
+  assignedGuidValues: Set<string>,
+  diagnostics?: FigExportDiagnostics
 ): GUID {
   if (sourceId) {
     const imported = parseGuidOrNull(sourceId)
@@ -131,35 +126,58 @@ function reuseOrMintGuid(
       const key = `${imported.sessionID}:${imported.localID}`
       if (!assignedGuidValues.has(key)) {
         assignedGuidValues.add(key)
+        diagnostics?.reusedGuids.push(key)
         return imported
       }
+      const minted = mintExportGuid(localIdCounter, assignedGuidValues)
+      diagnostics?.mintedGuids.push({
+        reason: 'collision',
+        sourceId,
+        assigned: `${minted.sessionID}:${minted.localID}`
+      })
+      return minted
     }
   }
-  return mintExportGuid(localIdCounter, assignedGuidValues)
+  const minted = mintExportGuid(localIdCounter, assignedGuidValues)
+  diagnostics?.mintedGuids.push({
+    reason: 'missing',
+    sourceId: sourceId ?? null,
+    assigned: `${minted.sessionID}:${minted.localID}`
+  })
+  return minted
 }
-
 function assignVariableGuids(
   graph: SceneGraph,
   localIdCounter: { value: number },
   varIdToGuid: Map<string, GUID>,
   modeIdToGuid: Map<string, GUID>,
-  assignedGuidValues: Set<string>
+  assignedGuidValues: Set<string>,
+  diagnostics?: FigExportDiagnostics
 ): void {
   for (const [colId, col] of graph.variableCollections) {
-    const colGuid = reuseOrMintGuid(col.source?.id, localIdCounter, assignedGuidValues)
+    const colGuid = reuseOrMintGuid(col.source?.id, localIdCounter, assignedGuidValues, diagnostics)
     varIdToGuid.set(colId, colGuid)
     for (const mode of col.modes) {
-      const modeGuid = reuseOrMintGuid(mode.source?.id, localIdCounter, assignedGuidValues)
+      const modeGuid = reuseOrMintGuid(
+        mode.source?.id,
+        localIdCounter,
+        assignedGuidValues,
+        diagnostics
+      )
       modeIdToGuid.set(mode.modeId, modeGuid)
     }
     for (const varId of col.variableIds) {
       const variable = graph.variables.get(varId)
-      const varGuid = reuseOrMintGuid(variable?.source?.id, localIdCounter, assignedGuidValues)
+      const varGuid = reuseOrMintGuid(
+        variable?.source?.id,
+        localIdCounter,
+        assignedGuidValues,
+        diagnostics
+      )
       varIdToGuid.set(varId, varGuid)
     }
   }
 }
-
 function appendVariableNodeChanges(
   graph: SceneGraph,
   nodeChanges: KiwiNodeChange[],
@@ -195,7 +213,6 @@ function appendVariableNodeChanges(
     )
   }
 }
-
 function appendVariablesForCollection(
   graph: SceneGraph,
   nodeChanges: KiwiNodeChange[],
@@ -270,7 +287,6 @@ function advanceCounterPastImportedGuids(
   }
   localIdCounter.value = Math.max(localIdCounter.value, maxLocalId0 + 1, maxLocalId1 + 1)
 }
-
 function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange): void {
   if (page.source.format !== 'fig') return
   if (!('pageType' in page.source.fig.rawNodeFields)) delete canvasNc.pageType
@@ -290,7 +306,6 @@ function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange
   const strokeWeight = page.source.fig.rawNodeFields.strokeWeight
   if (typeof strokeWeight === 'number') canvasNc.strokeWeight = strokeWeight
 }
-
 function buildCanvasEntries(
   graph: SceneGraph,
   pages: FigExportPage[],
@@ -337,7 +352,6 @@ function buildCanvasEntries(
     if (page.internalOnly) canvasNc.internalOnly = true
     canvasEntries.push({ page, canvasGuid, canvasNc })
   }
-
   if (graph.variableCollections.size > 0 && internalCanvasGuid === null) {
     internalCanvasGuid = { sessionID: 0, localID: localIdCounter.value++ }
     assignedGuidValues.add(`${internalCanvasGuid.sessionID}:${internalCanvasGuid.localID}`)
@@ -364,6 +378,11 @@ export async function exportFigFile(
   pageId?: string,
   renderHeadlessThumbnail = false
 ): Promise<Uint8Array> {
+  // L-05: Ensure all nodes have stable source.id before export. This makes the
+  // `if (page.source.id === null)` branch at the page-GUID assignment truly
+  // unreachable, as migrateLegacySourceIds assigns a source.id to every node
+  // that lacks one.
+  graph.migrateLegacySourceIds()
   populateAllLazyFigImportRoots(graph)
   await initCodec()
 
@@ -384,10 +403,8 @@ export async function exportFigFile(
     compiled = getCompiledSchema()
     schemaDeflated = deflateSync(getSchemaBytes())
   }
-
   const docGuid = { sessionID: 0, localID: 0 }
   const localIdCounter = { value: 2 }
-
   const documentNc = makeDocumentNodeChange(docGuid, graph.documentColorSpace)
   const rootNode = graph.getNode(graph.rootId)
   if (rootNode) Object.assign(documentNc, rootNode.source.fig.rawNodeFields)
@@ -421,9 +438,21 @@ export async function exportFigFile(
     assignedGuidValues
   )
 
+  // L-08: Track GUID remapping diagnostics during export
+  const exportDiag: FigExportDiagnostics = { reusedGuids: [], mintedGuids: [] }
   // Assign variable GUIDs AFTER canvas entries so that source.id-derived
   // canvas GUIDs don't collide with generated variable GUIDs.
-  assignVariableGuids(graph, localIdCounter, varIdToGuid, modeIdToGuid, assignedGuidValues)
+  assignVariableGuids(
+    graph,
+    localIdCounter,
+    varIdToGuid,
+    modeIdToGuid,
+    assignedGuidValues,
+    exportDiag
+  )
+
+  // Store diagnostics on the graph for inspection
+  graph.exportDiagnostics = exportDiag
 
   for (const entry of canvasEntries) nodeChanges.push(entry.canvasNc)
 
@@ -452,22 +481,18 @@ export async function exportFigFile(
       )
     }
   }
-
   if (graph.variableCollections.size > 0 && internalCanvasGuid) {
     appendVariableNodeChanges(graph, nodeChanges, internalCanvasGuid, varIdToGuid, modeIdToGuid)
   }
-
   const msg: Record<string, unknown> = {
     type: 'NODE_CHANGES',
     sessionID: 0,
     ackID: 0,
     nodeChanges
   }
-
   if (blobs.length > 0) {
     msg.blobs = blobs.map((bytes) => ({ bytes }))
   }
-
   const kiwiData = compiled.encodeMessage(msg)
 
   const currentPageId = pageId ?? pages[0]?.id
@@ -511,7 +536,6 @@ export { compressFigDataSync } from './compress'
 function canUseWorker(): boolean {
   return typeof Worker !== 'undefined' && IS_BROWSER
 }
-
 function compressViaWorker(
   schemaDeflated: Uint8Array,
   kiwiData: Uint8Array,

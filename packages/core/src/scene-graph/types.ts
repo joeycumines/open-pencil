@@ -41,7 +41,7 @@ export interface FigmaSourcePayload {
 }
 
 export interface SourceMetadata {
-  format: 'fig' | null
+  format: 'fig' | 'pen' | null
   id: string | null
   orderKey: string | null
   fig: FigmaSourcePayload
@@ -63,6 +63,13 @@ export interface FigImportDiagnostics {
   duplicateGuids: Array<{ guid: string; count: number }>
   missingGuidCount: number
   reassignedGuids: Array<{ original: string | null; assigned: string }>
+}
+
+export interface FigExportDiagnostics {
+  /** GUIDs that were reused from source.id (no collision). */
+  reusedGuids: string[]
+  /** GUIDs that were minted because source.id was missing or collided. */
+  mintedGuids: Array<{ reason: 'missing' | 'collision'; sourceId: string | null; assigned: string }>
 }
 
 export type HandleMirroring = 'NONE' | 'ANGLE' | 'ANGLE_AND_LENGTH'

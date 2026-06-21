@@ -517,6 +517,18 @@ export function parsePenFile(json: string): SceneGraph {
   fixInstanceWidths(graph)
   fixTextWidths(graph)
 
+  // M-10: Tag all pen-imported nodes with source.format = 'pen' so they are
+  // distinguishable from never-imported nodes (format = null) and from fig-imported
+  // nodes (format = 'fig'). This survives the guardSourceChanges check (which only
+  // prevents null → non-null transitions via updateNode — direct field assignment
+  // during import is not guarded) and ensures the fig exporter correctly skips
+  // pen nodes in advanceCounterPastImportedGraphs (which filters on format === 'fig').
+  for (const node of graph.getAllNodes()) {
+    if (node.source.format === null) {
+      node.source.format = 'pen'
+    }
+  }
+
   graph.migrateLegacySourceIds()
   graph.recomputeReservedRuntimeIds()
 
