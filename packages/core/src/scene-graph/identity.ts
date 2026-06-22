@@ -9,6 +9,18 @@ import type {
   VariableCollection
 } from './types'
 
+/**
+ * Dev-only flag. When true, performance counters track O(n) fallback paths
+ * and warn when they fire excessively — a symptom of O(n²) behavior.
+ *
+ * In production builds, Vite replaces `import.meta.env.DEV` with `false` and
+ * the bundler tree-shakes all guarded code, resulting in zero overhead.
+ */
+const IS_DEV = 'env' in import.meta && import.meta.env.DEV
+
+/** Threshold for linear-scan warnings in stableIdToRuntimeId. */
+const STABLE_ID_LINEAR_SCAN_THRESHOLD = 10
+
 export interface SceneGraphIdentityHost {
   rootId: string
   nodes: Map<string, SceneNode>
@@ -40,6 +52,8 @@ export class SceneGraphIdentity {
   private modeIds = new Set<string>()
   private stableIdToRuntimeIdMap = new Map<string, string>()
   private sourceIdsMigrated = false
+  /** Dev-only counter for stableIdToRuntimeId linear-scan fallback. */
+  private stableIdLinearScanCount = 0
 
   constructor(host: SceneGraphIdentityHost, options?: SceneGraphOptions) {
     this.host = host
@@ -197,6 +211,16 @@ export class SceneGraphIdentity {
     for (const node of this.host.nodes.values()) {
       if (node.source.id === stableId) {
         this.stableIdToRuntimeIdMap.set(stableId, node.id)
+        if (IS_DEV) {
+          this.stableIdLinearScanCount++
+          if (this.stableIdLinearScanCount === STABLE_ID_LINEAR_SCAN_THRESHOLD) {
+            console.warn(
+              `[OpenPencil] stableIdToRuntimeId: ${STABLE_ID_LINEAR_SCAN_THRESHOLD} linear scans detected. ` +
+                `Use findRuntimeIdByStableId() or call rebuildStableIdMap() to build the O(1) index. ` +
+                `This indicates potential O(n²) behavior if called in a loop.`
+            )
+          }
+        }
         return node.id
       }
     }
@@ -308,5 +332,14 @@ export class SceneGraphIdentity {
         this.unreserveRuntimeId(importedId)
       }
     }
+  }
+
+  /**
+   * Reset dev-only performance counters. Call at operation boundaries
+   * (import start, sync start) to avoid stale warnings across unrelated
+   * operations. No-op in production builds.
+   */
+  resetDevCounters(): void {
+    if (IS_DEV) this.stableIdLinearScanCount = 0
   }
 }

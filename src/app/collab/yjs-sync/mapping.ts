@@ -4,6 +4,27 @@ import type { GraphSyncState, SceneGraph, SceneNode } from '@open-pencil/core/sc
 
 import type { YNodes } from './constants'
 
+/**
+ * Dev-only flag. When true, performance counters track O(n) fallback paths
+ * in collab sync. Zero production overhead — Vite tree-shakes all guarded
+ * code when DEV is false.
+ */
+const IS_DEV = 'env' in import.meta && import.meta.env.DEV
+
+/** Dev-only counter for findNodeByStableId linear-scan fallback. */
+let findNodeByStableIdFallbackCount = 0
+
+/** Threshold for fallback warnings in findNodeByStableId. */
+const FIND_NODE_FALLBACK_THRESHOLD = 100
+
+/**
+ * Reset dev-only performance counters. Call at sync start to avoid stale
+ * warnings across unrelated sync operations. No-op in production builds.
+ */
+export function resetCollabDevCounters(): void {
+  if (IS_DEV) findNodeByStableIdFallbackCount = 0
+}
+
 export function stableIdForNode(node: SceneNode): string {
   return node.source.id ?? node.id
 }
@@ -79,7 +100,18 @@ export function findNodeByStableId(graph: SceneGraph, stableId: string): SceneNo
   }
   // Fallback: linear scan for graphs without identity (e.g., test stubs)
   for (const node of graph.getAllNodes()) {
-    if (stableIdForNode(node) === stableId) return node
+    if (stableIdForNode(node) === stableId) {
+      if (IS_DEV) {
+        findNodeByStableIdFallbackCount++
+        if (findNodeByStableIdFallbackCount === FIND_NODE_FALLBACK_THRESHOLD) {
+          console.warn(
+            `[OpenPencil] findNodeByStableId: ${FIND_NODE_FALLBACK_THRESHOLD} fallback linear scans. ` +
+              `The O(1) stable ID index is missing — ensure graph.identity.rebuildStableIdMap() is called.`
+          )
+        }
+      }
+      return node
+    }
   }
   return undefined
 }

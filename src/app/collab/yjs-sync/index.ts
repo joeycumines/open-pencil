@@ -8,7 +8,8 @@ export {
   stableIdForRuntimeId,
   findNodeByStableId,
   findStableIdForYMap,
-  toRuntimeId
+  toRuntimeId,
+  resetCollabDevCounters
 } from './mapping'
 export {
   asString,
