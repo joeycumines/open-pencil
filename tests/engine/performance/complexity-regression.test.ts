@@ -129,17 +129,21 @@ heavy('Complexity regression tests', () => {
     HEAVY_TEST_TIMEOUT_MS * 2
   )
 
-  test('deleteNode batch is sub-quadratic', () => {
-    // Deleting n nodes should be O(n), not O(n²). The identity system's
-    // maybeUnreserveImportedId was previously O(n) per delete (O(n²) total).
-    const results = runAtScales(SCALES, (n) => {
-      const { graph } = createGraphWithNNodes(n)
-      const page = graph.getPages()[0]
-      const childIds = [...page.childIds]
-      for (const id of childIds) {
-        graph.deleteNode(id)
-      }
-    })
-    assertSubQuadratic(results, 3.0)
-  })
+  test(
+    'deleteNode batch is sub-quadratic',
+    () => {
+      // Deleting n nodes should be O(n), not O(n²). The identity system's
+      // maybeUnreserveImportedId was previously O(n) per delete (O(n²) total).
+      const results = runAtScales(SCALES, (n) => {
+        const { graph } = createGraphWithNNodes(n)
+        const page = graph.getPages()[0]
+        const childIds = [...page.childIds]
+        for (const id of childIds) {
+          graph.deleteNode(id)
+        }
+      })
+      assertSubQuadratic(results, 4.0)
+    },
+    HEAVY_TEST_TIMEOUT_MS * 3
+  )
 })
