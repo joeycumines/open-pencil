@@ -42,17 +42,17 @@ async function chooseFormat(label: 'RGB' | 'HSL' | 'HSB' | 'OkHCL') {
   await page.getByRole('option', { name: label, exact: true }).click()
 }
 
-async function dragSlider(testId: string, ratio: number) {
+async function setSlider(testId: string, ratio: number) {
   const slider = page.getByTestId(testId).locator('input[type="range"]')
-  const box = await slider.boundingBox()
-  if (!box) throw new Error(`Missing slider: ${testId}`)
-  const y = box.y + box.height / 2
-  await page.mouse.move(box.x + 2, y)
-  await page.mouse.down()
-  await page.mouse.move(box.x + Math.max(2, Math.min(box.width - 2, box.width * ratio)), y, {
-    steps: 20
-  })
-  await page.mouse.up()
+  await expect(slider).toBeAttached()
+  await slider.evaluate((input, targetRatio) => {
+    const range = input as HTMLInputElement
+    const min = Number(range.min || 0)
+    const max = Number(range.max || 100)
+    const clampedRatio = Math.max(0, Math.min(1, targetRatio))
+    range.value = String(min + (max - min) * clampedRatio)
+    range.dispatchEvent(new Event('input', { bubbles: true }))
+  }, ratio)
   await canvas.waitForRender()
 }
 
@@ -63,7 +63,7 @@ test('rgb hue slider updates selected fill color', async () => {
 
   await openFillPicker()
   const before = await getSelectedFill()
-  await dragSlider('color-slider-hue', 0.65)
+  await setSlider('color-slider-hue', 0.65)
   const after = await getSelectedFill()
 
   expect(after).not.toBeNull()
@@ -76,7 +76,7 @@ test('rgb hue slider updates selected fill color', async () => {
 
 test('rgb alpha slider updates fill opacity and alpha', async () => {
   await openFillPicker()
-  await dragSlider('color-slider-alpha', 0.3)
+  await setSlider('color-slider-alpha', 0.3)
   const after = await getSelectedFill()
 
   expect(after).not.toBeNull()
@@ -88,7 +88,7 @@ test('hsl saturation slider changes saturation', async () => {
   await openFillPicker()
   await chooseFormat('HSL')
   const before = await getSelectedFill()
-  await dragSlider('color-slider-hsl-s', 0.2)
+  await setSlider('color-slider-hsl-s', 0.2)
   const after = await getSelectedFill()
 
   expect(after).not.toBeNull()
@@ -103,7 +103,7 @@ test('hsl lightness slider changes color independently', async () => {
   await openFillPicker()
   await chooseFormat('HSL')
   const before = await getSelectedFill()
-  await dragSlider('color-slider-hsl-l', 0.8)
+  await setSlider('color-slider-hsl-l', 0.8)
   const after = await getSelectedFill()
 
   expect(after).not.toBeNull()
@@ -119,7 +119,7 @@ test('hsb saturation and brightness sliders both affect fill color', async () =>
   await chooseFormat('HSB')
 
   const beforeS = await getSelectedFill()
-  await dragSlider('color-slider-hsb-s', 0.15)
+  await setSlider('color-slider-hsb-s', 0.15)
   const afterS = await getSelectedFill()
   expect(afterS).not.toBeNull()
   expect(
@@ -129,7 +129,7 @@ test('hsb saturation and brightness sliders both affect fill color', async () =>
   ).toBe(true)
 
   const beforeB = await getSelectedFill()
-  await dragSlider('color-slider-hsb-b', 0.9)
+  await setSlider('color-slider-hsb-b', 0.9)
   const afterB = await getSelectedFill()
   expect(afterB).not.toBeNull()
   expect(

@@ -66,13 +66,17 @@ describe('pen identity layer', () => {
 
     expect(duplicate?.id).not.toBe(component.id)
     expect(duplicate?.id).toMatch(/^\d+:\d+$/)
+    expect(duplicate?.source.format).toBe('pen')
     expect(missing?.id).toBeDefined()
     expect(missing?.id).not.toBe(component.id)
     expect(missing?.id).not.toBe(duplicate?.id)
     expect(missing?.id).toMatch(/^\d+:\d+$/)
+    expect(missing?.source.format).toBe('pen')
 
     expect(instance?.componentId).toBe(component.id)
-    expect(getNodeOrThrow(graph, instance?.id as string).componentId).toBe(component.id)
+    expect(instance?.source.format).toBe('pen')
+    if (instance === undefined) return
+    expect(getNodeOrThrow(graph, instance.id).componentId).toBe(component.id)
 
     migrateSpy.mockRestore()
     reserveSpy.mockRestore()
@@ -94,6 +98,7 @@ describe('pen identity layer', () => {
     for (const node of graph.getAllNodes()) {
       if (node.type === 'DOCUMENT') continue
       expect(node.source.id).toMatch(/^\d+:\d+$/)
+      expect(node.source.format).toBe('pen')
     }
   })
 })

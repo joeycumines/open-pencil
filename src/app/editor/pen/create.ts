@@ -1,5 +1,4 @@
 import type { Editor, Tool } from '@open-pencil/core/editor'
-import type { SceneGraph } from '@open-pencil/core/scene-graph'
 
 import {
   absoluteVertices,
@@ -10,7 +9,7 @@ import {
   type PenState
 } from '@/app/editor/pen/resume'
 
-export function createPenActions(editor: Editor, graph: SceneGraph, state: PenState) {
+export function createPenActions(editor: Editor, state: PenState) {
   function setTool(tool: Tool) {
     if (state.penState && tool !== 'PEN' && tool !== 'HAND') {
       editor.penCommit(false)
@@ -19,6 +18,7 @@ export function createPenActions(editor: Editor, graph: SceneGraph, state: PenSt
   }
 
   function penResumeOnPath(nodeId: string) {
+    const graph = editor.graph
     const node = graph.getNode(nodeId)
     if (node?.type !== 'VECTOR' || !node.vectorNetwork) return
 
@@ -35,6 +35,7 @@ export function createPenActions(editor: Editor, graph: SceneGraph, state: PenSt
   }
 
   function penResumeFromEndpoint(nodeId: string, endpointVertexIndex: number) {
+    const graph = editor.graph
     const node = graph.getNode(nodeId)
     if (node?.type !== 'VECTOR' || !node.vectorNetwork) return
 

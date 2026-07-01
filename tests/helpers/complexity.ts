@@ -37,6 +37,24 @@ export function runAtScales(scales: readonly number[], fn: (n: number) => void):
   return results
 }
 
+export function runBestAtScales(
+  scales: readonly number[],
+  fn: (n: number) => void,
+  samples = 2
+): TimingResult[] {
+  const results: TimingResult[] = []
+  for (const n of scales) {
+    let best = Number.POSITIVE_INFINITY
+    for (let sample = 0; sample < samples; sample++) {
+      const start = performance.now()
+      fn(n)
+      best = Math.min(best, performance.now() - start)
+    }
+    results.push({ n, ms: best })
+  }
+  return results
+}
+
 /**
  * Assert that timing grows sub-quadratically across consecutive scale
  * pairs.

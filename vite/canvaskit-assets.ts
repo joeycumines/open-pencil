@@ -3,11 +3,18 @@ import { dirname, resolve } from 'node:path'
 
 import type { Connect, Plugin, ResolvedConfig } from 'vite'
 
-function syncWasmFromNodeModules(root: string, source: string, destination: string) {
+function syncWasmFromNodeModules(
+  root: string,
+  source: string,
+  destination: string,
+  options: { warnIfMissing?: boolean } = {}
+) {
   const sourcePath = resolve(root, source)
   const destinationPath = resolve(root, destination)
   if (!existsSync(sourcePath)) {
-    console.warn(`[copy-canvaskit-wasm] Missing source (run \`bun install\`): ${sourcePath}`)
+    if (options.warnIfMissing ?? true) {
+      console.warn(`[copy-canvaskit-wasm] Missing source (run \`bun install\`): ${sourcePath}`)
+    }
     return
   }
   mkdirSync(dirname(destinationPath), { recursive: true })
@@ -58,12 +65,14 @@ export function copyCanvasKitAssetsPlugin(): Plugin {
       syncWasmFromNodeModules(
         root,
         'packages/core/vendor/canvaskit-webgpu/canvaskit.wasm',
-        'public/canvaskit-webgpu/canvaskit.wasm'
+        'public/canvaskit-webgpu/canvaskit.wasm',
+        { warnIfMissing: false }
       )
       syncWasmFromNodeModules(
         root,
         'packages/core/vendor/canvaskit-webgpu/canvaskit.js',
-        'public/canvaskit-webgpu/canvaskit.js'
+        'public/canvaskit-webgpu/canvaskit.js',
+        { warnIfMissing: false }
       )
     },
     configureServer(server) {

@@ -1,4 +1,4 @@
-import { onScopeDispose, shallowReactive } from 'vue'
+import { getCurrentScope, onScopeDispose, shallowReactive } from 'vue'
 
 import { createEditor } from '@open-pencil/core/editor'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
@@ -51,14 +51,18 @@ export function createEditorStore(initialGraph?: SceneGraph) {
     getStoreFigmaAPI(store).clearNodeCache()
   })
 
-  onScopeDispose(() => {
-    unbindGraphReplaced()
-    unbindNodeDeleted()
-  })
-
   const { selectedNodes, selectedNode, layerTree } = createEditorComputedRefs(editor, state)
 
-  const modules = createEditorStoreModules(editor, graph, state, io, viewportSize)
+  const modules = createEditorStoreModules(editor, state, io, viewportSize)
+
+  let disposed = false
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    unbindGraphReplaced()
+    unbindNodeDeleted()
+    modules.dispose()
+  }
 
   // ─── Public API ───────────────────────────────────────────────
   // Spread all core Editor methods, then override getters and add app-specific.
@@ -71,7 +75,12 @@ export function createEditorStore(initialGraph?: SceneGraph) {
     layerTree,
 
     // App-specific overrides and additions
-    ...modules
+    ...modules,
+    dispose
+  }
+
+  if (getCurrentScope()) {
+    onScopeDispose(dispose)
   }
 
   defineEditorStoreAccessors(store, editor)

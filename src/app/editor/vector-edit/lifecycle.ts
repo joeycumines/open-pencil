@@ -1,21 +1,18 @@
 import type { Editor } from '@open-pencil/core/editor'
 import { cloneVectorNetwork } from '@open-pencil/core/scene-graph'
-import type { SceneGraph, VectorNetwork } from '@open-pencil/core/scene-graph'
+import type { VectorNetwork } from '@open-pencil/core/scene-graph'
 import { computeAccurateBounds } from '@open-pencil/core/vector'
 
 import { getLiveNetwork } from './network'
 import type { VectorEditState } from './types'
 
-export function createVectorEditLifecycle(
-  editor: Editor,
-  graph: SceneGraph,
-  state: VectorEditState
-) {
+export function createVectorEditLifecycle(editor: Editor, state: VectorEditState) {
   function getNodeEditState() {
     return state.nodeEditState
   }
 
   function applyNodeEditToNode(es: NonNullable<typeof state.nodeEditState>) {
+    const graph = editor.graph
     const node = graph.getNode(es.nodeId)
     if (node?.type !== 'VECTOR') return
 
@@ -42,6 +39,7 @@ export function createVectorEditLifecycle(
   }
 
   function enterNodeEditMode(nodeId: string) {
+    const graph = editor.graph
     const node = graph.getNode(nodeId)
     if (node?.type !== 'VECTOR' || !node.vectorNetwork) return
 
@@ -79,6 +77,7 @@ export function createVectorEditLifecycle(
     const es = getNodeEditState()
     if (!es) return
 
+    const graph = editor.graph
     const node = graph.getNode(es.nodeId)
     if (node?.type !== 'VECTOR') {
       state.nodeEditState = null

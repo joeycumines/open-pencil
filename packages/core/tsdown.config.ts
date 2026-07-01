@@ -37,5 +37,10 @@ export default defineConfig({
   deps: {
     neverBundle: [...Object.keys(packageJson.dependencies ?? {}), /^node:/],
     onlyBundle: false
+  },
+  inputOptions: {
+    checks: {
+      pluginTimings: false
+    }
   }
 })

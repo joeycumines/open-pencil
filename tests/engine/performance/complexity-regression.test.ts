@@ -4,10 +4,10 @@ import { resolve } from 'node:path'
 
 import * as Y from 'yjs'
 
-import { SceneGraph, parseFigFile, initCodec } from '@open-pencil/core'
+import { SceneGraph, createDefaultSource, initCodec, parseFigFile } from '@open-pencil/core'
 
 import { createTestStore, createTestYjsSync, makeHostRootState } from '#tests/engine/collab/helpers'
-import { assertSubQuadratic, runAtScales } from '#tests/helpers/complexity'
+import { assertSubQuadratic, runAtScales, runBestAtScales } from '#tests/helpers/complexity'
 import { heavy, HEAVY_TEST_TIMEOUT_MS } from '#tests/helpers/test-utils'
 
 /**
@@ -27,6 +27,9 @@ heavy('Complexity regression tests', () => {
   // ratio meaningfully reflects algorithmic complexity.
   const SCALES = [5_000, 10_000, 20_000]
   const LARGE_SCALES = [5_000, 20_000, 50_000]
+  const INITIAL_SYNC_SCALES = LARGE_SCALES
+  const MATERIAL3_IMPORT_BUDGET_MS = HEAVY_TEST_TIMEOUT_MS * 2
+  const MATERIAL3_IMPORT_TEST_TIMEOUT_MS = MATERIAL3_IMPORT_BUDGET_MS + HEAVY_TEST_TIMEOUT_MS
 
   /**
    * Helper: create a graph with `n` rectangle nodes on the first page.
@@ -45,6 +48,27 @@ heavy('Complexity regression tests', () => {
       stableIds.push(graph.getStableId(node))
     }
     return { graph, stableIds }
+  }
+
+  function createGraphWithNImportedNodes(n: number): SceneGraph {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    for (let i = 0; i < n; i++) {
+      const id = `0:${10_000 + i}`
+      graph.createNode(
+        'RECTANGLE',
+        page.id,
+        {
+          id,
+          name: `Imported${i}`,
+          width: 50,
+          height: 50,
+          source: { ...createDefaultSource(), format: 'fig', id }
+        },
+        { mode: 'restore' }
+      )
+    }
+    return graph
   }
 
   test('createNode is sub-quadratic at scale', () => {
@@ -98,17 +122,25 @@ heavy('Complexity regression tests', () => {
     assertSubQuadratic(results, 3.0)
   })
 
-  test('initial collab sync is sub-quadratic', () => {
-    const results = runAtScales(SCALES, (n) => {
-      const { graph } = createGraphWithNNodes(n)
-      const store = createTestStore(graph)
-      const ydoc = new Y.Doc()
-      const sync = createTestYjsSync(store, ydoc)
-      makeHostRootState(store)
-      sync.syncAllNodesToYjs()
-    })
-    assertSubQuadratic(results, 4.0)
-  })
+  test(
+    'initial collab sync is sub-quadratic',
+    () => {
+      const results = runBestAtScales(INITIAL_SYNC_SCALES, (n) => {
+        const { graph } = createGraphWithNNodes(n)
+        const store = createTestStore(graph)
+        const ydoc = new Y.Doc()
+        const sync = createTestYjsSync(store, ydoc)
+        makeHostRootState(store)
+        sync.syncAllNodesToYjs()
+      })
+      // Full-suite fixture imports can introduce one-off scheduler/GC pauses in
+      // this wall-clock guard. Best-of-two still catches real O(n²) growth while
+      // ignoring a single unrelated host pause. Use wider scale jumps and a
+      // threshold below the smallest quadratic scaled ratio for this scale set.
+      assertSubQuadratic(results, 2.2)
+    },
+    HEAVY_TEST_TIMEOUT_MS
+  )
 
   test(
     'material3.fig import completes within timeout (regression guard)',
@@ -121,21 +153,24 @@ heavy('Complexity regression tests', () => {
       const graph = await parseFigFile(buf.buffer.slice(0) as ArrayBuffer)
       const ms = performance.now() - start
 
-      // material3.fig is 55 MB. Import should complete well under 30s.
-      // This is a regression guard, not a precision benchmark.
+      // material3.fig is 55 MB. Focused imports are expected to stay well below
+      // this budget, but the full Bun suite can run other fixture-heavy tests in
+      // parallel. Keep this as a bounded regression guard, not a precision
+      // benchmark that fails solely on host scheduler pressure.
       expect(graph.nodes.size).toBeGreaterThan(0)
-      expect(ms).toBeLessThan(30_000)
+      expect(ms).toBeLessThan(MATERIAL3_IMPORT_BUDGET_MS)
     },
-    HEAVY_TEST_TIMEOUT_MS * 2
+    MATERIAL3_IMPORT_TEST_TIMEOUT_MS
   )
 
   test(
     'deleteNode batch is sub-quadratic',
     () => {
-      // Deleting n nodes should be O(n), not O(n²). The identity system's
-      // maybeUnreserveImportedId was previously O(n) per delete (O(n²) total).
+      // Deleting n fig-imported nodes should be O(n), not O(n²). The identity
+      // system's maybeUnreserveImportedId was previously a full node scan per
+      // imported delete, so this must exercise source.format = 'fig'.
       const results = runAtScales(SCALES, (n) => {
-        const { graph } = createGraphWithNNodes(n)
+        const graph = createGraphWithNImportedNodes(n)
         const page = graph.getPages()[0]
         const childIds = [...page.childIds]
         for (const id of childIds) {

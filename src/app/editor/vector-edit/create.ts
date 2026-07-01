@@ -1,5 +1,4 @@
 import type { Editor } from '@open-pencil/core/editor'
-import type { SceneGraph } from '@open-pencil/core/scene-graph'
 
 import { createVectorEditHandleActions } from './handle-actions'
 import { createVectorEditLifecycle } from './lifecycle'
@@ -7,9 +6,9 @@ import { createVectorEditNetworkActions, getLiveNetwork, setNodeEditNetwork } fr
 import { createVectorEditSelectionActions } from './selection'
 import type { VectorEditState } from './types'
 
-export function createVectorEditActions(editor: Editor, graph: SceneGraph, state: VectorEditState) {
+export function createVectorEditActions(editor: Editor, state: VectorEditState) {
   const { getNodeEditState, applyNodeEditToNode, enterNodeEditMode, exitNodeEditMode } =
-    createVectorEditLifecycle(editor, graph, state)
+    createVectorEditLifecycle(editor, state)
   const {
     nodeEditSelectVertex,
     nodeEditAlignVertices,

@@ -4,8 +4,8 @@ import {
   parseOpenPencilClipboard
 } from '#core/clipboard'
 import { computeAllLayouts } from '#core/layout'
-import { createDefaultSource, splitOverrideKey } from '#core/scene-graph'
-import type { SceneNode, SourceMetadata } from '#core/scene-graph'
+import { createDefaultSource, joinOverrideKey, splitOverrideKey } from '#core/scene-graph'
+import type { SceneGraph, SceneNode, SourceMetadata } from '#core/scene-graph'
 import type { Vector } from '#core/types'
 
 import { createClipboardCopyActions } from './clipboard/copy'
@@ -17,10 +17,18 @@ import { replaceTargetsWithCreated, selectedReplacementTargets } from './clipboa
 import { resolvePasteTarget } from './clipboard/paste-target'
 import { createClipboardPlacementActions } from './clipboard/placement'
 import { collectSubtrees, restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
+import { remapRestoredSnapshotReferences } from './history/restore-references'
 import type { EditorContext } from './types'
 
 type PasteOptions = {
   replaceSelection?: boolean
+}
+
+type ClipboardSnapshot = SceneNode & { children?: ClipboardSnapshot[] }
+
+type PasteReferencePair = {
+  source: ClipboardSnapshot
+  pastedStableId: string
 }
 
 export function createClipboardActions(ctx: EditorContext) {
@@ -30,6 +38,7 @@ export function createClipboardActions(ctx: EditorContext) {
     const topLevel = selectedNodes.filter((n) => !n.parentId || !selectedSet.has(n.parentId))
 
     const newRootIds: string[] = []
+    const sourceToClone = new Map<string, string>()
     const allSnapshots = new Map<string, SceneNode>()
 
     for (const node of topLevel) {
@@ -41,27 +50,38 @@ export function createClipboardActions(ctx: EditorContext) {
       })
       if (!clone) continue
       newRootIds.push(clone.id)
-      const subtree = snapshotSubtree(ctx.graph, clone.id)
-      for (const [id, snap] of subtree) allSnapshots.set(id, snap)
+      collectParallelCloneRuntimeMap(ctx.graph, node.id, clone.id, sourceToClone)
     }
 
     if (newRootIds.length > 0) {
+      remapDuplicatedComponentIds(ctx.graph, newRootIds, sourceToClone)
+      for (const rootId of newRootIds) {
+        const subtree = snapshotSubtree(ctx.graph, rootId)
+        for (const [id, snap] of subtree) allSnapshots.set(id, snap)
+      }
+      let currentRootIds = [...newRootIds]
       ctx.setSelectedIds(new Set(newRootIds))
       ctx.undo.push({
         label: 'Duplicate',
         forward: () => {
+          const restoredRootIds: string[] = []
+          const oldToNew = new Map<string, string>()
           for (const rootId of newRootIds) {
             const snapshot = allSnapshots.get(rootId)
             if (!snapshot) continue
             const parentId = snapshot.parentId ?? ctx.state.currentPageId
-            restoreSubtree(ctx.graph, snapshot, parentId, allSnapshots)
+            const restored = restoreSubtree(ctx.graph, snapshot, parentId, allSnapshots, oldToNew)
+            restoredRootIds.push(restored.rootId)
           }
-          ctx.setSelectedIds(new Set(newRootIds))
+          remapRestoredSnapshotReferences(ctx.graph, allSnapshots.values(), oldToNew)
+          currentRootIds = restoredRootIds
+          ctx.setSelectedIds(new Set(currentRootIds))
         },
         inverse: () => {
-          for (const id of newRootIds.slice().reverse()) {
+          for (const id of currentRootIds.slice().reverse()) {
             ctx.graph.deleteNode(id, { permanent: true })
           }
+          currentRootIds = []
           ctx.setSelectedIds(prevSelection)
         }
       })
@@ -71,15 +91,18 @@ export function createClipboardActions(ctx: EditorContext) {
   function pushPasteUndo(created: string[], prevSelection: Set<string>) {
     const allNodes = collectSubtrees(ctx.graph, created)
     const pageId = ctx.state.currentPageId
+    let currentCreated = [...created]
     ctx.undo.push({
       label: 'Paste',
       forward: () => {
-        recreateSnapshots(ctx, allNodes, pageId)
+        const restoredIds = recreateSnapshots(ctx, allNodes, pageId)
+        currentCreated = created.map((id) => restoredIds.get(id) ?? id)
         computeAllLayouts(ctx.graph, pageId)
-        ctx.setSelectedIds(new Set(created))
+        ctx.setSelectedIds(new Set(currentCreated))
       },
       inverse: () => {
-        deleteIds(ctx, created)
+        deleteIds(ctx, currentCreated)
+        currentCreated = []
         computeAllLayouts(ctx.graph, pageId)
         ctx.setSelectedIds(prevSelection)
       }
@@ -140,13 +163,11 @@ export function createClipboardActions(ctx: EditorContext) {
 
     const oldRuntimeToNew = new Map<string, string>()
     const oldStableToNew = new Map<string, string>()
+    const sourceSnapshotByCreatedId = new Map<string, ClipboardSnapshot>()
     const createdRoots: string[] = []
     const createdIds = new Set<string>()
 
-    const createWithFreshIds = (
-      snapshot: SceneNode & { children?: SceneNode[] },
-      parentId: string
-    ): SceneNode => {
+    const createWithFreshIds = (snapshot: ClipboardSnapshot, parentId: string): SceneNode => {
       const originalRuntimeId = snapshot.id
       const originalStableId = snapshot.source.id ?? null
 
@@ -164,6 +185,7 @@ export function createClipboardActions(ctx: EditorContext) {
 
       const node = ctx.graph.createNode(snapshot.type, parentId, overrides, { mode: 'restore' })
       oldRuntimeToNew.set(originalRuntimeId, node.id)
+      sourceSnapshotByCreatedId.set(node.id, snapshot)
       createdIds.add(node.id)
       if (originalStableId !== null) {
         oldStableToNew.set(originalStableId, node.id)
@@ -207,15 +229,10 @@ export function createClipboardActions(ctx: EditorContext) {
       }
 
       if (node.type === 'INSTANCE') {
-        const remapped: Record<string, unknown> = {}
-        for (const [key, value] of Object.entries(node.overrides)) {
-          const { childId, prop } = splitOverrideKey(key)
-          const newChildId = mapRef(childId)
-          if (newChildId) {
-            remapped[`${newChildId}:${prop}`] = value
-          }
-        }
-        changes.overrides = remapped
+        const sourceSnapshot = sourceSnapshotByCreatedId.get(node.id)
+        changes.overrides = sourceSnapshot
+          ? remapPastedOverrideRecord(ctx.graph, sourceSnapshot, oldRuntimeToNew, node.overrides)
+          : structuredClone(node.overrides)
       }
 
       if (Object.keys(changes).length > 0) {
@@ -267,16 +284,20 @@ export function createClipboardActions(ctx: EditorContext) {
 
     const prevSelection = new Set(ctx.state.selectedIds)
     for (const { id } of entries) ctx.graph.deleteNode(id, { permanent: true })
+    let restoredIds = new Map<string, string>()
 
     ctx.undo.push({
       label: 'Delete',
       forward: () => {
-        for (const { id } of entries) ctx.graph.deleteNode(id, { permanent: true })
+        for (const { id } of entries) {
+          ctx.graph.deleteNode(restoredIds.get(id) ?? id, { permanent: true })
+        }
+        restoredIds = new Map()
         ctx.setSelectedIds(new Set())
       },
       inverse: () => {
-        restoreDeletedEntries(ctx, entries)
-        ctx.setSelectedIds(prevSelection)
+        restoredIds = restoreDeletedEntries(ctx, entries)
+        ctx.setSelectedIds(mapSelection(prevSelection, restoredIds))
       }
     })
     ctx.setSelectedIds(new Set())
@@ -299,5 +320,148 @@ export function createClipboardActions(ctx: EditorContext) {
     deleteSelected,
     ...imageActions,
     ...exportActions
+  }
+}
+
+function mapSelection(selection: Set<string>, oldToNew: Map<string, string>) {
+  return new Set([...selection].map((id) => oldToNew.get(id) ?? id))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function pushPasteReferencePair(
+  index: Map<string, PasteReferencePair[]>,
+  key: string,
+  pair: PasteReferencePair
+): void {
+  const existing = index.get(key)
+  if (existing) {
+    existing.push(pair)
+  } else {
+    index.set(key, [pair])
+  }
+}
+
+function descendantPasteReferencePairs(
+  graph: SceneGraph,
+  sourceContext: ClipboardSnapshot,
+  oldRuntimeToNew: ReadonlyMap<string, string>
+): Map<string, PasteReferencePair[]> {
+  const index = new Map<string, PasteReferencePair[]>()
+  const visit = (snapshot: ClipboardSnapshot): void => {
+    for (const child of snapshot.children ?? []) {
+      const pastedId = oldRuntimeToNew.get(child.id)
+      const pasted = pastedId ? graph.getNode(pastedId) : undefined
+      if (pasted) {
+        const pair = {
+          source: child,
+          pastedStableId: graph.identity.getStableId(pasted)
+        }
+        pushPasteReferencePair(index, child.id, pair)
+        if (child.source.id) pushPasteReferencePair(index, child.source.id, pair)
+      }
+      visit(child)
+    }
+  }
+  visit(sourceContext)
+  return index
+}
+
+function remapPastedBindingRecord(bindings: Record<string, unknown>): Record<string, unknown> {
+  const remapped: Record<string, unknown> = {}
+  for (const [field, value] of Object.entries(bindings)) {
+    remapped[field] = structuredClone(value)
+  }
+  return remapped
+}
+
+function remapPastedOverrideValue(
+  graph: SceneGraph,
+  sourceContext: ClipboardSnapshot,
+  oldRuntimeToNew: ReadonlyMap<string, string>,
+  prop: string,
+  value: unknown
+): unknown {
+  if (prop === 'overrides' && isRecord(value)) {
+    return remapPastedOverrideRecord(graph, sourceContext, oldRuntimeToNew, value)
+  }
+  if (prop === 'boundVariables' && isRecord(value)) {
+    return remapPastedBindingRecord(value)
+  }
+  return structuredClone(value)
+}
+
+function remapPastedOverrideRecord(
+  graph: SceneGraph,
+  sourceContext: ClipboardSnapshot,
+  oldRuntimeToNew: ReadonlyMap<string, string>,
+  overrides: Record<string, unknown>
+): Record<string, unknown> {
+  const pairsByOriginalKey = descendantPasteReferencePairs(graph, sourceContext, oldRuntimeToNew)
+  const remapped: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(overrides)) {
+    const { childId, prop } = splitOverrideKey(key)
+    if (childId === '') {
+      remapped[key] = remapPastedOverrideValue(graph, sourceContext, oldRuntimeToNew, prop, value)
+      continue
+    }
+
+    const pairs = pairsByOriginalKey.get(childId)
+    if (!pairs) {
+      remapped[key] = remapPastedOverrideValue(graph, sourceContext, oldRuntimeToNew, prop, value)
+      continue
+    }
+
+    for (const pair of pairs) {
+      remapped[joinOverrideKey(pair.pastedStableId, prop)] = remapPastedOverrideValue(
+        graph,
+        pair.source,
+        oldRuntimeToNew,
+        prop,
+        value
+      )
+    }
+  }
+
+  return remapped
+}
+
+function collectParallelCloneRuntimeMap(
+  graph: SceneGraph,
+  sourceId: string,
+  cloneId: string,
+  sourceToClone: Map<string, string>
+): void {
+  const source = graph.getNode(sourceId)
+  const clone = graph.getNode(cloneId)
+  if (!source || !clone) return
+  sourceToClone.set(source.id, clone.id)
+
+  const childCount = Math.min(source.childIds.length, clone.childIds.length)
+  for (let index = 0; index < childCount; index++) {
+    const sourceChildId = source.childIds[index]
+    const cloneChildId = clone.childIds[index]
+    if (sourceChildId && cloneChildId) {
+      collectParallelCloneRuntimeMap(graph, sourceChildId, cloneChildId, sourceToClone)
+    }
+  }
+}
+
+function remapDuplicatedComponentIds(
+  graph: SceneGraph,
+  duplicatedRootIds: readonly string[],
+  sourceToClone: ReadonlyMap<string, string>
+): void {
+  for (const rootId of duplicatedRootIds) {
+    for (const node of snapshotSubtree(graph, rootId).values()) {
+      if (!node.componentId) continue
+      const clonedComponentId = sourceToClone.get(node.componentId)
+      if (clonedComponentId && clonedComponentId !== node.componentId) {
+        graph.updateNode(node.id, { componentId: clonedComponentId })
+      }
+    }
   }
 }
