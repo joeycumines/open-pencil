@@ -1,4 +1,9 @@
-import type { GUID, NodeChange, VariableConsumptionEntry } from '#core/kiwi/fig/codec'
+import type {
+  GUID,
+  NodeChange,
+  VariableConsumptionEntry,
+  VariableDataEntry
+} from '#core/kiwi/fig/codec'
 import type { SceneGraph } from '#core/scene-graph'
 import type { Matrix, Vector } from '#core/types'
 
@@ -66,6 +71,8 @@ export interface ComponentPropDef {
   id?: GUID
   name?: string
   initialValue?: ComponentPropValue
+  parentPropDefId?: GUID
+  varValue?: VariableDataEntry
   type?: number
 }
 

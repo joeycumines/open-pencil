@@ -240,4 +240,46 @@ describe('fig import identity remediation (KC-005)', () => {
     expect(variable?.source?.id).toBe('10:102')
     expect(variable?.collectionId).toBe('10:100')
   })
+
+  test('keeps imported node runtime ids distinct from later variable mode ids', () => {
+    const collidingModeId = { sessionID: 10, localID: 101 }
+    const changes = [
+      ...buildDocumentTree(),
+      {
+        guid: collidingModeId,
+        parentIndex: { guid: { sessionID: 10, localID: 1 }, position: '!' },
+        type: 'RECTANGLE',
+        name: 'Node colliding with mode',
+        visible: true,
+        opacity: 1,
+        phase: 'CREATED',
+        size: { x: 10, y: 10 },
+        transform: { m00: 1, m01: 0, m02: 0, m10: 0, m11: 1, m12: 0 }
+      },
+      {
+        guid: { sessionID: 10, localID: 100 },
+        parentIndex: { guid: { sessionID: 10, localID: 1 }, position: '"' },
+        type: 'VARIABLE_SET',
+        name: 'Tokens',
+        visible: true,
+        opacity: 1,
+        phase: 'CREATED',
+        variableSetModes: [{ id: collidingModeId, name: 'Light' }],
+        transform: { m00: 1, m01: 0, m02: 0, m10: 0, m11: 1, m12: 0 }
+      }
+    ] as NodeChange[]
+
+    const graph = importNodeChanges(changes)
+    const node = [...graph.getAllNodes()].find(
+      (candidate) => candidate.name === 'Node colliding with mode'
+    )
+    const collection = graph.variableCollections.get('10:100')
+    const modeId = collection?.modes[0]?.modeId
+
+    expect(node).toBeDefined()
+    expect(modeId).toBe('10:101')
+    expect(node?.source.id).toBe('10:101')
+    expect(node?.id).not.toBe(modeId)
+    expect(graph.identity.findRuntimeIdByStableId('10:101')).toBe(node?.id)
+  })
 })

@@ -9,9 +9,9 @@ export function recloneChildren(
   tgtNode: SceneNode,
   swappedInstances: Set<string>,
   protections?: ProtectionMap
-): void {
+): boolean {
   const srcChild = graph.getNode(srcChildId)
-  if (!srcChild) return
+  if (!srcChild) return false
 
   for (const childId of Array.from(tgtNode.childIds)) {
     graph.deleteNode(childId, { permanent: false })
@@ -20,6 +20,7 @@ export function recloneChildren(
   syncNodeProps(graph, srcChild, tgtNode, protections)
   if (srcChild.childIds.length > 0) graph.populateInstanceChildren(tgtNode.id, srcChildId)
   swappedInstances.add(tgtNode.id)
+  return true
 }
 
 export function syncChildrenDeep(
@@ -29,10 +30,11 @@ export function syncChildrenDeep(
   swappedInstances: Set<string>,
   skip?: Set<string>,
   protections?: ProtectionMap
-): void {
+): boolean {
   const src = graph.getNode(sourceId)
   const tgt = graph.getNode(targetId)
-  if (!src || !tgt) return
+  if (!src || !tgt) return false
+  let structurallyChanged = false
   const len = Math.min(src.childIds.length, tgt.childIds.length)
   for (let i = 0; i < len; i++) {
     if (skip?.has(tgt.childIds[i])) continue
@@ -41,13 +43,24 @@ export function syncChildrenDeep(
     if (!srcNode || !tgtNode || srcNode.type !== tgtNode.type) continue
 
     if (srcNode.type === 'INSTANCE' && srcNode.componentId !== tgtNode.componentId) {
-      recloneChildren(graph, src.childIds[i], tgtNode, swappedInstances, protections)
+      structurallyChanged =
+        recloneChildren(graph, src.childIds[i], tgtNode, swappedInstances, protections) ||
+        structurallyChanged
       continue
     }
 
     syncNodeProps(graph, srcNode, tgtNode, protections)
-    syncChildrenDeep(graph, src.childIds[i], tgt.childIds[i], swappedInstances, skip, protections)
+    structurallyChanged =
+      syncChildrenDeep(
+        graph,
+        src.childIds[i],
+        tgt.childIds[i],
+        swappedInstances,
+        skip,
+        protections
+      ) || structurallyChanged
   }
+  return structurallyChanged
 }
 
 export function buildClonesMap(

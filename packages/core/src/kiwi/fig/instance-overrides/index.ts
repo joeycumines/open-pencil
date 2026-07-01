@@ -228,27 +228,11 @@ export function populateAndApplyOverrides(
   // synced with the correct values) AND protected (so sync doesn't overwrite
   // them with component defaults).
   for (const id of ctx.kiwiPropertyNodes) overriddenNodes.add(id)
-  propagateOverridesTransitively(
-    graph,
-    overriddenNodes,
-    ctx.swappedInstances,
-    ctx.componentIdRoot,
-    undefined,
-    ctx.activeNodeIds,
-    ctx.protectedFields
-  )
+  propagateOverridesTransitively(ctx, overriddenNodes)
 
   const propModified = applyComponentProperties(ctx)
   if (propModified.size > 0) {
-    propagateOverridesTransitively(
-      graph,
-      propModified,
-      ctx.swappedInstances,
-      ctx.componentIdRoot,
-      overriddenNodes,
-      ctx.activeNodeIds,
-      ctx.protectedFields
-    )
+    propagateOverridesTransitively(ctx, propModified, overriddenNodes)
   }
 
   if (activeRootIds) {
@@ -257,15 +241,7 @@ export function populateAndApplyOverrides(
     const latePropModified = applyComponentProperties(ctx)
     const lateSeeds = new Set([...overriddenNodes, ...propModified, ...latePropModified])
     if (lateSeeds.size > 0) {
-      propagateOverridesTransitively(
-        graph,
-        lateSeeds,
-        ctx.swappedInstances,
-        ctx.componentIdRoot,
-        overriddenNodes,
-        ctx.activeNodeIds,
-        ctx.protectedFields
-      )
+      propagateOverridesTransitively(ctx, lateSeeds, overriddenNodes)
     }
     propagateResolvedChildPlacementClones(graph)
   }

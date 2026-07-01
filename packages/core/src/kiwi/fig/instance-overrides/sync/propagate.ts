@@ -1,4 +1,5 @@
-import type { ProtectionMap } from '#core/kiwi/fig/instance-overrides/patches'
+import { clearLookupCaches } from '#core/kiwi/fig/instance-overrides/cache'
+import type { OverrideContext } from '#core/kiwi/fig/instance-overrides/types'
 import type { SceneGraph } from '#core/scene-graph'
 
 import { buildClonesMap, syncChildrenDeep } from './clones'
@@ -37,18 +38,15 @@ function buildNeedsSyncSet(
 }
 
 export function propagateOverridesTransitively(
-  graph: SceneGraph,
+  ctx: OverrideContext,
   seeds: Set<string>,
-  swappedInstances: Set<string>,
-  componentIdRoot: Map<string, string>,
-  protect?: Set<string>,
-  activeNodeIds?: Set<string>,
-  protections?: ProtectionMap
+  protect?: Set<string>
 ): void {
   if (seeds.size === 0) return
 
-  componentIdRoot.clear()
-  const clonesOf = buildClonesMap(graph, activeNodeIds)
+  const { graph, swappedInstances } = ctx
+  ctx.componentIdRoot.clear()
+  const clonesOf = buildClonesMap(graph, ctx.activeNodeIds)
   const expandedSeeds = expandSeedsToParents(graph, seeds)
   const needsSync = buildNeedsSyncSet(expandedSeeds, clonesOf)
   const skip = protect && protect.size > 0 ? new Set([...seeds, ...protect]) : seeds
@@ -75,14 +73,19 @@ export function propagateOverridesTransitively(
         continue
       }
 
-      syncNodeProps(graph, source, node, protections)
+      syncNodeProps(graph, source, node, ctx.protectedFields)
       if (source.childIds.length !== node.childIds.length) {
         for (const childId of Array.from(node.childIds)) {
           graph.deleteNode(childId, { permanent: false })
         }
         if (source.childIds.length > 0) graph.populateInstanceChildren(node.id, sourceId)
+        clearLookupCaches(ctx)
       } else if (source.childIds.length > 0 && node.childIds.length > 0) {
-        syncChildrenDeep(graph, sourceId, node.id, swappedInstances, skip, protections)
+        if (
+          syncChildrenDeep(graph, sourceId, node.id, swappedInstances, skip, ctx.protectedFields)
+        ) {
+          clearLookupCaches(ctx)
+        }
       }
       syncQueue.push(cloneId)
     }

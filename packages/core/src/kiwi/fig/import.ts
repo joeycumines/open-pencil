@@ -19,6 +19,7 @@ import {
   setVariableColorResolver,
   VARIABLE_BINDING_FIELDS_INVERSE
 } from '#core/kiwi/fig/node-change/convert'
+import { orderNodeChangesBySiblingPosition } from '#core/kiwi/fig/node-change/order'
 import { applyStyleRefsToFields } from '#core/kiwi/fig/node-change/style-refs'
 import { createDefaultSource, SceneGraph } from '#core/scene-graph'
 import type { FigImportDiagnostics, Variable, VariableType, VariableValue } from '#core/scene-graph'
@@ -511,9 +512,10 @@ export function importNodeChanges(
   }
 
   const importedRuntimeIds = new Set<string>(collectImportedRuntimeIds(nodeChanges))
+  const orderedNodeChanges = orderNodeChangesBySiblingPosition(nodeChanges)
   const { changeMap, parentMap, childrenMap, diagnostics } = buildChangeMaps(
     graph,
-    nodeChanges,
+    orderedNodeChanges,
     importedRuntimeIds
   )
   graph.importDiagnostics = diagnostics
@@ -553,10 +555,9 @@ export function importNodeChanges(
     }
   }
 
-  importPages(graph, changeMap, parentMap, childrenMap, created, canvasIdToPageId, createSceneNode)
-
   importCollections(changeMap, graph)
   importVariableEntries(changeMap, parentMap, graph, assetRefs)
+  importPages(graph, changeMap, parentMap, childrenMap, created, canvasIdToPageId, createSceneNode)
   importVariableBindings(changeMap, guidToNodeId, graph)
   remapComponentIds(graph, guidToNodeId)
   applyVariantPropSpecs(graph)

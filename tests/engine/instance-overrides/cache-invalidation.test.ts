@@ -14,11 +14,15 @@ import {
 } from '#core/kiwi/fig/instance-overrides/cache'
 import {
   clearInstanceOverrideCaches,
+  findNodeByComponentId,
   getComponentRoot,
   preComputeRoots,
-  repopulateInstance
+  repopulateInstance,
+  resolveOverrideTarget
 } from '#core/kiwi/fig/instance-overrides/resolve'
+import { propagateOverridesTransitively } from '#core/kiwi/fig/instance-overrides/sync'
 import type { OverrideContext } from '#core/kiwi/fig/instance-overrides/types'
+import { stringToGuid } from '#core/kiwi/fig/node-change/guid'
 
 function buildCtx(graph: SceneGraph): OverrideContext {
   return {
@@ -61,6 +65,10 @@ function componentWithChildRect(
     ]
   })
   return component
+}
+
+function guid(value: string) {
+  return stringToGuid(value)
 }
 
 describe('instance override cache invalidation (KC-008)', () => {
@@ -200,5 +208,110 @@ describe('module-level WeakMap cache invalidation (H-14)', () => {
     expect(getComponentFindCache(ctx)).toBeUndefined()
     expect(getSiblingIndexCache(ctx)).toBeUndefined()
     expect(getSiblingGroupCache(ctx)).toBeUndefined()
+  })
+
+  test('transitive child-count repopulation clears lookup caches', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const component = graph.createNode('COMPONENT', page.id, {
+      name: 'Source',
+      width: 100,
+      height: 100
+    })
+    graph.createNode('RECTANGLE', component.id, { name: 'A', width: 10, height: 10 })
+    graph.createNode('RECTANGLE', component.id, { name: 'B', width: 10, height: 10 })
+    const instance = graph.createNode('INSTANCE', page.id, {
+      name: 'Source',
+      width: 100,
+      height: 100,
+      componentId: component.id
+    })
+    graph.populateInstanceChildren(instance.id, component.id)
+    const componentChild = graph.getChildren(component.id)[0]
+    const staleChild = graph.getChildren(instance.id)[0]
+    const extraChild = graph.getChildren(instance.id)[1]
+    expect(componentChild).toBeDefined()
+    expect(staleChild).toBeDefined()
+    expect(extraChild).toBeDefined()
+    if (!componentChild || !staleChild || !extraChild) return
+
+    const ctx = buildCtx(graph)
+    preComputeRoots(ctx)
+    expect(findNodeByComponentId(ctx, instance.id, componentChild.id)).toBe(staleChild.id)
+    expect(getComponentFindCache(ctx)).toBeDefined()
+
+    graph.deleteNode(extraChild.id, { permanent: false })
+    setSiblingIndexCache(ctx, new Map([['idx-key', 7]]))
+    setSiblingGroupCache(ctx, new Map([['grp-key', ['a', 'b']]]))
+
+    propagateOverridesTransitively(ctx, new Set([component.id]))
+
+    expect(graph.getNode(staleChild.id)).toBeUndefined()
+    expect(graph.getChildren(instance.id).map((child) => child.name)).toEqual(['A', 'B'])
+    expect(getComponentFindCache(ctx)).toBeUndefined()
+    expect(getSiblingIndexCache(ctx)?.get('idx-key')).toBe(7)
+    expect(getSiblingGroupCache(ctx)?.get('grp-key')).toEqual(['a', 'b'])
+  })
+
+  test('transitive nested instance reclone clears sibling-index candidate cache', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const sourceComponent = graph.createNode('COMPONENT', page.id, { name: 'Source' })
+    const innerA = graph.createNode('COMPONENT', page.id, { name: 'InnerA' })
+    graph.createNode('TEXT', innerA.id, { name: 'label', text: 'A' })
+    const sourceNested = graph.createNode('INSTANCE', sourceComponent.id, {
+      name: 'nested',
+      y: 0,
+      componentId: innerA.id
+    })
+    graph.populateInstanceChildren(sourceNested.id, innerA.id)
+    const secondSourceNested = graph.createNode('INSTANCE', sourceComponent.id, {
+      name: 'nested 2',
+      y: 20,
+      componentId: innerA.id
+    })
+    graph.populateInstanceChildren(secondSourceNested.id, innerA.id)
+    const instance = graph.createNode('INSTANCE', page.id, {
+      name: 'Source',
+      componentId: sourceComponent.id
+    })
+    graph.populateInstanceChildren(instance.id, sourceComponent.id)
+    const staleNested = graph.getChildren(instance.id)[1]
+    const staleGrandchild = graph.getChildren(staleNested?.id ?? '')[0]
+    expect(staleNested).toBeDefined()
+    expect(staleGrandchild?.text).toBe('A')
+    if (!staleNested || !staleGrandchild) return
+
+    const ctx = buildCtx(graph)
+    ctx.guidToNodeId.set('9:2', innerA.id)
+    ctx.changeMap.set('9:3', {
+      parentIndex: { guid: guid('9:1') },
+      symbolData: { symbolID: guid('9:2') },
+      transform: { m00: 1, m01: 0, m02: 0, m10: 0, m11: 1, m12: 0 },
+      type: 'INSTANCE',
+      name: 'nested'
+    })
+    ctx.changeMap.set('9:4', {
+      parentIndex: { guid: guid('9:1') },
+      symbolData: { symbolID: guid('9:2') },
+      transform: { m00: 1, m01: 0, m02: 0, m10: 0, m11: 1, m12: 20 },
+      type: 'INSTANCE',
+      name: 'nested 2'
+    })
+    preComputeRoots(ctx)
+    expect(resolveOverrideTarget(ctx, instance.id, [guid('9:4')])).toBe(staleNested.id)
+    expect(getCandidateCache(ctx)).toBeDefined()
+
+    setSiblingIndexCache(ctx, new Map([['idx-key', 3]]))
+    setSiblingGroupCache(ctx, new Map([['grp-key', ['x', 'y']]]))
+
+    propagateOverridesTransitively(ctx, new Set([sourceComponent.id]))
+
+    expect(graph.getNode(staleGrandchild.id)).toBeUndefined()
+    expect(graph.getNode(staleNested.id)?.componentId).toBe(innerA.id)
+    expect(graph.getChildren(staleNested.id).map((child) => child.text)).toEqual(['A'])
+    expect(getCandidateCache(ctx)).toBeUndefined()
+    expect(getSiblingIndexCache(ctx)?.get('idx-key')).toBe(3)
+    expect(getSiblingGroupCache(ctx)?.get('grp-key')).toEqual(['x', 'y'])
   })
 })

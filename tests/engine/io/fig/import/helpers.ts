@@ -1,4 +1,12 @@
-import type { NodeChange } from '@open-pencil/core'
+import type { GUID, NodeChange } from '@open-pencil/core'
+
+export function guid(sessionID: number, localID: number): GUID {
+  return { sessionID, localID }
+}
+
+export function guidString(value: GUID | undefined): string | undefined {
+  return value ? `${value.sessionID}:${value.localID}` : undefined
+}
 
 export function minimalDocumentTree(sessionID = 10, localIDOffset = 0): NodeChange[] {
   return [

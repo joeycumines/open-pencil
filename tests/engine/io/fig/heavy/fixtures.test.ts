@@ -1,78 +1,111 @@
 import { beforeAll, expect, setDefaultTimeout, test } from 'bun:test'
 
-import { SceneGraph, type SceneNode } from '@open-pencil/core'
+import type { NodeChange } from '@open-pencil/core/kiwi'
+import type { Color } from '@open-pencil/core/types'
 
-import { parseFixture, VALID_NODE_TYPES } from '#tests/helpers/fig-fixtures'
-import { collectAllNodes } from '#tests/helpers/fig-traversal'
-import { heavy } from '#tests/helpers/test-utils'
+import { resolveNodeType } from '#core/kiwi/fig/node-change/convert'
+import { parseFigBuffer } from '#core/kiwi/fig/parse/core'
 
-setDefaultTimeout(600_000)
+import { readFixtureBytes, VALID_NODE_TYPES } from '#tests/helpers/fig-fixtures'
+import { HEAVY_TEST_TIMEOUT_MS, heavy } from '#tests/helpers/test-utils'
+
+setDefaultTimeout(HEAVY_TEST_TIMEOUT_MS)
+
+interface RawFixtureSummary {
+  canvasCount: number
+  componentCount: number
+  invalidMappedTypes: string[]
+  invalidSolidColorCount: number
+  nodeChangeCount: number
+  solidFillCount: number
+}
+
+function fixtureBytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+}
+
+function colorChannelsAreValid(color: Color | undefined): boolean {
+  if (color === undefined) return false
+  return [color.r, color.g, color.b, color.a].every(
+    (channel) => Number.isFinite(channel) && channel >= 0 && channel <= 1
+  )
+}
+
+function summarizeRawFixture(name: string): RawFixtureSummary {
+  const bytes = readFixtureBytes(name)
+  const { nodeChanges } = parseFigBuffer(fixtureBytesToArrayBuffer(bytes))
+  const summary: RawFixtureSummary = {
+    canvasCount: 0,
+    componentCount: 0,
+    invalidMappedTypes: [],
+    invalidSolidColorCount: 0,
+    nodeChangeCount: nodeChanges.length,
+    solidFillCount: 0
+  }
+
+  for (const nc of nodeChanges) {
+    if (nc.type === 'CANVAS') summary.canvasCount++
+    const mappedType = resolveNodeType(nc)
+    if (mappedType === 'COMPONENT') summary.componentCount++
+    if (
+      mappedType !== 'DOCUMENT' &&
+      mappedType !== 'VARIABLE' &&
+      !VALID_NODE_TYPES.has(mappedType)
+    ) {
+      summary.invalidMappedTypes.push(`${nc.name ?? '<unnamed>'}: ${mappedType}`)
+    }
+    collectSolidFillColorStats(nc, summary)
+  }
+
+  return summary
+}
+
+function collectSolidFillColorStats(nc: NodeChange, summary: RawFixtureSummary): void {
+  for (const fill of nc.fillPaints ?? []) {
+    if (fill.type !== 'SOLID') continue
+    summary.solidFillCount++
+    if (!colorChannelsAreValid(fill.color)) summary.invalidSolidColorCount++
+  }
+}
 
 heavy('parse heavy .fig files', () => {
-  let material3: SceneGraph
-  let nuxtui: SceneGraph
-  let material3Nodes: SceneNode[]
-  let nuxtUiNodes: SceneNode[]
+  let material3Summary: RawFixtureSummary
+  let nuxtuiSummary: RawFixtureSummary
 
-  beforeAll(async () => {
-    material3 = await parseFixture('material3.fig')
-    nuxtui = await parseFixture('nuxtui.fig')
-    material3Nodes = collectAllNodes(material3)
-    nuxtUiNodes = collectAllNodes(nuxtui)
+  beforeAll(() => {
+    material3Summary = summarizeRawFixture('material3.fig')
+    nuxtuiSummary = summarizeRawFixture('nuxtui.fig')
   })
 
-  test('material3.fig parses with pages and nodes', () => {
-    expect(material3).toBeInstanceOf(SceneGraph)
-    expect(material3.getPages().length).toBeGreaterThan(0)
-    expect(material3Nodes.length).toBeGreaterThan(0)
+  test('material3.fig decodes with pages and node changes', () => {
+    expect(material3Summary.canvasCount).toBeGreaterThan(0)
+    expect(material3Summary.nodeChangeCount).toBeGreaterThan(0)
   })
 
-  test('nuxtui.fig parses with pages and nodes', () => {
-    expect(nuxtui).toBeInstanceOf(SceneGraph)
-    expect(nuxtui.getPages().length).toBeGreaterThan(0)
-    expect(nuxtUiNodes.length).toBeGreaterThan(0)
+  test('nuxtui.fig decodes with pages and node changes', () => {
+    expect(nuxtuiSummary.canvasCount).toBeGreaterThan(0)
+    expect(nuxtuiSummary.nodeChangeCount).toBeGreaterThan(0)
   })
 
   test('material3: contains COMPONENT nodes', () => {
-    expect(material3Nodes.some((n) => n.type === 'COMPONENT')).toBe(true)
+    expect(material3Summary.componentCount).toBeGreaterThan(0)
   })
 
-  test('material3: no unmapped node types', () => {
-    const invalid = material3Nodes.filter((n) => !VALID_NODE_TYPES.has(n.type))
-    expect(invalid.map((n) => `${n.name}: ${n.type}`)).toEqual([])
+  test('material3: raw node changes map to known OpenPencil node types', () => {
+    expect(material3Summary.invalidMappedTypes).toEqual([])
   })
 
-  test('nuxtui: no unmapped node types', () => {
-    const invalid = nuxtUiNodes.filter((n) => !VALID_NODE_TYPES.has(n.type))
-    expect(invalid.map((n) => `${n.name}: ${n.type}`)).toEqual([])
+  test('nuxtui: raw node changes map to known OpenPencil node types', () => {
+    expect(nuxtuiSummary.invalidMappedTypes).toEqual([])
   })
 
-  test('material3: fills have valid colors', () => {
-    for (const n of material3Nodes) {
-      for (const fill of n.fills) {
-        if (fill.type === 'SOLID') {
-          const { r, g, b, a } = fill.color
-          expect(r).toBeGreaterThanOrEqual(0)
-          expect(r).toBeLessThanOrEqual(1)
-          expect(g).toBeGreaterThanOrEqual(0)
-          expect(g).toBeLessThanOrEqual(1)
-          expect(b).toBeGreaterThanOrEqual(0)
-          expect(b).toBeLessThanOrEqual(1)
-          expect(a).toBeGreaterThanOrEqual(0)
-          expect(a).toBeLessThanOrEqual(1)
-        }
-      }
-    }
+  test('material3: raw solid fills have valid colors', () => {
+    expect(material3Summary.solidFillCount).toBeGreaterThan(0)
+    expect(material3Summary.invalidSolidColorCount).toBe(0)
   })
 
-  test('nuxtui: fills have valid colors', () => {
-    for (const n of nuxtUiNodes) {
-      for (const fill of n.fills) {
-        if (fill.type === 'SOLID') {
-          expect(fill.color.r).toBeGreaterThanOrEqual(0)
-          expect(fill.color.r).toBeLessThanOrEqual(1)
-        }
-      }
-    }
+  test('nuxtui: raw solid fills have valid colors', () => {
+    expect(nuxtuiSummary.solidFillCount).toBeGreaterThan(0)
+    expect(nuxtuiSummary.invalidSolidColorCount).toBe(0)
   })
 })

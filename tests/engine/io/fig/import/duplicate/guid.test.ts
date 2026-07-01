@@ -5,7 +5,7 @@ import { importNodeChanges } from '@open-pencil/core/kiwi/fig/import'
 
 import { getNodeOrThrow } from '#tests/helpers/assert'
 
-import { minimalDocumentTree } from './helpers'
+import { minimalDocumentTree } from '../helpers'
 
 describe('fig import duplicate GUID remediation', () => {
   test('reports duplicate GUIDs and gives reassigned nodes a defined parent', () => {

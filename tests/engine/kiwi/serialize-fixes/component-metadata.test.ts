@@ -54,4 +54,53 @@ describe('component metadata serialization', () => {
       { propDefId: { sessionID: 90, localID: 1 }, value: 'Enabled' }
     ])
   })
+
+  test('preserves raw component prop definition schema fields during export', () => {
+    const graph = new SceneGraph()
+    const node = graph.createNode('COMPONENT', pageId(graph), {
+      name: 'Icon wrapper',
+      width: 100,
+      height: 100,
+      componentPropertyDefinitions: [
+        {
+          id: '90:1',
+          name: 'Icon',
+          type: 'INSTANCE_SWAP',
+          defaultValue: '90:2'
+        }
+      ],
+      source: {
+        id: '90:10',
+        format: 'fig',
+        orderKey: null,
+        fig: {
+          rawSize: null,
+          rawTransform: null,
+          rawNodeFields: {
+            componentPropDefs: [
+              {
+                id: { sessionID: 90, localID: 1 },
+                parentPropDefId: { sessionID: 90, localID: 3 },
+                varValue: { value: { alias: { guid: { sessionID: 90, localID: 4 } } } }
+              }
+            ]
+          },
+          layout: null,
+          symbolOverrides: [],
+          componentPropAssignments: [],
+          derivedSymbolData: [],
+          derivedSymbolDataLayoutVersion: null,
+          uniformScaleFactor: null
+        }
+      }
+    })
+
+    const [kiwi] = toKiwi(node, graph)
+    expect(kiwi.componentPropDefs?.[0]).toMatchObject({
+      id: { sessionID: 90, localID: 1 },
+      name: 'Icon',
+      parentPropDefId: { sessionID: 90, localID: 3 },
+      varValue: { value: { alias: { guid: { sessionID: 90, localID: 4 } } } }
+    })
+  })
 })
