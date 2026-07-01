@@ -16,6 +16,7 @@ import type {
 import { copyFills, copyStrokes, copyEffects } from '#core/scene-graph/copy'
 import type { Rect, Vector } from '#core/types'
 
+import { computeImageHash } from './image-hash'
 import type {
   FigmaBooleanOperationNode,
   FigmaComponentNode,
@@ -38,10 +39,16 @@ import {
   type FigmaFontName,
   type NodeProxyHost
 } from './proxy'
+import {
+  composeTranslationsByGeneration,
+  translateRuntimeIdForGeneration,
+  translateRuntimeIdFromAnyGeneration
+} from './translation'
 
 const noop = () => undefined
 
 export { FigmaNodeProxy } from './proxy'
+export { computeImageHash } from './image-hash'
 export type {
   FigmaBooleanOperationNode,
   FigmaComponentNode,
@@ -58,40 +65,6 @@ export type {
 } from './node-types'
 export type { FigmaFont, FigmaFontName } from './proxy'
 
-export function computeImageHash(data: Uint8Array): string {
-  let h1 = 0x811c9dc5 >>> 0
-  let h2 = 0x811c9dc5 >>> 0
-  let h3 = 0x811c9dc5 >>> 0
-  let h4 = 0x811c9dc5 >>> 0
-  let h5 = 0x811c9dc5 >>> 0
-  for (let i = 0; i < data.length; i++) {
-    const b = data[i]
-    switch (i % 5) {
-      case 0:
-        h1 ^= b
-        h1 = Math.imul(h1, 0x01000193) >>> 0
-        break
-      case 1:
-        h2 ^= b
-        h2 = Math.imul(h2, 0x01000193) >>> 0
-        break
-      case 2:
-        h3 ^= b
-        h3 = Math.imul(h3, 0x01000193) >>> 0
-        break
-      case 3:
-        h4 ^= b
-        h4 = Math.imul(h4, 0x01000193) >>> 0
-        break
-      case 4:
-        h5 ^= b
-        h5 = Math.imul(h5, 0x01000193) >>> 0
-        break
-    }
-  }
-  return [h1, h2, h3, h4, h5].map((h) => h.toString(16).padStart(8, '0')).join('')
-}
-
 // TODO(figma-api): Implement the full official PluginAPI interface once our compatibility
 // layer covers all required node-specific return types and unsupported APIs are modeled explicitly.
 export class FigmaAPI implements NodeProxyHost {
@@ -101,7 +74,9 @@ export class FigmaAPI implements NodeProxyHost {
   private _nodeCache = new Map<string, FigmaNodeProxy>()
   private _pageProxies = new WeakSet<FigmaNodeProxy>()
   private _renderer: SkiaRenderer | null = null
-  private _translation = new Map<string, string>()
+  private _runtimeGeneration = 0
+  private _translationsByGeneration = new Map<number, Map<string, string>>()
+  private _invalidRuntimeIdsByGeneration = new Map<number, Set<string>>()
 
   readonly mixed = MIXED
 
@@ -115,9 +90,21 @@ export class FigmaAPI implements NodeProxyHost {
     return this._graph
   }
 
+  get runtimeGeneration(): number {
+    return this._runtimeGeneration
+  }
+
   setGraph(graph: SceneGraph, translation?: Map<string, string>): void {
     this._graph = graph
-    this._translation = translation ?? new Map()
+    const translated = composeTranslationsByGeneration(
+      this._translationsByGeneration,
+      this._invalidRuntimeIdsByGeneration,
+      this._runtimeGeneration,
+      translation
+    )
+    this._translationsByGeneration = translated.translations
+    this._invalidRuntimeIdsByGeneration = translated.invalidRuntimeIds
+    this._runtimeGeneration += 1
     this._nodeCache.clear()
     this._pageProxies = new WeakSet<FigmaNodeProxy>()
     this._currentPageId = graph.getPages()[0]?.id ?? graph.rootId
@@ -179,12 +166,26 @@ export class FigmaAPI implements NodeProxyHost {
     this._currentPageId = this._translateId(page[INTERNAL_ID])
   }
 
-  translateRuntimeId(id: string): string {
-    return this._translateId(id)
+  translateRuntimeId(id: string, generation?: number): string {
+    return this._translateId(id, generation)
   }
 
-  private _translateId(id: string): string {
-    return this._translation.get(id) ?? id
+  private _translateId(id: string, generation?: number): string {
+    if (generation !== undefined) {
+      return translateRuntimeIdForGeneration(
+        id,
+        generation,
+        this._translationsByGeneration,
+        this._invalidRuntimeIdsByGeneration
+      )
+    }
+
+    if (this.graph.getNode(id)) return id
+    return translateRuntimeIdFromAnyGeneration(
+      id,
+      this._translationsByGeneration,
+      this._invalidRuntimeIdsByGeneration
+    )
   }
 
   getNodeById(id: string): FigmaNodeProxy | null {
@@ -359,7 +360,7 @@ export class FigmaAPI implements NodeProxyHost {
   setVariableValue(variableId: string, modeId: string, value: VariableValue): void {
     const variable = this.graph.variables.get(variableId)
     if (!variable) throw new Error(`Variable "${variableId}" not found`)
-    variable.valuesByMode[modeId] = value
+    this.graph.updateVariableValue(variableId, modeId, value)
   }
 
   deleteVariable(id: string): void {
@@ -559,8 +560,6 @@ export class FigmaAPI implements NodeProxyHost {
     this.graph.images.set(hash, data)
     return { hash }
   }
-
-  // --- Stubs ---
 
   async loadFontAsync(_fontName: FigmaFontName): Promise<void> {
     // No-op: we don't gate text editing on font loading

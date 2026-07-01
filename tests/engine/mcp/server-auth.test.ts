@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, vi } from 'bun:test'
 import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -18,6 +18,26 @@ const SOCKET_DIR = join(tmpdir(), `openpencil-test-server-${process.pid}`)
 const TEST_AUTH_TOKEN = 'test-auth-token'
 const NO_AUTH_TOKEN = null as string | null
 let testCounter = 0
+
+async function startServerWithExpectedAuthDisabledWarning(
+  options: Parameters<typeof startServer>[0]
+): Promise<Awaited<ReturnType<typeof startServer>>> {
+  let stderr = ''
+  const writeSpy = vi
+    .spyOn(process.stderr, 'write')
+    .mockImplementation((chunk: string | Uint8Array) => {
+      stderr += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk)
+      return true
+    })
+
+  try {
+    const handle = await startServer(options)
+    expect(stderr).toContain('WARNING: MCP server is running without authentication')
+    return handle
+  } finally {
+    writeSpy.mockRestore()
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -87,7 +107,7 @@ describe('MCP server auto-generated auth token', () => {
 describe('MCP server /rpc auth skip', () => {
   test('/rpc skips auth when authToken is explicitly null', async () => {
     if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
-    const handle = await startServer({
+    const handle = await startServerWithExpectedAuthDisabledWarning({
       httpPort: 0,
       withTcp: true,
       socketPath: testSocketPath(),
@@ -247,7 +267,7 @@ describe('MCP auth boundary', () => {
 
   test('server accepts requests with authToken: null (auth disabled)', async () => {
     if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
-    const handle = await startServer({
+    const handle = await startServerWithExpectedAuthDisabledWarning({
       httpPort: 0,
       withTcp: true,
       socketPath: testSocketPath(),

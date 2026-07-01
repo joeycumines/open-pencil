@@ -4,7 +4,7 @@ import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
 
 import { clearTauriMocks, installTauriMockWindow, mockTauriIPC } from '#tests/helpers/tauri/mocks'
 
-const DISCOVERY_PATH = '/mock/home/.openpencil/mcp.json'
+const DISCOVERY_PATH = '/mock/home/Library/Application Support/OpenPencil/mcp.json'
 const DISCOVERY_JSON = JSON.stringify({
   pid: 1234,
   socketPath: '/mock/home/.openpencil/mcp.sock',
@@ -68,11 +68,18 @@ describe('Tauri MCP spawning', () => {
       return null
     })
 
+    const discoveryWarning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const stderrLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
     const handle = await spawnMCPIfNeeded()
     onEvent?.({ event: 'Stderr', payload: [119, 97, 114, 110] })
     handle?.disconnect()
     await Promise.resolve()
 
+    expect(discoveryWarning).toHaveBeenCalledWith(
+      expect.stringContaining('[MCP] Server discovery path')
+    )
+    expect(stderrLog).toHaveBeenCalledWith('[MCP]', 'warn')
     expect(handle?.authToken).toBe('discovery-token')
     expect(calls.some((c) => c.cmd === 'plugin:shell|spawn')).toBe(true)
     expect(

@@ -36,6 +36,8 @@ export const INTERNAL_API = Symbol('api')
 
 export interface NodeProxyHost {
   wrapNode(id: string): FigmaNodeProxy
+  translateRuntimeId(id: string, generation?: number): string
+  readonly runtimeGeneration: number
   readonly currentPageId: string
   readonly graph: SceneGraph
 }
@@ -43,7 +45,8 @@ export interface NodeProxyHost {
 export { MIXED }
 
 export class FigmaNodeProxy {
-  [INTERNAL_ID]: string;
+  readonly #generation: number
+  readonly #id: string;
   [INTERNAL_API]: NodeProxyHost
 
   /** Returns the current graph from the API host (not a stored reference). */
@@ -109,8 +112,13 @@ export class FigmaNodeProxy {
   declare maxHeight: number | null
 
   constructor(id: string, api: NodeProxyHost) {
-    this[INTERNAL_ID] = id
+    this.#generation = api.runtimeGeneration
+    this.#id = id
     this[INTERNAL_API] = api
+  }
+
+  get [INTERNAL_ID](): string {
+    return this[INTERNAL_API].translateRuntimeId(this.#id, this.#generation)
   }
 
   private _raw(): SceneNode {
