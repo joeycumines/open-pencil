@@ -7,6 +7,24 @@
  *
  * Framework-agnostic: this module has no dependency on Yjs or any app code.
  */
+export interface PendingVariableBinding {
+  /** Stable id of the node that owns the pending binding. */
+  nodeStableId: string
+  /** Stable id of the owning instance when the node is a populated instance descendant. */
+  instanceStableId?: string
+  /** Stable-id path of nested populated INSTANCE descendants whose overrides contain the binding. */
+  nestedInstanceStablePath?: string[]
+  /** Field name in boundVariables (e.g., 'fills', 'opacity'). */
+  field: string
+}
+
+export interface PendingVariableAlias {
+  /** Stable id of the variable whose value contains the alias. */
+  variableStableId: string
+  /** Stable id of the mode whose value contains the alias. */
+  modeStableId: string
+}
+
 export interface GraphSyncState {
   /** Remote stable id -> local runtime id. */
   remoteToLocal: Map<string, string>
@@ -14,6 +32,8 @@ export interface GraphSyncState {
   localToRemote: Map<string, string>
   /** Parent stable id -> set of waiting child stable ids. */
   pendingParents: Map<string, Set<string>>
+  /** Parent stable id -> desired child stable-id order waiting for children to materialize. */
+  pendingChildOrders: Map<string, string[]>
   /** Component stable id -> set of waiting instance stable ids. */
   pendingComponents: Map<string, Set<string>>
   /** Child stable id -> set of pending override keys waiting for that child. */
@@ -22,6 +42,8 @@ export interface GraphSyncState {
     Set<{
       /** Stable id of the instance that owns the pending override. */
       remoteStableId: string
+      /** Stable-id path of nested populated INSTANCE descendants whose overrides contain this override. */
+      nestedInstanceStablePath?: string[]
       /** Property name from the override key. */
       prop: string
       /** Raw override value received from the remote peer. */
@@ -42,20 +64,14 @@ export interface GraphSyncState {
   collectionToLocal: Map<string, string>
   /** Local collection runtime id -> remote collection stable id. */
   localToCollection: Map<string, string>
-  /** Remote mode stable id -> local mode runtime id. */
-  modeToLocal: Map<string, string>
+  /** Remote collection stable id -> remote mode stable id -> local mode runtime id. */
+  modeToLocal: Map<string, Map<string, string>>
   /** Collection stable id -> set of waiting variable stable ids. */
   pendingVariableCollections: Map<string, Set<string>>
   /** Variable stable id -> set of pending boundVariables bindings waiting for that variable. */
-  pendingVariableBindings: Map<
-    string,
-    Set<{
-      /** Stable id of the node that owns the pending binding. */
-      nodeStableId: string
-      /** Field name in boundVariables (e.g., 'fills', 'opacity'). */
-      field: string
-    }>
-  >
+  pendingVariableBindings: Map<string, Set<PendingVariableBinding>>
+  /** Aliased variable stable id -> variable values waiting for that alias target. */
+  pendingVariableAliases: Map<string, Set<PendingVariableAlias>>
 }
 
 export function createGraphSyncState(): GraphSyncState {
@@ -63,6 +79,7 @@ export function createGraphSyncState(): GraphSyncState {
     remoteToLocal: new Map(),
     localToRemote: new Map(),
     pendingParents: new Map(),
+    pendingChildOrders: new Map(),
     pendingComponents: new Map(),
     pendingOverrideKeys: new Map(),
     pendingUntilRoot: new Set(),
@@ -74,7 +91,8 @@ export function createGraphSyncState(): GraphSyncState {
     localToCollection: new Map(),
     modeToLocal: new Map(),
     pendingVariableCollections: new Map(),
-    pendingVariableBindings: new Map()
+    pendingVariableBindings: new Map(),
+    pendingVariableAliases: new Map()
   }
 }
 
@@ -82,6 +100,7 @@ export function resetGraphSyncState(state: GraphSyncState): void {
   state.remoteToLocal.clear()
   state.localToRemote.clear()
   state.pendingParents.clear()
+  state.pendingChildOrders.clear()
   state.pendingComponents.clear()
   state.pendingOverrideKeys.clear()
   state.pendingUntilRoot.clear()
@@ -94,4 +113,5 @@ export function resetGraphSyncState(state: GraphSyncState): void {
   state.modeToLocal.clear()
   state.pendingVariableCollections.clear()
   state.pendingVariableBindings.clear()
+  state.pendingVariableAliases.clear()
 }

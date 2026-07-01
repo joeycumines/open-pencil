@@ -1,5 +1,42 @@
 import type { SceneGraph } from './'
-import { splitOverrideKey } from './override-key'
+import { joinOverrideKey, splitOverrideKey } from './override-key'
+
+interface OverrideMigration {
+  overrides: Record<string, unknown>
+  changed: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function migrateOverrideRecord(
+  graph: SceneGraph,
+  overrides: Record<string, unknown>
+): OverrideMigration {
+  const remapped: Record<string, unknown> = {}
+  let changed = false
+
+  for (const [key, value] of Object.entries(overrides)) {
+    const { childId, prop } = splitOverrideKey(key)
+
+    // Bare keys (INSTANCE-self properties like "boundVariables") — no child ID
+    if (!childId || prop === key) {
+      remapped[key] = value
+      continue
+    }
+
+    const nested =
+      prop === 'overrides' && isRecord(value) ? migrateOverrideRecord(graph, value) : undefined
+    const childNode = graph.getNode(childId)
+    const stableId = childNode ? graph.identity.getStableId(childNode) : childId
+    const nextKey = stableId === childId ? key : joinOverrideKey(stableId, prop)
+    remapped[nextKey] = nested?.overrides ?? value
+    changed ||= nextKey !== key || nested?.changed === true
+  }
+
+  return { overrides: remapped, changed }
+}
 
 /**
  * Convert override keys from runtime-ID format to stable-ID format.
@@ -12,39 +49,11 @@ import { splitOverrideKey } from './override-key'
 export function migrateOverrideKeys(graph: SceneGraph): void {
   for (const node of graph.getAllNodes()) {
     if (node.type !== 'INSTANCE') continue
-    const entries = Object.entries(node.overrides)
-    if (entries.length === 0) continue
+    if (Object.keys(node.overrides).length === 0) continue
 
-    const remapped: Record<string, unknown> = {}
-    let changed = false
-
-    for (const [key, value] of entries) {
-      const { childId, prop } = splitOverrideKey(key)
-
-      // Bare keys (INSTANCE-self properties like "boundVariables") — no child ID
-      if (!childId || prop === key) {
-        remapped[key] = value
-        continue
-      }
-
-      // Check if childId is a runtime ID that differs from the stable ID
-      const childNode = graph.getNode(childId)
-      if (childNode) {
-        const stableId = graph.identity.getStableId(childNode)
-        if (stableId !== childId) {
-          // Old format: runtime ID key → convert to stable ID
-          remapped[`${stableId}:${prop}`] = value
-          changed = true
-          continue
-        }
-      }
-
-      // Already stable-ID format or orphaned (child not in graph) — pass through
-      remapped[key] = value
-    }
-
-    if (changed) {
-      node.overrides = remapped
+    const migrated = migrateOverrideRecord(graph, node.overrides)
+    if (migrated.changed) {
+      node.overrides = migrated.overrides
     }
   }
 }

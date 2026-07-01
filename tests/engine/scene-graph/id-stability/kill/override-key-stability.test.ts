@@ -199,4 +199,50 @@ describe('C-01: Override keys use runtime IDs instead of stable IDs', () => {
     // Override should be preserved (fills = blueFill)
     expect(graph.getChildren(instance.id)[0].fills).toEqual(blueFill)
   })
+
+  test('nested runtime override keys are migrated recursively', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const innerComponent = graph.createNode('COMPONENT', page, {
+      name: 'Inner',
+      width: 60,
+      height: 20
+    })
+    graph.createNode('RECTANGLE', innerComponent.id, {
+      name: 'Inner Bg',
+      width: 60,
+      height: 20
+    })
+    const outerComponent = graph.createNode('COMPONENT', page, {
+      name: 'Outer',
+      width: 120,
+      height: 48
+    })
+    const nestedBacking = graph.createInstance(innerComponent.id, outerComponent.id)
+    expect(nestedBacking).not.toBeNull()
+    const outerInstance = graph.createInstance(outerComponent.id, page)
+    expect(outerInstance).not.toBeNull()
+    if (!nestedBacking || !outerInstance) return
+
+    const nestedInstance = graph.getChildren(outerInstance.id)[0]
+    const nestedChild = graph.getChildren(nestedInstance.id)[0]
+    const nestedStableId = graph.identity.getStableId(nestedInstance)
+    const nestedChildStableId = graph.identity.getStableId(nestedChild)
+
+    graph.updateNode(nestedChild.id, { width: 84 })
+    outerInstance.overrides[`${nestedInstance.id}:overrides`] = {
+      [`${nestedChild.id}:width`]: 84
+    }
+
+    migrateOverrideKeys(graph)
+
+    expect(outerInstance.overrides[`${nestedInstance.id}:overrides`]).toBeUndefined()
+    expect(outerInstance.overrides[`${nestedStableId}:overrides`]).toEqual({
+      [`${nestedChildStableId}:width`]: 84
+    })
+
+    graph.syncInstances(outerComponent.id)
+
+    expect(graph.getNode(nestedChild.id)?.width).toBe(84)
+  })
 })

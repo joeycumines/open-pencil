@@ -86,6 +86,10 @@ function copyProp(
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function cloneChildrenWithMapping(
   graph: SceneGraph,
   sourceParentId: string,
@@ -123,6 +127,31 @@ function syncOverrideProps(
     if (overrideKey in overrides) continue
     copyProp(instChild, compChild, key)
   }
+}
+
+function nestedOverrideRecord(
+  instChildStableId: string,
+  overrides: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  const value = overrides[`${instChildStableId}:overrides`]
+  return isRecord(value) ? value : undefined
+}
+
+function hasOverrideEntries(overrides: Record<string, unknown>): boolean {
+  return Object.keys(overrides).length > 0
+}
+
+function effectiveNestedOverrideRecord(
+  instChild: SceneNode,
+  instChildStableId: string,
+  overrides: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  const ownerRecord = nestedOverrideRecord(instChildStableId, overrides)
+  if (instChild.type !== 'INSTANCE' || !hasOverrideEntries(instChild.overrides)) {
+    return ownerRecord
+  }
+  if (ownerRecord === undefined) return instChild.overrides
+  return { ...instChild.overrides, ...ownerRecord }
 }
 
 function syncChildren(
@@ -177,11 +206,20 @@ function syncChildren(
 
     // C-01: Use stable ID for override keys so they survive runtime ID changes
     const instChildStableId = graph.identity.getStableId(instChild)
+    const nestedOverrides = effectiveNestedOverrideRecord(instChild, instChildStableId, overrides)
+    if (nestedOverrides !== undefined) {
+      instChild.overrides = structuredClone(nestedOverrides)
+    }
     syncOverrideProps(instChild, compChild, instChildStableId, overrides, INSTANCE_SYNC_PROPS)
     syncOverrideProps(instChild, compChild, instChildStableId, overrides, EXTRA_SYNC_PROPS)
 
     if (compChild.childIds.length > 0) {
-      syncChildren(graph, compChildId, instChild.id, overrides)
+      syncChildren(
+        graph,
+        compChildId,
+        instChild.id,
+        nestedOverrides === undefined ? overrides : { ...overrides, ...nestedOverrides }
+      )
     }
   }
 

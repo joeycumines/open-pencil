@@ -44,17 +44,15 @@ export function createVariableActions(ctx: EditorContext) {
     const collection = ctx.graph.variableCollections.get(id)
     if (!collection) return
     const prevName = collection.name
-    collection.name = newName
+    ctx.graph.renameCollection(id, newName)
     ctx.undo.push({
       label: 'Rename collection',
       forward: () => {
-        const c = ctx.graph.variableCollections.get(id)
-        if (c) c.name = newName
+        ctx.graph.renameCollection(id, newName)
         ctx.requestRender()
       },
       inverse: () => {
-        const c = ctx.graph.variableCollections.get(id)
-        if (c) c.name = prevName
+        ctx.graph.renameCollection(id, prevName)
         ctx.requestRender()
       }
     })
@@ -140,17 +138,15 @@ export function createVariableActions(ctx: EditorContext) {
     const variable = ctx.graph.variables.get(id)
     if (!variable) return
     const prevName = variable.name
-    variable.name = newName
+    ctx.graph.renameVariable(id, newName)
     ctx.undo.push({
       label: 'Rename variable',
       forward: () => {
-        const v = ctx.graph.variables.get(id)
-        if (v) v.name = newName
+        ctx.graph.renameVariable(id, newName)
         ctx.requestRender()
       },
       inverse: () => {
-        const v = ctx.graph.variables.get(id)
-        if (v) v.name = prevName
+        ctx.graph.renameVariable(id, prevName)
         ctx.requestRender()
       }
     })
@@ -206,8 +202,7 @@ export function createVariableActions(ctx: EditorContext) {
           if (mode) col.modes.splice(modeIndex, 0, mode)
         }
         for (const [varId, value] of valueSnapshots) {
-          const v = ctx.graph.variables.get(varId)
-          if (v) v.valuesByMode[modeId] = structuredClone(value)
+          ctx.graph.updateVariableValue(varId, modeId, value)
         }
         if (wasDefault) ctx.graph.setDefaultMode(collectionId, modeId)
         ctx.requestRender()
@@ -289,17 +284,15 @@ export function createVariableActions(ctx: EditorContext) {
     if (!variable) return
     const prevValue = structuredClone(variable.valuesByMode[modeId])
     const newValue = structuredClone(value)
-    variable.valuesByMode[modeId] = newValue
+    ctx.graph.updateVariableValue(id, modeId, newValue)
     ctx.undo.push({
       label: 'Update variable value',
       forward: () => {
-        const v = ctx.graph.variables.get(id)
-        if (v) v.valuesByMode[modeId] = structuredClone(newValue)
+        ctx.graph.updateVariableValue(id, modeId, newValue)
         ctx.requestRender()
       },
       inverse: () => {
-        const v = ctx.graph.variables.get(id)
-        if (v) v.valuesByMode[modeId] = structuredClone(prevValue)
+        ctx.graph.updateVariableValue(id, modeId, prevValue)
         ctx.requestRender()
       }
     })

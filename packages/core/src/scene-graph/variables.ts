@@ -3,12 +3,32 @@ import { omit, omitBy } from 'es-toolkit/object'
 import { BLACK } from '#core/constants'
 import type { Color } from '#core/types'
 
-import type { SceneGraph } from './index'
+import type { SceneGraph, SceneNode } from './index'
 import { createDefaultSource } from './node/defaults'
+import { splitOverrideKey } from './override-key'
 import type { Variable, VariableCollection, VariableType, VariableValue } from './types'
 
+function registerCollectionImportedSources(
+  graph: SceneGraph,
+  collection: VariableCollection
+): void {
+  graph.identity.registerImportedSource(collection.source)
+  for (const mode of collection.modes) graph.identity.registerImportedSource(mode.source)
+}
+
+function unregisterCollectionImportedSources(
+  graph: SceneGraph,
+  collection: VariableCollection
+): void {
+  graph.identity.unregisterImportedSource(collection.source)
+  for (const mode of collection.modes) graph.identity.unregisterImportedSource(mode.source)
+}
+
 export function addVariable(graph: SceneGraph, variable: Variable): void {
+  const existing = graph.variables.get(variable.id)
+  if (existing) graph.identity.unregisterImportedSource(existing.source)
   graph.variables.set(variable.id, variable)
+  graph.identity.registerImportedSource(variable.source)
   const collection = graph.variableCollections.get(variable.collectionId)
   if (collection && !collection.variableIds.includes(variable.id)) {
     collection.variableIds.push(variable.id)
@@ -20,6 +40,7 @@ export function removeVariable(graph: SceneGraph, id: string): void {
   const variable = graph.variables.get(id)
   if (!variable) return
   graph.variables.delete(id)
+  graph.identity.unregisterImportedSource(variable.source)
   const collection = graph.variableCollections.get(variable.collectionId)
   if (collection) {
     collection.variableIds = collection.variableIds.filter((vid) => vid !== id)
@@ -31,14 +52,21 @@ export function removeVariable(graph: SceneGraph, id: string): void {
       string,
       string
     >
-    graph.emitter.emit('node:updated', node.id, { boundVariables: { ...node.boundVariables } })
     markBoundVariablesOverrideOnInstance(graph, node.id)
+    graph.emitter.emit('node:updated', node.id, { boundVariables: { ...node.boundVariables } })
   }
   graph.emitter.emit('variable:deleted', id)
 }
 
 export function addCollection(graph: SceneGraph, collection: VariableCollection): void {
+  const existing = graph.variableCollections.get(collection.id)
+  if (existing) {
+    graph.identity.unregisterCollectionModes(existing)
+    unregisterCollectionImportedSources(graph, existing)
+  }
   graph.variableCollections.set(collection.id, collection)
+  graph.identity.registerCollectionModes(collection)
+  registerCollectionImportedSources(graph, collection)
   if (!graph.activeMode.has(collection.id)) {
     graph.activeMode.set(collection.id, collection.defaultModeId)
   }
@@ -51,6 +79,13 @@ function defaultVariableValue(type: VariableType, value?: VariableValue): Variab
   if (type === 'FLOAT') return 0
   if (type === 'BOOLEAN') return false
   return ''
+}
+
+function emitVariableUpdates(graph: SceneGraph, variableIds: Iterable<string>): void {
+  for (const varId of variableIds) {
+    const variable = graph.variables.get(varId)
+    if (variable) graph.emitter.emit('variable:updated', variable)
+  }
 }
 
 export function createVariable(
@@ -115,10 +150,38 @@ export function removeCollection(graph: SceneGraph, id: string): void {
     for (const varId of Array.from(collection.variableIds)) {
       removeVariable(graph, varId)
     }
+    graph.identity.unregisterCollectionModes(collection)
+    unregisterCollectionImportedSources(graph, collection)
   }
   graph.variableCollections.delete(id)
   graph.activeMode.delete(id)
   graph.emitter.emit('collection:deleted', id)
+}
+
+export function renameCollection(graph: SceneGraph, id: string, name: string): void {
+  const collection = graph.variableCollections.get(id)
+  if (!collection) return
+  collection.name = name
+  graph.emitter.emit('collection:updated', collection)
+}
+
+export function renameVariable(graph: SceneGraph, id: string, name: string): void {
+  const variable = graph.variables.get(id)
+  if (!variable) return
+  variable.name = name
+  graph.emitter.emit('variable:updated', variable)
+}
+
+export function updateVariableValue(
+  graph: SceneGraph,
+  id: string,
+  modeId: string,
+  value: VariableValue
+): void {
+  const variable = graph.variables.get(id)
+  if (!variable) return
+  variable.valuesByMode[modeId] = structuredClone(value)
+  graph.emitter.emit('variable:updated', variable)
 }
 
 export function getActiveModeId(graph: SceneGraph, collectionId: string): string {
@@ -141,33 +204,48 @@ export function addModeToCollection(
 ): void {
   const collection = graph.variableCollections.get(collectionId)
   if (!collection) return
-  collection.modes.push({ modeId, name, source: { ...createDefaultSource(), id: modeId } })
+  const mode = { modeId, name, source: { ...createDefaultSource(), id: modeId } }
+  collection.modes.push(mode)
+  graph.identity.registerModeId(modeId)
+  graph.identity.registerImportedSource(mode.source)
   const sourceModeId = sourceMode ?? collection.defaultModeId
+  const updatedVariableIds: string[] = []
   for (const varId of collection.variableIds) {
     const variable = graph.variables.get(varId)
     if (!variable) continue
     variable.valuesByMode[modeId] = structuredClone(
       variable.valuesByMode[sourceModeId] ?? Object.values(variable.valuesByMode)[0]
     )
+    updatedVariableIds.push(varId)
   }
   graph.emitter.emit('collection:updated', collection)
+  emitVariableUpdates(graph, updatedVariableIds)
 }
 
 export function removeMode(graph: SceneGraph, collectionId: string, modeId: string): void {
   const collection = graph.variableCollections.get(collectionId)
   if (!collection || collection.modes.length <= 1) return
+  const removedMode = collection.modes.find((m) => m.modeId === modeId)
+  if (!removedMode) return
   collection.modes = collection.modes.filter((m) => m.modeId !== modeId)
+  graph.identity.unregisterModeId(removedMode.modeId)
+  graph.identity.unregisterImportedSource(removedMode.source)
   if (collection.defaultModeId === modeId) {
     collection.defaultModeId = collection.modes[0].modeId
   }
+  const updatedVariableIds: string[] = []
   for (const varId of collection.variableIds) {
     const variable = graph.variables.get(varId)
-    if (variable) variable.valuesByMode = omit(variable.valuesByMode, [modeId])
+    if (variable) {
+      variable.valuesByMode = omit(variable.valuesByMode, [modeId])
+      updatedVariableIds.push(varId)
+    }
   }
   if (graph.activeMode.get(collectionId) === modeId) {
     graph.activeMode.set(collectionId, collection.defaultModeId)
   }
   graph.emitter.emit('collection:updated', collection)
+  emitVariableUpdates(graph, updatedVariableIds)
 }
 
 export function renameMode(
@@ -179,7 +257,9 @@ export function renameMode(
   const collection = graph.variableCollections.get(collectionId)
   if (!collection) return
   const mode = collection.modes.find((m) => m.modeId === modeId)
-  if (mode) mode.name = name
+  if (!mode) return
+  mode.name = name
+  graph.emitter.emit('collection:updated', collection)
 }
 
 export function setDefaultMode(graph: SceneGraph, collectionId: string, modeId: string): void {
@@ -187,6 +267,7 @@ export function setDefaultMode(graph: SceneGraph, collectionId: string, modeId: 
   if (!collection) return
   if (!collection.modes.some((m) => m.modeId === modeId)) return
   collection.defaultModeId = modeId
+  graph.emitter.emit('collection:updated', collection)
 }
 
 export function resolveVariable(
@@ -339,8 +420,8 @@ export function bindVariable(
   }
 
   node.boundVariables = { ...node.boundVariables, [field]: variableId }
-  graph.emitter.emit('node:updated', nodeId, { boundVariables: { ...node.boundVariables } })
   markBoundVariablesOverrideOnInstance(graph, nodeId)
+  graph.emitter.emit('node:updated', nodeId, { boundVariables: { ...node.boundVariables } })
 }
 
 export function unbindVariable(graph: SceneGraph, nodeId: string, field: string): void {
@@ -348,8 +429,8 @@ export function unbindVariable(graph: SceneGraph, nodeId: string, field: string)
   if (!node) return
   if (!(field in node.boundVariables)) return
   node.boundVariables = omit(node.boundVariables, [field])
-  graph.emitter.emit('node:updated', nodeId, { boundVariables: { ...node.boundVariables } })
   markBoundVariablesOverrideOnInstance(graph, nodeId)
+  graph.emitter.emit('node:updated', nodeId, { boundVariables: { ...node.boundVariables } })
 }
 
 function markBoundVariablesOverrideOnInstance(graph: SceneGraph, nodeId: string): void {
@@ -360,6 +441,7 @@ function markBoundVariablesOverrideOnInstance(graph: SceneGraph, nodeId: string)
   // checks `key in instance.overrides` for INSTANCE-self properties)
   if (node.type === 'INSTANCE') {
     node.overrides['boundVariables'] = true
+    propagateInstanceOverridesToAncestorInstances(graph, node)
     return
   }
 
@@ -370,9 +452,54 @@ function markBoundVariablesOverrideOnInstance(graph: SceneGraph, nodeId: string)
     const parent = graph.nodes.get(current.parentId)
     if (!parent) break
     if (parent.type === 'INSTANCE') {
-      parent.overrides[`${graph.identity.getStableId(node)}:boundVariables`] = true
+      parent.overrides[`${graph.identity.getStableId(node)}:boundVariables`] = {
+        ...node.boundVariables
+      }
+      propagateInstanceOverridesToAncestorInstances(graph, parent)
       break
     }
     current = parent
   }
+}
+
+function propagateInstanceOverridesToAncestorInstances(
+  graph: SceneGraph,
+  instance: SceneNode
+): void {
+  let current: SceneNode = instance
+  let parentId = current.parentId
+  while (parentId) {
+    const parent = graph.nodes.get(parentId)
+    if (!parent) return
+    if (parent.type === 'INSTANCE') {
+      const overrideKey = `${graph.identity.getStableId(current)}:overrides`
+      parent.overrides[overrideKey] = mergeOverrideRecords(
+        parent.overrides[overrideKey],
+        current.overrides
+      )
+      current = parent
+    }
+    parentId = parent.parentId
+  }
+}
+
+function isOverrideRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeOverrideRecords(
+  existing: unknown,
+  incoming: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = isOverrideRecord(existing) ? structuredClone(existing) : {}
+  for (const [key, value] of Object.entries(incoming)) {
+    const { prop } = splitOverrideKey(key)
+    const existingValue = merged[key]
+    if (prop === 'overrides' && isOverrideRecord(existingValue) && isOverrideRecord(value)) {
+      merged[key] = mergeOverrideRecords(existingValue, value)
+      continue
+    }
+    merged[key] = structuredClone(value)
+  }
+  return merged
 }

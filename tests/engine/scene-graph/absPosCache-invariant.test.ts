@@ -201,24 +201,44 @@ describe('absPosCache invariant', () => {
     expect(absAfter.x).toBe(110)
   })
 
-  test('deleteNode then getAbsolutePosition returns stale value from cache', () => {
-    // This test documents a known gap: deleteNode does NOT clear absPosCache.
-    // The cached entry for the deleted id remains. If the id is reused
-    // (e.g., via restore mode), a stale position could be served.
+  test('deleteNode invalidates cached absolute position before runtime ID reuse', () => {
     const graph = new SceneGraph()
+    const page = pageId(graph)
     const node = rect(graph, 'Node', 100, 200)
+    const original = graph.getNode(node)
+    if (original === undefined) throw new Error('node missing before delete')
 
-    // Cache the abs pos
     const abs = graph.getAbsolutePosition(node)
-    expect(abs.x).toBe(100)
-    expect(abs.y).toBe(200)
+    expect(abs).toEqual({ x: 100, y: 200 })
 
-    // Delete the node — cache is NOT cleared (known gap)
     graph.deleteNode(node)
-
-    // The cache entry still exists. This is harmless as long as nobody
-    // asks for the deleted node's abs pos. But if the id is reused...
-    // (This is documented as a known limitation, not a test failure.)
     expect(graph.getNode(node)).toBeUndefined()
+    expect(graph.getAbsolutePosition(node)).toEqual({ x: 0, y: 0 })
+
+    const newParent = graph.createNode('FRAME', page, {
+      name: 'New Parent',
+      x: 500,
+      y: 600,
+      width: 100,
+      height: 100
+    })
+    const restored = graph.createNode(
+      'RECTANGLE',
+      newParent.id,
+      {
+        id: node,
+        name: 'Restored Node',
+        x: 30,
+        y: 40,
+        width: 50,
+        height: 50,
+        source: original.source
+      },
+      { mode: 'restore' }
+    )
+
+    expect(restored.id).toBe(node)
+    expect(graph.getAbsolutePosition(node)).toEqual({ x: 530, y: 640 })
+    expect(graph.getAbsolutePosition(node)).not.toBe(abs)
   })
 })

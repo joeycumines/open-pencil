@@ -148,6 +148,8 @@ export class SceneGraph {
 
     this.rootId = root.id
     this.nodes.set(root.id, root)
+    this.identity.registerImportedSource(root.source)
+    if (root.source.id !== null) this.identity.registerStableId(root.id, root.source.id)
     this.addPage('Page 1')
   }
 
@@ -223,6 +225,8 @@ export class SceneGraph {
     if (handlers.reordered) u.push(this.emitter.on('node:reordered', handlers.reordered))
     if (handlers.variableCreated)
       u.push(this.emitter.on('variable:created', handlers.variableCreated))
+    if (handlers.variableUpdated)
+      u.push(this.emitter.on('variable:updated', handlers.variableUpdated))
     if (handlers.variableDeleted)
       u.push(this.emitter.on('variable:deleted', handlers.variableDeleted))
     if (handlers.collectionCreated)
@@ -272,29 +276,33 @@ export class SceneGraph {
   removeCollection(id: string): void {
     Variables.removeCollection(this, id)
   }
+  renameCollection(id: string, name: string): void {
+    Variables.renameCollection(this, id, name)
+  }
   getActiveModeId(collectionId: string): string {
     return Variables.getActiveModeId(this, collectionId)
   }
   setActiveMode(collectionId: string, modeId: string): void {
     Variables.setActiveMode(this, collectionId, modeId)
   }
-
   addMode(collectionId: string, modeId: string, name: string, sourceMode?: string): void {
     Variables.addModeToCollection(this, collectionId, modeId, name, sourceMode)
   }
-
   removeMode(collectionId: string, modeId: string): void {
     Variables.removeMode(this, collectionId, modeId)
   }
-
+  renameVariable(id: string, name: string): void {
+    Variables.renameVariable(this, id, name)
+  }
+  updateVariableValue(id: string, modeId: string, value: VariableValue): void {
+    Variables.updateVariableValue(this, id, modeId, value)
+  }
   renameMode(collectionId: string, modeId: string, name: string): void {
     Variables.renameMode(this, collectionId, modeId, name)
   }
-
   setDefaultMode(collectionId: string, modeId: string): void {
     Variables.setDefaultMode(this, collectionId, modeId)
   }
-
   resolveVariable(
     variableId: string,
     modeId?: string,
@@ -302,31 +310,24 @@ export class SceneGraph {
   ): VariableValue | undefined {
     return Variables.resolveVariable(this, variableId, modeId, visited)
   }
-
   resolveColorVariable(variableId: string): Color | undefined {
     return Variables.resolveColorVariable(this, variableId)
   }
-
   resolveNumberVariable(variableId: string): number | undefined {
     return Variables.resolveNumberVariable(this, variableId)
   }
-
   getVariablesForCollection(collectionId: string): Variable[] {
     return Variables.getVariablesForCollection(this, collectionId)
   }
-
   getVariablesByType(type: VariableType): Variable[] {
     return Variables.getVariablesByType(this, type)
   }
-
   bindVariable(nodeId: string, field: string, variableId: string): void {
     Variables.bindVariable(this, nodeId, field, variableId)
   }
-
   unbindVariable(nodeId: string, field: string): void {
     Variables.unbindVariable(this, nodeId, field)
   }
-
   getChildren(id: string): SceneNode[] {
     const node = this.nodes.get(id)
     if (!node) return []
@@ -393,8 +394,6 @@ export class SceneGraph {
     // append the id to the new parent's childIds — leaving a duplicate entry when
     // the parent is unchanged or a dangling reference in the old parent when it
     // moved, corrupting traversal, ordering, selection, and hit-testing.
-    // The guard is scoped to restore mode so that a future change to pickRuntimeId
-    // can never silently trigger in-place restoration in default mode.
     if (mode === 'restore') {
       const occupied = this.nodes.get(runtimeId)
       if (occupied !== undefined) {
@@ -413,6 +412,9 @@ export class SceneGraph {
     node.childIds = []
     node.parentId = parentId
     this.nodes.set(node.id, node)
+    this.identity.registerImportedSource(node.source, {
+      consumeSuspendedRuntimeId: mode === 'restore' ? (overrides.id ?? node.id) : undefined
+    })
     this.identity.registerStableId(node.id, stableId)
 
     const parent = this.nodes.get(parentId)
@@ -577,7 +579,6 @@ export class SceneGraph {
   getInstances(componentId: string): SceneNode[] {
     return Instances.getInstances(this, componentId)
   }
-
   flattenTree(parentId?: string, depth = 0): Array<{ node: SceneNode; depth: number }> {
     return flattenNodeTree(this, parentId, depth)
   }

@@ -7,7 +7,11 @@ export function deleteNode(graph: SceneGraph, id: string, options?: { permanent?
   if (node.parentId) {
     const parent = graph.nodes.get(node.parentId)
     if (parent) {
-      parent.childIds = parent.childIds.filter((cid) => cid !== id)
+      const index = parent.childIds.indexOf(id)
+      if (index !== -1) {
+        parent.childIds.splice(index, 1)
+        while (parent.childIds[index] === id) parent.childIds.splice(index, 1)
+      }
     }
   }
 
@@ -20,8 +24,10 @@ export function deleteNode(graph: SceneGraph, id: string, options?: { permanent?
   }
 
   graph.identity.maybeUnreserveImportedId(node, options)
+  graph.identity.unregisterStableId(id, node.source.id)
 
   graph.nodes.delete(id)
+  graph.clearAbsPosCache()
   graph.emitter.emit('node:deleted', id)
 }
 

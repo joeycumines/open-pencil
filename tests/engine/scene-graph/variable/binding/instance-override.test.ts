@@ -48,10 +48,10 @@ function setupFloatVars(graph: SceneGraph, ...ids: string[]): void {
   }
 }
 
-// ─── bindVariable on instance child sets override flag ──────────────────
+// ─── bindVariable on instance child stores override records ──────────────
 
-describe('bindVariable on instance child sets override flag', () => {
-  test('binding on instance child sets boundVariables override on parent instance', () => {
+describe('bindVariable on instance child stores override records', () => {
+  test('binding on instance child stores boundVariables record on parent instance', () => {
     const graph = new SceneGraph()
     setupColorVars(graph, 'v1', 'v2')
     const page = pageId(graph)
@@ -78,7 +78,9 @@ describe('bindVariable on instance child sets override flag', () => {
 
     graph.bindVariable(instanceChild.id, 'fills/0/color', 'v2')
 
-    expect(instance.overrides[`${instanceChild.source.id}:boundVariables`]).toBe(true)
+    expect(instance.overrides[`${instanceChild.source.id}:boundVariables`]).toEqual({
+      'fills/0/color': 'v2'
+    })
   })
 
   test('binding on instance child survives syncInstances', () => {
@@ -111,6 +113,98 @@ describe('bindVariable on instance child sets override flag', () => {
     graph.syncInstances(component.id)
 
     expect(instanceChild.boundVariables['fills/0/color']).toBe('v2')
+  })
+
+  test('binding on nested instance child survives outer component sync', () => {
+    const graph = new SceneGraph()
+    setupFloatVars(graph, 'v1')
+    const page = pageId(graph)
+
+    const innerComponent = graph.createNode('COMPONENT', page, {
+      name: 'Inner',
+      width: 80,
+      height: 32
+    })
+    graph.createNode('RECTANGLE', innerComponent.id, {
+      name: 'Inner child',
+      width: 80,
+      height: 32
+    })
+    const outerComponent = graph.createNode('COMPONENT', page, {
+      name: 'Outer',
+      width: 160,
+      height: 64
+    })
+    const nestedInComponent = graph.createInstance(innerComponent.id, outerComponent.id)
+    if (!nestedInComponent) throw new Error('nested component instance failed')
+
+    const outerInstance = graph.createInstance(outerComponent.id, page)
+    if (!outerInstance) throw new Error('outer instance failed')
+    const nestedInstance = graph.getChildren(outerInstance.id)[0]
+    const nestedChild = graph.getChildren(nestedInstance.id)[0]
+    const nestedStableId = graph.identity.getStableId(nestedInstance)
+    const nestedChildStableId = graph.identity.getStableId(nestedChild)
+
+    graph.bindVariable(nestedChild.id, 'width', 'v1')
+
+    expect(nestedInstance.overrides[`${nestedChildStableId}:boundVariables`]).toEqual({
+      width: 'v1'
+    })
+    expect(outerInstance.overrides[`${nestedStableId}:overrides`]).toEqual({
+      [`${nestedChildStableId}:boundVariables`]: { width: 'v1' }
+    })
+
+    graph.syncInstances(outerComponent.id)
+
+    expect(nestedChild.boundVariables['width']).toBe('v1')
+  })
+
+  test('binding on nested instance child merges existing ancestor nested overrides', () => {
+    const graph = new SceneGraph()
+    setupFloatVars(graph, 'v1')
+    const page = pageId(graph)
+
+    const innerComponent = graph.createNode('COMPONENT', page, {
+      name: 'Inner',
+      width: 80,
+      height: 32
+    })
+    graph.createNode('RECTANGLE', innerComponent.id, {
+      name: 'Inner child',
+      width: 60,
+      height: 32
+    })
+    const outerComponent = graph.createNode('COMPONENT', page, {
+      name: 'Outer',
+      width: 160,
+      height: 64
+    })
+    const nestedInComponent = graph.createInstance(innerComponent.id, outerComponent.id)
+    if (!nestedInComponent) throw new Error('nested component instance failed')
+
+    const outerInstance = graph.createInstance(outerComponent.id, page)
+    if (!outerInstance) throw new Error('outer instance failed')
+    const nestedInstance = graph.getChildren(outerInstance.id)[0]
+    const nestedChild = graph.getChildren(nestedInstance.id)[0]
+    const nestedStableId = graph.identity.getStableId(nestedInstance)
+    const nestedChildStableId = graph.identity.getStableId(nestedChild)
+
+    graph.updateNode(outerInstance.id, {
+      overrides: { [`${nestedStableId}:overrides`]: { [`${nestedChildStableId}:width`]: 84 } }
+    })
+    graph.updateNode(nestedChild.id, { width: 84 })
+
+    graph.bindVariable(nestedChild.id, 'height', 'v1')
+
+    expect(outerInstance.overrides[`${nestedStableId}:overrides`]).toEqual({
+      [`${nestedChildStableId}:width`]: 84,
+      [`${nestedChildStableId}:boundVariables`]: { height: 'v1' }
+    })
+
+    graph.syncInstances(outerComponent.id)
+
+    expect(nestedChild.width).toBe(84)
+    expect(nestedChild.boundVariables['height']).toBe('v1')
   })
 })
 
@@ -223,7 +317,7 @@ describe('removeVariable emits events and sets overrides', () => {
 
     graph.removeVariable('v1')
 
-    expect(instance.overrides[`${instanceChild.source.id}:boundVariables`]).toBe(true)
+    expect(instance.overrides[`${instanceChild.source.id}:boundVariables`]).toEqual({})
   })
 
   test('removeVariable does not emit for unaffected nodes', () => {

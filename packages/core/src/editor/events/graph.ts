@@ -59,6 +59,9 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       variableCreated: (variable: Variable) => {
         options.emitEditorEvent('variable:created', variable)
       },
+      variableUpdated: (variable: Variable) => {
+        options.emitEditorEvent('variable:updated', variable)
+      },
       variableDeleted: (id: string) => {
         options.emitEditorEvent('variable:deleted', id)
       },

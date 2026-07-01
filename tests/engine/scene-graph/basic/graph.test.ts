@@ -45,6 +45,19 @@ describe('SceneGraph', () => {
     expect(graph.getNode(id)).toBeFalsy()
   })
 
+  test('delete removes duplicate adjacent child references defensively', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const node = graph.createNode('RECTANGLE', page, { name: 'Duplicate child ref' })
+    const parent = expectDefined(graph.getNode(page), 'page')
+
+    parent.childIds.push(node.id)
+    graph.deleteNode(node.id)
+
+    expect(graph.getNode(node.id)).toBeUndefined()
+    expect(parent.childIds).not.toContain(node.id)
+  })
+
   test('delete frame recursively deletes children', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)

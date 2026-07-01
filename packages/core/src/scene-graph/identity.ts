@@ -49,7 +49,10 @@ export class SceneGraphIdentity {
   private nextLocalID = 1
   private importerCounter = 1
   private reservedRuntimeIds = new Set<string>()
-  private modeIds = new Set<string>()
+  private importedSourceRefCounts = new Map<string, number>()
+  private suspendedImportedSourceRefCounts = new Map<string, number>()
+  private suspendedImportedSourceRuntimeRefCounts = new Map<string, Map<string, number>>()
+  private modeIds = new Map<string, number>()
   private stableIdToRuntimeIdMap = new Map<string, string>()
   private sourceIdsMigrated = false
   /** Dev-only counter for stableIdToRuntimeId linear-scan fallback. */
@@ -64,7 +67,7 @@ export class SceneGraphIdentity {
     }
     for (const collection of this.host.variableCollections.values()) {
       for (const mode of collection.modes) {
-        this.modeIds.add(mode.modeId)
+        this.addModeId(mode.modeId)
       }
     }
   }
@@ -73,9 +76,9 @@ export class SceneGraphIdentity {
     return `${this.sessionID}:${localID}`
   }
 
-  private isReservedImportedId(node: SceneNode): string | null {
-    if (node.source.format === 'fig' && node.source.id !== null) {
-      return node.source.id
+  private importedSourceId(source: SourceMetadata | undefined): string | null {
+    if (source?.format === 'fig' && source.id !== null) {
+      return source.id
     }
     return null
   }
@@ -84,8 +87,52 @@ export class SceneGraphIdentity {
     return this.modeIds.has(id)
   }
 
+  private addModeId(id: string): void {
+    this.modeIds.set(id, (this.modeIds.get(id) ?? 0) + 1)
+  }
+
+  private removeModeId(id: string): void {
+    const count = this.modeIds.get(id)
+    if (count === undefined) return
+    if (count <= 1) {
+      this.modeIds.delete(id)
+      return
+    }
+    this.modeIds.set(id, count - 1)
+  }
+
+  private hasVariableSourceId(id: string): boolean {
+    for (const variable of this.host.variables.values()) {
+      if (variable.source?.id === id) return true
+    }
+    for (const collection of this.host.variableCollections.values()) {
+      if (collection.source?.id === id) return true
+      for (const mode of collection.modes) {
+        if (mode.source?.id === id) return true
+      }
+    }
+    return false
+  }
+
+  private isGeneratedStableIdFree(id: string): boolean {
+    return (
+      !this.host.nodes.has(id) &&
+      !this.stableIdToRuntimeIdMap.has(id) &&
+      !this.host.variables.has(id) &&
+      !this.host.variableCollections.has(id) &&
+      !this.reservedRuntimeIds.has(id) &&
+      !this.hasImportedSourceRef(id) &&
+      !this.hasModeId(id) &&
+      !this.hasVariableSourceId(id)
+    )
+  }
+
   generateStableId(): string {
-    return this.makeId(this.nextLocalID++)
+    let id = this.makeId(this.nextLocalID++)
+    while (!this.isGeneratedStableIdFree(id)) {
+      id = this.makeId(this.nextLocalID++)
+    }
+    return id
   }
 
   /**
@@ -113,13 +160,14 @@ export class SceneGraphIdentity {
         !this.host.variables.has(preferred) &&
         !this.host.variableCollections.has(preferred) &&
         !this.reservedRuntimeIds.has(preferred) &&
+        !this.hasImportedSourceRef(preferred) &&
         !this.hasModeId(preferred)
       ) {
         return preferred
       }
     }
     let id = this.makeId(this.nextLocalID++)
-    while (this.host.nodes.has(id) || this.reservedRuntimeIds.has(id)) {
+    while (!this.isRuntimeIdFree(id)) {
       id = this.makeId(this.nextLocalID++)
     }
     return id
@@ -130,6 +178,7 @@ export class SceneGraphIdentity {
     while (
       this.host.nodes.has(id) ||
       this.reservedRuntimeIds.has(id) ||
+      this.hasImportedSourceRef(id) ||
       this.host.variables.has(id) ||
       this.host.variableCollections.has(id) ||
       allocatedInThisImport.has(id)
@@ -143,7 +192,156 @@ export class SceneGraphIdentity {
     for (const id of ids) this.reservedRuntimeIds.add(id)
   }
 
+  private incrementImportedSourceRefCount(id: string): void {
+    this.importedSourceRefCounts.set(id, (this.importedSourceRefCounts.get(id) ?? 0) + 1)
+  }
+
+  private incrementSuspendedImportedRuntime(sourceId: string, runtimeId: string): void {
+    let runtimes = this.suspendedImportedSourceRuntimeRefCounts.get(sourceId)
+    if (runtimes === undefined) {
+      runtimes = new Map<string, number>()
+      this.suspendedImportedSourceRuntimeRefCounts.set(sourceId, runtimes)
+    }
+    runtimes.set(runtimeId, (runtimes.get(runtimeId) ?? 0) + 1)
+  }
+
+  private decrementSuspendedImportedRuntime(sourceId: string, runtimeId: string): boolean {
+    const runtimes = this.suspendedImportedSourceRuntimeRefCounts.get(sourceId)
+    const count = runtimes?.get(runtimeId)
+    if (runtimes === undefined || count === undefined) return false
+    if (count <= 1) {
+      runtimes.delete(runtimeId)
+      if (runtimes.size === 0) this.suspendedImportedSourceRuntimeRefCounts.delete(sourceId)
+      return true
+    }
+    runtimes.set(runtimeId, count - 1)
+    return true
+  }
+
+  private decrementAnySuspendedImportedRuntime(sourceId: string): void {
+    const runtimeId = this.suspendedImportedSourceRuntimeRefCounts
+      .get(sourceId)
+      ?.keys()
+      .next().value
+    if (runtimeId !== undefined) this.decrementSuspendedImportedRuntime(sourceId, runtimeId)
+  }
+
+  private decrementSuspendedImportedSource(id: string, runtimeId?: string): void {
+    const count = this.suspendedImportedSourceRefCounts.get(id)
+    if (count === undefined) return
+    if (runtimeId !== undefined && !this.decrementSuspendedImportedRuntime(id, runtimeId)) return
+    if (runtimeId === undefined) {
+      this.decrementAnySuspendedImportedRuntime(id)
+    }
+    if (count <= 1) {
+      this.suspendedImportedSourceRefCounts.delete(id)
+      return
+    }
+    this.suspendedImportedSourceRefCounts.set(id, count - 1)
+  }
+
+  private hasSuspendedImportedSource(id: string): boolean {
+    return this.suspendedImportedSourceRefCounts.has(id)
+  }
+
+  private hasSuspendedImportedRuntime(sourceId: string, runtimeId: string): boolean {
+    return this.suspendedImportedSourceRuntimeRefCounts.get(sourceId)?.has(runtimeId) === true
+  }
+
+  private hasLiveImportedSource(id: string): boolean {
+    return (this.importedSourceRefCounts.get(id) ?? 0) > 0
+  }
+
+  private hasImportedSourceRef(id: string): boolean {
+    return this.hasLiveImportedSource(id) || this.hasSuspendedImportedSource(id)
+  }
+
+  private hasLiveImportedVariableSource(id: string): boolean {
+    for (const variable of this.host.variables.values()) {
+      if (this.importedSourceId(variable.source) === id) return true
+    }
+    for (const collection of this.host.variableCollections.values()) {
+      if (this.importedSourceId(collection.source) === id) return true
+      for (const mode of collection.modes) {
+        if (this.importedSourceId(mode.source) === id) return true
+      }
+    }
+    return false
+  }
+
+  private canRestoreReservedImportedSource(id: string): boolean {
+    if (this.hasLiveImportedVariableSource(id)) return false
+    return !this.hasLiveImportedSource(id) || this.hasSuspendedImportedRuntime(id, id)
+  }
+
+  registerImportedSource(
+    source: SourceMetadata | undefined,
+    options?: { consumeSuspended?: boolean; consumeSuspendedRuntimeId?: string }
+  ): void {
+    const id = this.importedSourceId(source)
+    if (id === null) return
+    this.reservedRuntimeIds.add(id)
+    this.incrementImportedSourceRefCount(id)
+    if (options?.consumeSuspendedRuntimeId !== undefined) {
+      this.decrementSuspendedImportedSource(id, options.consumeSuspendedRuntimeId)
+    } else if (options?.consumeSuspended === true) {
+      this.decrementSuspendedImportedSource(id)
+    }
+  }
+
+  unregisterImportedSource(source: SourceMetadata | undefined): void {
+    const id = this.importedSourceId(source)
+    if (id === null) return
+    const count = this.importedSourceRefCounts.get(id)
+    if (count === undefined) {
+      if (!this.hasSuspendedImportedSource(id)) this.reservedRuntimeIds.delete(id)
+      return
+    }
+    if (count <= 1) {
+      this.importedSourceRefCounts.delete(id)
+      if (!this.hasSuspendedImportedSource(id)) this.reservedRuntimeIds.delete(id)
+      return
+    }
+    this.importedSourceRefCounts.set(id, count - 1)
+  }
+
+  suspendImportedSource(source: SourceMetadata | undefined, runtimeId?: string): void {
+    const id = this.importedSourceId(source)
+    if (id === null) return
+    this.reservedRuntimeIds.add(id)
+    const liveCount = this.importedSourceRefCounts.get(id)
+    if (liveCount !== undefined) {
+      if (liveCount <= 1) {
+        this.importedSourceRefCounts.delete(id)
+      } else {
+        this.importedSourceRefCounts.set(id, liveCount - 1)
+      }
+    }
+    this.suspendedImportedSourceRefCounts.set(
+      id,
+      (this.suspendedImportedSourceRefCounts.get(id) ?? 0) + 1
+    )
+    if (runtimeId !== undefined) this.incrementSuspendedImportedRuntime(id, runtimeId)
+  }
+
+  registerCollectionModes(collection: VariableCollection): void {
+    for (const mode of collection.modes) this.addModeId(mode.modeId)
+  }
+
+  unregisterCollectionModes(collection: VariableCollection): void {
+    for (const mode of collection.modes) this.removeModeId(mode.modeId)
+  }
+
+  registerModeId(id: string): void {
+    this.addModeId(id)
+  }
+
+  unregisterModeId(id: string): void {
+    this.removeModeId(id)
+  }
+
   unreserveRuntimeId(id: string): void {
+    if (this.hasImportedSourceRef(id)) return
     this.reservedRuntimeIds.delete(id)
   }
 
@@ -153,11 +351,13 @@ export class SceneGraphIdentity {
 
   recomputeReservedRuntimeIds(): void {
     this.reservedRuntimeIds.clear()
+    this.importedSourceRefCounts.clear()
     this.modeIds.clear()
+    for (const id of this.suspendedImportedSourceRefCounts.keys()) {
+      this.reservedRuntimeIds.add(id)
+    }
     const reserve = (source: SourceMetadata | undefined): void => {
-      if (source?.format === 'fig' && source.id !== null) {
-        this.reservedRuntimeIds.add(source.id)
-      }
+      this.registerImportedSource(source)
     }
     for (const node of this.host.nodes.values()) reserve(node.source)
     for (const variable of this.host.variables.values()) reserve(variable.source)
@@ -165,7 +365,7 @@ export class SceneGraphIdentity {
       reserve(collection.source)
       for (const mode of collection.modes) {
         reserve(mode.source)
-        this.modeIds.add(mode.modeId)
+        this.addModeId(mode.modeId)
       }
     }
     this.rebuildStableIdMap()
@@ -177,8 +377,15 @@ export class SceneGraphIdentity {
 
   /** Register a stable→runtime ID mapping. Called from createNode. */
   registerStableId(runtimeId: string, stableId: string): void {
-    if (!this.stableIdToRuntimeIdMap.has(stableId)) {
+    const cached = this.stableIdToRuntimeIdMap.get(stableId)
+    if (cached === undefined || this.host.nodes.get(cached)?.source.id !== stableId) {
       this.stableIdToRuntimeIdMap.set(stableId, runtimeId)
+    }
+  }
+
+  unregisterStableId(runtimeId: string, stableId: string | null): void {
+    if (stableId !== null && this.stableIdToRuntimeIdMap.get(stableId) === runtimeId) {
+      this.stableIdToRuntimeIdMap.delete(stableId)
     }
   }
 
@@ -203,7 +410,7 @@ export class SceneGraphIdentity {
     const cached = this.stableIdToRuntimeIdMap.get(stableId)
     if (cached !== undefined) {
       // Verify the cached entry is still valid
-      if (this.host.nodes.has(cached)) return cached
+      if (this.host.nodes.get(cached)?.source.id === stableId) return cached
       // Stale entry — clean up
       this.stableIdToRuntimeIdMap.delete(stableId)
     }
@@ -267,14 +474,14 @@ export class SceneGraphIdentity {
     }
   }
 
-  /**
-   * Returns true if `id` is free across all runtime namespaces (nodes,
-   * variables, collections, modes). Used by pickRuntimeId to determine
-   * whether a requested runtime ID can be safely reused.
-   */
-  private isNamespaceFree(id: string): boolean {
+  private isRuntimeIdFree(id: string): boolean {
     return (
-      !this.host.variables.has(id) && !this.host.variableCollections.has(id) && !this.hasModeId(id)
+      !this.host.nodes.has(id) &&
+      !this.reservedRuntimeIds.has(id) &&
+      !this.hasImportedSourceRef(id) &&
+      !this.host.variables.has(id) &&
+      !this.host.variableCollections.has(id) &&
+      !this.hasModeId(id)
     )
   }
 
@@ -298,7 +505,8 @@ export class SceneGraphIdentity {
       mode === 'restore' &&
       existing === undefined &&
       reserved &&
-      stableId === requestedRuntimeId
+      stableId === requestedRuntimeId &&
+      this.canRestoreReservedImportedSource(requestedRuntimeId)
     ) {
       return requestedRuntimeId
     }
@@ -307,31 +515,18 @@ export class SceneGraphIdentity {
     // branches above handle the cases where mode matters (sameIdentity,
     // reserved+stableId match). This covers nodes whose runtime ID differs
     // from their stable ID (e.g. fig-imported nodes with GUID collision).
-    if (existing === undefined && !reserved && this.isNamespaceFree(requestedRuntimeId)) {
+    if (existing === undefined && !reserved && this.isRuntimeIdFree(requestedRuntimeId)) {
       return requestedRuntimeId
     }
     return this.generateNodeId(stableId)
   }
 
   maybeUnreserveImportedId(node: SceneNode, options?: { permanent?: boolean }): void {
-    if (options?.permanent === false) return
-    const importedId = this.isReservedImportedId(node)
-    if (importedId !== null) {
-      // Check if any other node still references this imported source.id.
-      // Multiple nodes can share the same Figma GUID (multi-document import);
-      // unreserving when one is deleted would break undo for the others.
-      let stillReferenced = false
-      for (const other of this.host.nodes.values()) {
-        if (other === node) continue
-        if (other.source.format === 'fig' && other.source.id === importedId) {
-          stillReferenced = true
-          break
-        }
-      }
-      if (!stillReferenced) {
-        this.unreserveRuntimeId(importedId)
-      }
+    if (options?.permanent === false) {
+      this.suspendImportedSource(node.source, node.id)
+      return
     }
+    this.unregisterImportedSource(node.source)
   }
 
   /**

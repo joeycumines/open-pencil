@@ -111,6 +111,11 @@ describe('variables editor helpers', () => {
     actions.addCollection()
 
     expect(activeCollectionId.value).toStartWith('col:')
-    expect(collections.get(activeCollectionId.value)?.name).toBe('New collection')
+    const collection = collections.get(activeCollectionId.value)
+    expect(collection?.name).toBe('New collection')
+    const mode = collection?.modes[0]
+    expect(mode?.modeId).toStartWith('mode:')
+    expect(collection?.defaultModeId).toBe(mode?.modeId)
+    expect(mode?.source?.id).toBe(mode?.modeId)
   })
 })

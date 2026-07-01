@@ -4,11 +4,12 @@ import { colorToHexRaw, parseColor } from '@open-pencil/core/color'
 import { BLACK } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
 import { randomHex } from '@open-pencil/core/random'
-import type {
-  Variable,
-  VariableCollection,
-  VariableType,
-  VariableValue
+import {
+  createDefaultSource,
+  type Variable,
+  type VariableCollection,
+  type VariableType,
+  type VariableValue
 } from '@open-pencil/core/scene-graph'
 
 export function createVariableCollectionActions(editor: Editor, activeCollectionId: Ref<string>) {
@@ -18,12 +19,14 @@ export function createVariableCollectionActions(editor: Editor, activeCollection
 
   function addCollection() {
     const id = `col:${randomHex(8)}`
+    const modeId = `mode:${randomHex(8)}`
     const collection: VariableCollection = {
       id,
       name: 'New collection',
-      modes: [{ modeId: 'default', name: 'Mode 1' }],
-      defaultModeId: 'default',
-      variableIds: []
+      modes: [{ modeId, name: 'Mode 1', source: { ...createDefaultSource(), id: modeId } }],
+      defaultModeId: modeId,
+      variableIds: [],
+      source: { ...createDefaultSource(), id }
     }
     editor.addCollection(collection)
     activeCollectionId.value = id
