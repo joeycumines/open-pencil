@@ -191,7 +191,11 @@ describe('roundtrip: remediated GUIDs survive double round-trip', () => {
 
     // Export diagnostics should be populated
     expect(graph.exportDiagnostics).toBeDefined()
-    expect(graph.exportDiagnostics?.reusedGuids.length).toBeGreaterThanOrEqual(0)
-    expect(graph.exportDiagnostics?.mintedGuids.length).toBeGreaterThanOrEqual(0)
+    expect(graph.exportDiagnostics?.reusedGuids).toContain('1:200')
+    expect(
+      graph.exportDiagnostics?.mintedGuids.some(
+        (entry) => entry.reason === 'missing' && entry.sourceId === null
+      )
+    ).toBe(true)
   })
 })

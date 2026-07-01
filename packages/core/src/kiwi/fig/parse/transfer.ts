@@ -92,6 +92,7 @@ export function deserializeSceneGraph(data: SerializedSceneGraph): SceneGraph {
   graph.figKiwiVersion = data.figKiwiVersion
   graph.figSchemaDeflated = data.figSchemaDeflated
   graph.documentColorSpace = data.documentColorSpace
+  graph.recomputeReservedRuntimeIds()
   if (data.lazyFigImport) {
     setLazyFigImportContext(graph, {
       changeMap: new Map(data.lazyFigImport.changeMap),

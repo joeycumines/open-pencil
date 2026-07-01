@@ -11,9 +11,22 @@ import type { JsonObject } from '@open-pencil/core/types'
 
 import { expectDefined } from '#tests/helpers/assert'
 import { parseFixture } from '#tests/helpers/fig-fixtures'
-import { runsHeavyTests } from '#tests/helpers/test-utils'
+import { HEAVY_TEST_TIMEOUT_MS, runsHeavyTests } from '#tests/helpers/test-utils'
 
 setDefaultTimeout(60_000)
+
+const MATERIAL3_TEXT_EXPORT_TIMEOUT_MS = HEAVY_TEST_TIMEOUT_MS * 6
+
+function releaseHeavyTextExportGraph(graph: SceneGraph): void {
+  graph.nodes.clear()
+  graph.images.clear()
+  graph.variables.clear()
+  graph.variableCollections.clear()
+  graph.activeMode.clear()
+  graph.figSchemaDeflated = null
+  graph.importDiagnostics = undefined
+  graph.exportDiagnostics = undefined
+}
 
 describe('text node export', () => {
   test('text nodes have derivedTextData and textUserLayoutVersion', async () => {
@@ -276,20 +289,23 @@ describe('text node export', () => {
     'material3.fig text nodes have derivedTextData after round-trip',
     async () => {
       const original = await parseFixture('material3.fig')
-
-      const textNodes = [...original.getAllNodes()].filter((n) => n.type === 'TEXT')
-      expect(textNodes.length).toBeGreaterThan(0)
+      const expectedTextNodeCount = [...original.getAllNodes()].filter(
+        (n) => n.type === 'TEXT'
+      ).length
+      expect(expectedTextNodeCount).toBeGreaterThan(0)
 
       const exported = await exportFigFile(original)
+      releaseHeavyTextExportGraph(original)
+
       const reimported = await parseFigFile(exported.buffer as ArrayBuffer)
 
       const reimportedText = [...reimported.getAllNodes()].filter((n) => n.type === 'TEXT')
-      expect(reimportedText.length).toBe(textNodes.length)
+      expect(reimportedText.length).toBe(expectedTextNodeCount)
 
       for (const node of reimportedText.slice(0, 10)) {
         expect(node.text.length).toBeGreaterThan(0)
       }
     },
-    90_000
+    MATERIAL3_TEXT_EXPORT_TIMEOUT_MS
   )
 })

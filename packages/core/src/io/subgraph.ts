@@ -75,6 +75,7 @@ function cloneIntoGraph(source: SceneGraph, ids: Set<string>): SceneGraph {
     graph.variableCollections.get(collection.id)?.variableIds.push(variableId)
   }
 
+  graph.recomputeReservedRuntimeIds()
   graph.clearAbsPosCache()
   return graph
 }

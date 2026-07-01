@@ -1,10 +1,10 @@
 /* eslint-disable max-lines */
 import { bytesToHex } from '#core/bytes/hex'
 import type { NodeChange, Paint } from '#core/kiwi/fig/codec'
-import type { SceneGraph, SceneNode } from '#core/scene-graph'
+import type { FigExportDiagnostics, SceneGraph, SceneNode } from '#core/scene-graph'
 import type { Color, GUID, Matrix, Vector } from '#core/types'
 
-import { parseGuidOrNull, stringToGuid } from './guid'
+import { guidToString, parseGuidOrNull, stringToGuid } from './guid'
 import {
   applyExportSettingsPluginData,
   mergePluginData,
@@ -44,6 +44,7 @@ interface SceneNodeToKiwiContext {
   /** Reverse index of assigned GUID values ("sessionID:localID") for O(1)
    *  collision detection. Populated alongside every nodeIdToGuid.set() call. */
   assignedGuidValues?: Set<string>
+  diagnostics?: FigExportDiagnostics
   fontDigestMap?: Map<string, Uint8Array>
   glyphBlobMap?: Map<string, number>
   varIdToGuid?: Map<string, GUID>
@@ -281,6 +282,16 @@ function resolveInstanceComponentId(context: SceneNodeToKiwiContext, componentId
   return componentId
 }
 
+function mintNodeExportGuid(
+  localIdCounter: { value: number },
+  assignedGuidValues: Set<string> | undefined
+): GUID {
+  for (;;) {
+    const guid: GUID = { sessionID: 1, localID: localIdCounter.value++ }
+    if (!assignedGuidValues?.has(guidToString(guid))) return guid
+  }
+}
+
 function getOrCreateNodeGuid(
   context: SceneNodeToKiwiContext,
   nodeId: string,
@@ -292,6 +303,7 @@ function getOrCreateNodeGuid(
   if (existing) return existing
   const importedGuid =
     node.source.format === 'fig' && node.source.id ? parseGuidOrNull(node.source.id) : null
+  const sourceId = node.source.format === 'fig' ? node.source.id : null
 
   // When source.id maps to a GUID value that is already assigned to a
   // different node (e.g. two nodes from different canvases with the same
@@ -299,16 +311,30 @@ function getOrCreateNodeGuid(
   if (importedGuid && context.assignedGuidValues) {
     const key = `${importedGuid.sessionID}:${importedGuid.localID}`
     if (context.assignedGuidValues.has(key)) {
-      const guid: GUID = { sessionID: 1, localID: localIdCounter.value++ }
+      const guid = mintNodeExportGuid(localIdCounter, context.assignedGuidValues)
       context.nodeIdToGuid?.set(nodeId, guid)
       context.assignedGuidValues.add(`${guid.sessionID}:${guid.localID}`)
+      context.diagnostics?.mintedGuids.push({
+        reason: 'collision',
+        sourceId,
+        assigned: guidToString(guid)
+      })
       return guid
     }
   }
 
-  const guid = importedGuid ?? { sessionID: 1, localID: localIdCounter.value++ }
+  const guid = importedGuid ?? mintNodeExportGuid(localIdCounter, context.assignedGuidValues)
   context.nodeIdToGuid?.set(nodeId, guid)
   context.assignedGuidValues?.add(`${guid.sessionID}:${guid.localID}`)
+  if (importedGuid) {
+    context.diagnostics?.reusedGuids.push(guidToString(importedGuid))
+  } else {
+    context.diagnostics?.mintedGuids.push({
+      reason: 'missing',
+      sourceId,
+      assigned: guidToString(guid)
+    })
+  }
   return guid
 }
 
@@ -435,6 +461,58 @@ function convertColorVarAssetRefs<T>(paints: T, assetRefToVarGuid: Map<string, G
   return paints
 }
 
+interface RawComponentPropDefFields {
+  id?: GUID
+  parentPropDefId?: GUID
+  varValue?: unknown
+}
+
+type ExportedComponentPropDef = RawComponentPropDefFields & Record<string, unknown>
+
+function isGuid(value: unknown): value is GUID {
+  if (!value || typeof value !== 'object') return false
+  const guid = value as Partial<GUID>
+  return typeof guid.sessionID === 'number' && typeof guid.localID === 'number'
+}
+
+function rawComponentPropDefsById(node: SceneNode): Map<string, RawComponentPropDefFields> {
+  const rawDefs = node.source.fig.rawNodeFields.componentPropDefs
+  if (!Array.isArray(rawDefs)) return new Map()
+
+  const defsById = new Map<string, RawComponentPropDefFields>()
+  for (const rawDef of rawDefs) {
+    if (!rawDef || typeof rawDef !== 'object') continue
+    const def = rawDef as RawComponentPropDefFields
+    if (!isGuid(def.id)) continue
+    defsById.set(guidToString(def.id), def)
+  }
+  return defsById
+}
+
+function mergeRawComponentPropDefFields(
+  node: SceneNode,
+  defs: ExportedComponentPropDef[]
+): ExportedComponentPropDef[] {
+  const rawDefsById = rawComponentPropDefsById(node)
+  if (rawDefsById.size === 0) return defs
+
+  return defs.map((def) => {
+    if (!isGuid(def.id)) return def
+    const rawDef = rawDefsById.get(guidToString(def.id))
+    if (!rawDef) return def
+
+    const parentPropDefId = isGuid(rawDef.parentPropDefId) ? rawDef.parentPropDefId : undefined
+    const hasVarValue = rawDef.varValue !== undefined
+    if (!parentPropDefId && !hasVarValue) return def
+
+    return {
+      ...def,
+      ...(parentPropDefId ? { parentPropDefId } : {}),
+      ...(hasVarValue ? { varValue: structuredClone(rawDef.varValue) } : {})
+    }
+  })
+}
+
 function applyInstancePayload(
   context: SceneNodeToKiwiContext,
   node: SceneNode,
@@ -520,7 +598,9 @@ function applyComponentMetadata(node: SceneNode, nc: KiwiNodeChange): void {
         : null
     })
     .filter((def): def is NonNullable<typeof def> => def !== null)
-  if (componentPropDefs.length > 0) nc.componentPropDefs = componentPropDefs
+  if (componentPropDefs.length > 0) {
+    nc.componentPropDefs = mergeRawComponentPropDefFields(node, componentPropDefs)
+  }
 
   const variantPropSpecs = node.variantPropSpecs
     .map((spec) => {

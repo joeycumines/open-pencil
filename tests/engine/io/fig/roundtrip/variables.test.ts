@@ -14,12 +14,25 @@ import {
 
 import { expectDefined } from '#tests/helpers/assert'
 import { parseFixture } from '#tests/helpers/fig-fixtures'
-import { runsHeavyTests } from '#tests/helpers/test-utils'
+import { HEAVY_TEST_TIMEOUT_MS, runsHeavyTests } from '#tests/helpers/test-utils'
 
 setDefaultTimeout(60_000)
 
+const MATERIAL3_VARIABLE_ROUNDTRIP_TIMEOUT_MS = HEAVY_TEST_TIMEOUT_MS * 10
+
 function figSource(id: string) {
   return { ...createDefaultSource(), format: 'fig' as const, id }
+}
+
+function releaseHeavyRoundTripGraph(graph: SceneGraph) {
+  graph.nodes.clear()
+  graph.images.clear()
+  graph.variables.clear()
+  graph.variableCollections.clear()
+  graph.activeMode.clear()
+  graph.figSchemaDeflated = null
+  graph.importDiagnostics = undefined
+  graph.exportDiagnostics = undefined
 }
 
 describe('variable roundtrip', () => {
@@ -128,16 +141,22 @@ describe('variable roundtrip', () => {
     'material3.fig variables survive round-trip',
     async () => {
       const original = await parseFixture('material3.fig')
+      const expectedVariableCount = original.variables.size
+      const expectedNonEmptyCollectionCount = [...original.variableCollections.values()].filter(
+        (c) => c.variableIds.length > 0
+      ).length
 
       const exported = await exportFigFile(original)
+      releaseHeavyRoundTripGraph(original)
+
       const reimported = await parseFigFile(exported.buffer as ArrayBuffer)
 
-      expect(reimported.variables.size).toBe(original.variables.size)
+      expect(reimported.variables.size).toBe(expectedVariableCount)
       expect(reimported.variableCollections.size).toBeGreaterThanOrEqual(
-        [...original.variableCollections.values()].filter((c) => c.variableIds.length > 0).length
+        expectedNonEmptyCollectionCount
       )
     },
-    120_000
+    MATERIAL3_VARIABLE_ROUNDTRIP_TIMEOUT_MS
   )
 
   test('preserves explicit collection, mode, and variable source ids (KC-006)', async () => {

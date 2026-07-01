@@ -14,7 +14,7 @@ export {
 export { buildFontDigestMap } from './font/digests'
 
 import type { NodeChange, Paint, VariableConsumptionEntry } from '#core/kiwi/fig/codec'
-import type { SceneGraph, SceneNode } from '#core/scene-graph'
+import type { FigExportDiagnostics, SceneGraph, SceneNode } from '#core/scene-graph'
 import type { Color, GUID, JsonObject, Matrix } from '#core/types'
 
 import { guidToString, stringToGuid, VARIABLE_BINDING_FIELDS } from './convert'
@@ -517,7 +517,8 @@ export function sceneNodeToKiwi(
   varIdToGuid?: Map<string, GUID>,
   glyphBlobMap = new Map<string, number>(),
   blobIndexByHex?: Map<string, number>,
-  assignedGuidValues?: Set<string>
+  assignedGuidValues?: Set<string>,
+  diagnostics?: FigExportDiagnostics
 ): KiwiNodeChange[] {
   // Build assetRef to guid mapping for converting colorVar references in raw paints
   const assetRefToVarGuid = varIdToGuid ? buildAssetRefToVarGuidMap(graph, varIdToGuid) : undefined
@@ -527,6 +528,7 @@ export function sceneNodeToKiwi(
     blobIndexByHex,
     nodeIdToGuid,
     assignedGuidValues,
+    diagnostics,
     fontDigestMap,
     glyphBlobMap,
     varIdToGuid,

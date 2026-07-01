@@ -7,11 +7,7 @@ import { renderThumbnail } from '#core/io/formats/raster'
 import { initCodec, getCompiledSchema, getSchemaBytes } from '#core/kiwi/fig/codec'
 import type { NodeChange } from '#core/kiwi/fig/codec'
 import { populateAllLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
-import {
-  FIGMA_SESSION_IMPORTED,
-  stringToGuid,
-  parseGuidOrNull
-} from '#core/kiwi/fig/node-change/guid'
+import { FIGMA_SESSION_IMPORTED, stringToGuid } from '#core/kiwi/fig/node-change/guid'
 import {
   sceneNodeToKiwi,
   fractionalPosition,
@@ -25,6 +21,11 @@ import type { FigExportDiagnostics, SceneGraph, VariableValue } from '#core/scen
 import type { GUID } from '#core/types'
 
 import { compressFigDataSync } from './compress'
+import {
+  advanceCounterPastImportedGuids,
+  reusableFigSourceId,
+  reuseOrMintGuid
+} from './export-guid'
 
 const THUMBNAIL_1X1 = Uint8Array.from(
   atob(
@@ -104,48 +105,6 @@ async function renderFigThumbnail(
     THUMBNAIL_1X1
   )
 }
-function mintExportGuid(localIdCounter: { value: number }, assignedGuidValues: Set<string>): GUID {
-  for (;;) {
-    const guid = { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
-    const key = `${guid.sessionID}:${guid.localID}`
-    if (!assignedGuidValues.has(key)) {
-      assignedGuidValues.add(key)
-      return guid
-    }
-  }
-}
-function reuseOrMintGuid(
-  sourceId: string | null | undefined,
-  localIdCounter: { value: number },
-  assignedGuidValues: Set<string>,
-  diagnostics?: FigExportDiagnostics
-): GUID {
-  if (sourceId) {
-    const imported = parseGuidOrNull(sourceId)
-    if (imported) {
-      const key = `${imported.sessionID}:${imported.localID}`
-      if (!assignedGuidValues.has(key)) {
-        assignedGuidValues.add(key)
-        diagnostics?.reusedGuids.push(key)
-        return imported
-      }
-      const minted = mintExportGuid(localIdCounter, assignedGuidValues)
-      diagnostics?.mintedGuids.push({
-        reason: 'collision',
-        sourceId,
-        assigned: `${minted.sessionID}:${minted.localID}`
-      })
-      return minted
-    }
-  }
-  const minted = mintExportGuid(localIdCounter, assignedGuidValues)
-  diagnostics?.mintedGuids.push({
-    reason: 'missing',
-    sourceId: sourceId ?? null,
-    assigned: `${minted.sessionID}:${minted.localID}`
-  })
-  return minted
-}
 function assignVariableGuids(
   graph: SceneGraph,
   localIdCounter: { value: number },
@@ -155,11 +114,16 @@ function assignVariableGuids(
   diagnostics?: FigExportDiagnostics
 ): void {
   for (const [colId, col] of graph.variableCollections) {
-    const colGuid = reuseOrMintGuid(col.source?.id, localIdCounter, assignedGuidValues, diagnostics)
+    const colGuid = reuseOrMintGuid(
+      reusableFigSourceId(col.source),
+      localIdCounter,
+      assignedGuidValues,
+      diagnostics
+    )
     varIdToGuid.set(colId, colGuid)
     for (const mode of col.modes) {
       const modeGuid = reuseOrMintGuid(
-        mode.source?.id,
+        reusableFigSourceId(mode.source),
         localIdCounter,
         assignedGuidValues,
         diagnostics
@@ -169,7 +133,7 @@ function assignVariableGuids(
     for (const varId of col.variableIds) {
       const variable = graph.variables.get(varId)
       const varGuid = reuseOrMintGuid(
-        variable?.source?.id,
+        reusableFigSourceId(variable?.source),
         localIdCounter,
         assignedGuidValues,
         diagnostics
@@ -258,32 +222,6 @@ function appendVariablesForCollection(
   }
 }
 
-/**
- * Scan all imported node source.ids to find the max sessionID:0 and
- * sessionID:1 localID values, then advance the counter past them.
- * This guarantees the counter is past every imported GUID before any
- * canvas, variable, or node claims a new counter-based GUID — preventing
- * collisions.
- */
-function advanceCounterPastImportedGuids(
-  graph: SceneGraph,
-  localIdCounter: { value: number }
-): void {
-  let maxLocalId0 = localIdCounter.value - 1
-  let maxLocalId1 = localIdCounter.value - 1
-  for (const node of graph.nodes.values()) {
-    if (node.source.format === 'fig' && node.source.id) {
-      const g = stringToGuid(node.source.id)
-      if (g.sessionID === 0 && g.localID > maxLocalId0) {
-        maxLocalId0 = g.localID
-      }
-      if (g.sessionID === 1 && g.localID > maxLocalId1) {
-        maxLocalId1 = g.localID
-      }
-    }
-  }
-  localIdCounter.value = Math.max(localIdCounter.value, maxLocalId0 + 1, maxLocalId1 + 1)
-}
 function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange): void {
   if (page.source.format !== 'fig') return
   if (!('pageType' in page.source.fig.rawNodeFields)) delete canvasNc.pageType
@@ -309,30 +247,25 @@ function buildCanvasEntries(
   docGuid: GUID,
   localIdCounter: { value: number },
   nodeIdToGuid: Map<string, GUID>,
-  assignedGuidValues: Set<string>
+  assignedGuidValues: Set<string>,
+  diagnostics: FigExportDiagnostics
 ): { canvasEntries: CanvasExportEntry[]; internalCanvasGuid: GUID | null } {
   const canvasEntries: CanvasExportEntry[] = []
   let internalCanvasGuid: GUID | null = null
   for (let p = 0; p < pages.length; p++) {
     const page = pages[p]
-    const canvasGuid = (() => {
-      if (page.source.id === null)
-        return { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
-
-      const importedGuid = stringToGuid(page.source.id)
-      const key = `${importedGuid.sessionID}:${importedGuid.localID}`
-
-      if (!assignedGuidValues.has(key)) return importedGuid
-
-      return { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
-    })()
+    const canvasGuid = reuseOrMintGuid(
+      page.source.format === 'fig' ? page.source.id : null,
+      localIdCounter,
+      assignedGuidValues,
+      diagnostics
+    )
     // Advance counter past any source.id-derived GUID to prevent collisions
     // with subsequently generated variable/collection GUIDs.
     if (page.source.format === 'fig' && canvasGuid.sessionID === 0) {
       localIdCounter.value = Math.max(localIdCounter.value, canvasGuid.localID + 1)
     }
     nodeIdToGuid.set(page.id, canvasGuid)
-    assignedGuidValues.add(`${canvasGuid.sessionID}:${canvasGuid.localID}`)
     if (page.internalOnly) internalCanvasGuid = canvasGuid
 
     const canvasNc = makeCanvasNodeChange(
@@ -351,8 +284,7 @@ function buildCanvasEntries(
     canvasEntries.push({ page, canvasGuid, canvasNc })
   }
   if (graph.variableCollections.size > 0 && internalCanvasGuid === null) {
-    internalCanvasGuid = { sessionID: FIGMA_SESSION_IMPORTED, localID: localIdCounter.value++ }
-    assignedGuidValues.add(`${internalCanvasGuid.sessionID}:${internalCanvasGuid.localID}`)
+    internalCanvasGuid = reuseOrMintGuid(null, localIdCounter, assignedGuidValues, diagnostics)
     canvasEntries.push({
       page: { id: '', name: 'Internal Only Canvas', internalOnly: true } as FigExportPage,
       canvasGuid: internalCanvasGuid,
@@ -418,6 +350,7 @@ export async function exportFigFile(
   const fontDigestMap = await buildFontDigestMap(graph)
   const glyphBlobMap = new Map<string, number>()
   const blobIndexByHex = new Map<string, number>()
+  const exportDiag: FigExportDiagnostics = { reusedGuids: [], mintedGuids: [] }
 
   // Scan ALL imported source.ids BEFORE any new GUID assignment to find
   // max sessionID:0 and sessionID:1 localID values. This guarantees the
@@ -431,11 +364,11 @@ export async function exportFigFile(
     docGuid,
     localIdCounter,
     nodeIdToGuid,
-    assignedGuidValues
+    assignedGuidValues,
+    exportDiag
   )
 
   // L-08: Track GUID remapping diagnostics during export
-  const exportDiag: FigExportDiagnostics = { reusedGuids: [], mintedGuids: [] }
   // Assign variable GUIDs AFTER canvas entries so that source.id-derived
   // canvas GUIDs don't collide with generated variable GUIDs.
   assignVariableGuids(
@@ -472,7 +405,8 @@ export async function exportFigFile(
           varIdToGuid,
           glyphBlobMap,
           blobIndexByHex,
-          assignedGuidValues
+          assignedGuidValues,
+          exportDiag
         )
       )
     }

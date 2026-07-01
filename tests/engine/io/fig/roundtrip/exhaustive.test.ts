@@ -66,10 +66,11 @@ const SPECS: FixtureSpec[] = [
     figKiwiVersion: 101,
     // Post-rebase export size: main's evolved codec (GUID-collision repair,
     // roundtrip fixes) combined with the stable-identity source-metadata
-    // integration serializes a slightly different (correct, idempotent) byte
-    // layout. All structural + G1→G2 idempotency assertions pass.
-    g1ExportSize: 497900,
-    g2ExportSize: 497900
+    // integration and component-prop varValue preservation serializes a
+    // slightly different (correct, idempotent) byte layout. All structural +
+    // G1→G2 idempotency assertions pass.
+    g1ExportSize: 498024,
+    g2ExportSize: 498024
   }
 ]
 
