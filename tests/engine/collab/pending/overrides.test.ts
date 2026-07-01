@@ -58,11 +58,7 @@ describe('pending overrides', () => {
     const joinerChild = joinerStore.graph.getNode(childStable)
     expect(joinerChild).toBeDefined()
 
-    const overrideKey = Object.keys(joinerInstance.overrides).find((k) =>
-      k.startsWith(`${joinerChild.id}:`)
-    )
-    expect(overrideKey).toBeDefined()
-    expect(joinerInstance.overrides[overrideKey]).toBe(42)
+    expect(joinerInstance.overrides[`${childStable}:x`]).toBe(42)
   })
 
   test('multiple pending overrides for one instance all resolve without clobbering', () => {
@@ -112,9 +108,9 @@ describe('pending overrides', () => {
     if (joinerInstance === undefined || joinerChild === undefined) {
       throw new Error('joiner instance or child missing after release')
     }
-    expect(joinerInstance.overrides[`${joinerChild.id}:x`]).toBe(11)
-    expect(joinerInstance.overrides[`${joinerChild.id}:y`]).toBe(22)
-    expect(joinerInstance.overrides[`${joinerChild.id}:visible`]).toBe(false)
+    expect(joinerInstance.overrides[`${childStable}:x`]).toBe(11)
+    expect(joinerInstance.overrides[`${childStable}:y`]).toBe(22)
+    expect(joinerInstance.overrides[`${childStable}:visible`]).toBe(false)
   })
 
   test('pending override release preserves already-resolved overrides on the instance', () => {
@@ -166,7 +162,7 @@ describe('pending overrides', () => {
     if (joinerInstanceBefore === undefined || joinerChildB === undefined) {
       throw new Error('joiner instance/childB missing before release')
     }
-    expect(joinerInstanceBefore.overrides[`${joinerChildB.id}:y`]).toBe(2)
+    expect(joinerInstanceBefore.overrides[`${childBStable}:y`]).toBe(2)
     expect(joinerState.pendingOverrideKeys.get(childAStable)?.size).toBe(1)
 
     // childA arrives -> release must MERGE childA:x into the existing overrides
@@ -182,7 +178,7 @@ describe('pending overrides', () => {
     if (joinerInstance === undefined || joinerChildA === undefined || joinerChildB === undefined) {
       throw new Error('joiner nodes missing after release')
     }
-    expect(joinerInstance.overrides[`${joinerChildA.id}:x`]).toBe(1)
-    expect(joinerInstance.overrides[`${joinerChildB.id}:y`]).toBe(2)
+    expect(joinerInstance.overrides[`${childAStable}:x`]).toBe(1)
+    expect(joinerInstance.overrides[`${childBStable}:y`]).toBe(2)
   })
 })

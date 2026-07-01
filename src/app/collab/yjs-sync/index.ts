@@ -12,6 +12,14 @@ export {
   resetCollabDevCounters
 } from './mapping'
 export {
+  appendRemoteNodeKeySegment,
+  decodeRemoteNodeKey,
+  isMalformedRemoteNodeKey,
+  originalStableIdFromRemoteNodeKey,
+  rawStableIdFromRemoteNodeKey,
+  remoteNodeKeyForStableId
+} from './remote-node-key'
+export {
   asString,
   isRecord,
   isSceneNodeType,
@@ -21,7 +29,19 @@ export {
   buildCreateProps,
   buildUpdateProps
 } from './serialize'
-export { applyYnodeToGraph } from './graph-apply'
+export { applyYnodeToGraph, removeFromPendingQueues } from './graph-apply'
+export {
+  applyInstanceOverrideValuesToChildren,
+  findInstanceDescendantByStableId,
+  findInstanceDescendantByStablePath,
+  findOwningComponentBackedInstance,
+  findOwningInstance,
+  isComponentBackedInstanceDescendant,
+  isInstanceDescendant,
+  mergeInstanceDescendantOverridesForYjs,
+  resolveInstanceOverrideChildId
+} from './instance-descendants'
+export { fallbackRootPageId, removeLocalRootChildrenForRemoteAdoption } from './root-adoption'
 export { bindCollabGraphEvents, registerYjsObservers, createYjsGraphSync } from './sync'
 export {
   stableIdForVariable,
@@ -37,11 +57,11 @@ export {
   syncAllVariablesToYjs,
   remapBoundVariablesToRemote,
   remapBoundVariablesToLocal
-} from './variables'
+} from './variable/sync'
 export {
   applyVariableToGraph,
   applyCollectionToGraph,
   applyYjsVariablesToGraph,
-  applyYjsCollectionsToGraph,
-  releasePendingVariableBindings
-} from './variable-apply'
+  applyYjsCollectionsToGraph
+} from './variable/apply'
+export { releasePendingVariableBindings } from './pending-variables'

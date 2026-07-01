@@ -3,6 +3,7 @@ import type * as Y from 'yjs'
 import type { GraphSyncState, SceneGraph, SceneNode } from '@open-pencil/core/scene-graph'
 
 import type { YNodes } from './constants'
+import { rawStableIdFromRemoteNodeKey, remoteNodeKeyForStableId } from './remote-node-key'
 
 /**
  * Dev-only flag. When true, performance counters track O(n) fallback paths
@@ -44,10 +45,16 @@ export function stableIdForNode(node: SceneNode): string {
  * The root is intentionally not handled here: its mapping is owned by
  * `remoteRootStableId` and is pre-seeded by makeHostRootState / reconcileRemoteRoot.
  */
-export function ensureRemoteMapping(state: GraphSyncState, node: SceneNode): string {
+export function ensureRemoteMapping(
+  state: GraphSyncState,
+  node: SceneNode,
+  remoteStableId = remoteNodeKeyForStableId(stableIdForNode(node))
+): string {
   const existing = state.localToRemote.get(node.id)
-  if (existing !== undefined) return existing
-  const remoteStableId = stableIdForNode(node)
+  if (existing === remoteStableId) return existing
+  if (existing !== undefined && state.remoteToLocal.get(existing) === node.id) {
+    state.remoteToLocal.delete(existing)
+  }
   state.localToRemote.set(node.id, remoteStableId)
   // Don't overwrite an existing reverse mapping that points to a different
   // node. Duplicate stable ids are handled by the importer's GUID remediation,
@@ -87,20 +94,24 @@ export function stableIdForRuntimeId(
 ): string | null {
   if (runtimeId === null || runtimeId === undefined) return null
   if (runtimeId === graph.rootId) return state.remoteRootStableId
+  const mapped = state.localToRemote.get(runtimeId)
+  if (mapped !== undefined) return mapped
   const node = graph.getNode(runtimeId)
   if (node === undefined) return null
-  return stableIdForNode(node)
+  return remoteNodeKeyForStableId(stableIdForNode(node))
 }
 
 export function findNodeByStableId(graph: SceneGraph, stableId: string): SceneNode | undefined {
+  const rawStableId = rawStableIdFromRemoteNodeKey(stableId)
+  if (rawStableId === null) return undefined
   // Use the O(1) stable ID index when available
-  const runtimeId = graph.identity.stableIdToRuntimeId(stableId)
+  const runtimeId = graph.identity.stableIdToRuntimeId(rawStableId)
   if (runtimeId !== undefined) {
     return graph.getNode(runtimeId)
   }
   // Fallback: linear scan for graphs without identity (e.g., test stubs)
   for (const node of graph.getAllNodes()) {
-    if (stableIdForNode(node) === stableId) {
+    if (stableIdForNode(node) === rawStableId) {
       if (IS_DEV) {
         findNodeByStableIdFallbackCount++
         if (findNodeByStableIdFallbackCount === FIND_NODE_FALLBACK_THRESHOLD) {

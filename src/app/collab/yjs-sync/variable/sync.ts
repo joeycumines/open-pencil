@@ -1,15 +1,24 @@
 import * as Y from 'yjs'
 
+import { createDefaultSource } from '@open-pencil/core/scene-graph'
 import type {
   GraphSyncState,
   SceneGraph,
+  SourceMetadata,
   Variable,
   VariableCollection,
   VariableCollectionMode,
   VariableValue
 } from '@open-pencil/core/scene-graph'
 
-import type { YCollections, YVariables } from './constants'
+import type { YCollections, YVariables } from '../constants'
+
+export interface RemoteVariableCollectionModePayload {
+  modeId: string
+  name: string
+  sourceId: string
+  sourceFormat: 'fig' | null
+}
 
 // ---------------------------------------------------------------------------
 // Stable ID helpers
@@ -25,6 +34,58 @@ export function stableIdForCollection(collection: VariableCollection): string {
 
 export function stableIdForMode(mode: VariableCollectionMode): string {
   return mode.source?.id ?? mode.modeId
+}
+
+export function remoteSourceMetadata(sourceId: string, sourceFormat: 'fig' | null): SourceMetadata {
+  return {
+    ...createDefaultSource(),
+    id: sourceId,
+    format: sourceFormat === 'fig' ? 'fig' : null
+  }
+}
+
+export function replaceImportedSource(
+  graph: SceneGraph,
+  current: SourceMetadata | undefined,
+  next: SourceMetadata
+): SourceMetadata {
+  graph.identity.unregisterImportedSource(current)
+  graph.identity.registerImportedSource(next)
+  return next
+}
+
+export function registerCollectionImportedSources(
+  graph: SceneGraph,
+  collection: VariableCollection
+): void {
+  graph.identity.registerImportedSource(collection.source)
+  for (const mode of collection.modes) graph.identity.registerImportedSource(mode.source)
+}
+
+export function registerModeImportedSources(
+  graph: SceneGraph,
+  collection: VariableCollection
+): void {
+  for (const mode of collection.modes) graph.identity.registerImportedSource(mode.source)
+}
+
+export function unregisterModeImportedSources(
+  graph: SceneGraph,
+  collection: VariableCollection
+): void {
+  for (const mode of collection.modes) graph.identity.unregisterImportedSource(mode.source)
+}
+
+function stableIdForCollectionId(
+  graph: SceneGraph,
+  state: GraphSyncState,
+  collectionId: string | undefined
+): string | undefined {
+  if (collectionId === undefined) return undefined
+  const mapped = state.localToCollection.get(collectionId)
+  if (mapped !== undefined) return mapped
+  const collection = graph.variableCollections.get(collectionId)
+  return collection === undefined ? undefined : stableIdForCollection(collection)
 }
 
 // ---------------------------------------------------------------------------
@@ -81,20 +142,151 @@ export function toModeRuntimeId(
   collectionId: string | undefined
 ): string | undefined {
   if (stableId === null || stableId === undefined) return undefined
-  const existing = state.modeToLocal.get(stableId)
+  const collectionStableId = stableIdForCollectionId(graph, state, collectionId)
+  const existing =
+    collectionStableId === undefined
+      ? undefined
+      : state.modeToLocal.get(collectionStableId)?.get(stableId)
   if (existing !== undefined) return existing
   if (collectionId !== undefined) {
     const collection = graph.variableCollections.get(collectionId)
     if (collection) {
       for (const mode of collection.modes) {
         if (stableIdForMode(mode) === stableId) {
-          state.modeToLocal.set(stableId, mode.modeId)
+          if (collectionStableId !== undefined) {
+            ensureModeMapping(state, collectionStableId, stableId, mode.modeId)
+          }
           return mode.modeId
         }
       }
     }
   }
   return undefined
+}
+
+export function isRuntimeNamespaceOccupied(graph: SceneGraph, id: string): boolean {
+  return graph.nodes.has(id) || graph.variables.has(id) || graph.variableCollections.has(id)
+}
+
+export function pruneModeMappingsForCollection(
+  state: GraphSyncState,
+  collectionStableId: string,
+  remoteModeStableIds: ReadonlySet<string>
+): void {
+  const mappedModes = state.modeToLocal.get(collectionStableId)
+  if (mappedModes === undefined) return
+  for (const remoteModeStableId of mappedModes.keys()) {
+    if (!remoteModeStableIds.has(remoteModeStableId)) mappedModes.delete(remoteModeStableId)
+  }
+  if (mappedModes.size === 0) state.modeToLocal.delete(collectionStableId)
+}
+
+export function activeModeIdForCollection(
+  graph: SceneGraph,
+  collectionId: string,
+  localDefaultModeId: string,
+  modes: VariableCollectionMode[]
+): string {
+  const activeModeId = graph.activeMode.get(collectionId)
+  if (activeModeId !== undefined && modes.some((mode) => mode.modeId === activeModeId)) {
+    return activeModeId
+  }
+  return localDefaultModeId
+}
+
+export function mapRemoteModesToLocal(
+  graph: SceneGraph,
+  state: GraphSyncState,
+  modes: RemoteVariableCollectionModePayload[],
+  collectionStableId: string,
+  collectionId: string | undefined
+): VariableCollectionMode[] {
+  return modes.map((mode) => {
+    const mappedModeId =
+      collectionId === undefined
+        ? undefined
+        : toModeRuntimeId(graph, state, mode.modeId, collectionId)
+    const localModeId =
+      mappedModeId !== undefined && !isRuntimeNamespaceOccupied(graph, mappedModeId)
+        ? mappedModeId
+        : graph.generateNodeId()
+    ensureModeMapping(state, collectionStableId, mode.modeId, localModeId)
+    return {
+      modeId: localModeId,
+      name: mode.name,
+      source: remoteSourceMetadata(mode.sourceId, mode.sourceFormat)
+    }
+  })
+}
+
+export function ensureModeMapping(
+  state: GraphSyncState,
+  collectionStableId: string,
+  modeStableId: string,
+  localModeId: string
+): void {
+  let collectionModes = state.modeToLocal.get(collectionStableId)
+  if (collectionModes === undefined) {
+    collectionModes = new Map()
+    state.modeToLocal.set(collectionStableId, collectionModes)
+  }
+  collectionModes.set(modeStableId, localModeId)
+}
+
+export function deleteVariableMapping(
+  state: GraphSyncState,
+  localVariableId: string | undefined,
+  remoteStableId = localVariableId === undefined
+    ? undefined
+    : state.localToVariable.get(localVariableId)
+): void {
+  if (localVariableId !== undefined) state.localToVariable.delete(localVariableId)
+  if (remoteStableId === undefined) return
+  state.variableToLocal.delete(remoteStableId)
+  deletePendingVariableReferences(state, remoteStableId)
+}
+
+export function clearPendingVariableAliasesForVariable(
+  state: GraphSyncState,
+  remoteStableId: string
+): void {
+  for (const [aliasTargetStableId, entries] of state.pendingVariableAliases) {
+    const remaining = [...entries].filter((entry) => entry.variableStableId !== remoteStableId)
+    if (remaining.length === entries.size) continue
+    if (remaining.length === 0) {
+      state.pendingVariableAliases.delete(aliasTargetStableId)
+    } else {
+      state.pendingVariableAliases.set(aliasTargetStableId, new Set(remaining))
+    }
+  }
+}
+
+function deletePendingVariableReferences(state: GraphSyncState, remoteStableId: string): void {
+  state.pendingVariableBindings.delete(remoteStableId)
+  state.pendingVariableAliases.delete(remoteStableId)
+  for (const [collectionStableId, pendingVariableIds] of state.pendingVariableCollections) {
+    if (!pendingVariableIds.delete(remoteStableId)) continue
+    if (pendingVariableIds.size === 0) state.pendingVariableCollections.delete(collectionStableId)
+  }
+  clearPendingVariableAliasesForVariable(state, remoteStableId)
+}
+
+export function deleteCollectionMapping(
+  state: GraphSyncState,
+  localCollectionId: string | undefined,
+  remoteStableId = localCollectionId === undefined
+    ? undefined
+    : state.localToCollection.get(localCollectionId)
+): void {
+  if (localCollectionId !== undefined) state.localToCollection.delete(localCollectionId)
+  if (remoteStableId === undefined) return
+  state.collectionToLocal.delete(remoteStableId)
+  const pendingVariableIds = [...(state.pendingVariableCollections.get(remoteStableId) ?? [])]
+  state.pendingVariableCollections.delete(remoteStableId)
+  for (const variableStableId of pendingVariableIds) {
+    deletePendingVariableReferences(state, variableStableId)
+  }
+  state.modeToLocal.delete(remoteStableId)
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +425,9 @@ export function remapBoundVariablesToLocal(
   graph: SceneGraph,
   state: GraphSyncState,
   boundVariables: Record<string, string> | undefined,
-  nodeStableId: string
+  nodeStableId: string,
+  instanceStableId?: string,
+  nestedInstanceStablePath?: readonly string[]
 ): Record<string, string> {
   if (boundVariables === undefined) return {}
   const remapped: Record<string, string> = {}
@@ -247,7 +441,13 @@ export function remapBoundVariablesToLocal(
         set = new Set()
         state.pendingVariableBindings.set(stableId, set)
       }
-      set.add({ nodeStableId, field })
+      set.add({
+        nodeStableId,
+        instanceStableId,
+        nestedInstanceStablePath:
+          nestedInstanceStablePath === undefined ? undefined : [...nestedInstanceStablePath],
+        field
+      })
     }
   }
   return remapped

@@ -11,45 +11,43 @@ import type {
 import {
   EXCLUDED_SYNC_KEYS,
   JSON_PROPERTY_KEYS,
+  YJS_ORIGINAL_SOURCE_ID_KEY,
+  YJS_PARENT_INSTANCE_ID_KEY,
+  YJS_PARENT_INSTANCE_PATH_KEY,
   YJS_NODE_PROPERTY_KEYS,
   type NodeProps,
   type YNodes
 } from './constants'
-import { ensureRemoteMapping, stableIdForNode, stableIdForRuntimeId, toRuntimeId } from './mapping'
-import { remapBoundVariablesToLocal, remapBoundVariablesToRemote } from './variables'
+import {
+  canStoreInstanceDescendantOverrideProp,
+  ensureRemoteMappingForNode,
+  findInstanceDescendantByStableId,
+  findInstanceDescendantByStablePath,
+  originalStableIdForScopedInstanceDescendant,
+  remoteStableIdForRuntimeId,
+  resolveInstanceOverrideChildId
+} from './instance-descendants'
+import { findNodeByStableId, stableIdForNode, toRuntimeId } from './mapping'
+import { parentInstanceBranchForRemoteParent, resolveRemoteParentId } from './parent-routing'
+import {
+  INVALID_YJS_NODE_VALUE,
+  isPlainRecord,
+  validateYNodeBareOverrideValue,
+  validateYNodePropertyValue
+} from './payload-validation'
+import { isMalformedRemoteNodeKey, rawStableIdFromRemoteNodeKey } from './remote-node-key'
+import { tryParseSourceFig } from './source-fig'
+import { remapBoundVariablesToLocal, remapBoundVariablesToRemote } from './variable/sync'
+
+export { isPlainRecord as isRecord, isSceneNodeType } from './payload-validation'
 
 export function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-export function isRecord(value: unknown): value is NodeProps {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-export function isSceneNodeType(value: unknown): value is SceneNode['type'] {
-  const known: readonly string[] = [
-    'DOCUMENT',
-    'CANVAS',
-    'FRAME',
-    'GROUP',
-    'VECTOR',
-    'BOOLEAN_OPERATION',
-    'STAR',
-    'LINE',
-    'ELLIPSE',
-    'POLYGON',
-    'RECTANGLE',
-    'TEXT',
-    'SLICE',
-    'COMPONENT',
-    'COMPONENT_SET',
-    'INSTANCE',
-    'SECTION',
-    'CONNECTOR',
-    'SHAPE_WITH_TEXT',
-    'ROUNDED_RECTANGLE'
-  ]
-  return typeof value === 'string' && known.includes(value)
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!isPlainRecord(value)) return false
+  return Object.values(value).every((entry) => typeof entry === 'string')
 }
 
 export function yNodeToProps(ynode: Y.Map<unknown>): NodeProps {
@@ -68,7 +66,11 @@ export function yNodeToProps(ynode: Y.Map<unknown>): NodeProps {
   for (const [key, value] of ynode.entries()) {
     if (EXCLUDED_SYNC_KEYS.has(key)) continue
     if (YJS_NODE_PROPERTY_KEYS.has(key)) {
-      props[key] = parseValue(key, value)
+      const parsed = parseValue(key, value)
+      const validated = validateYNodePropertyValue(key, parsed)
+      if (validated !== INVALID_YJS_NODE_VALUE) {
+        props[key] = validated
+      }
     }
   }
 
@@ -93,32 +95,74 @@ function setIfChanged(ynode: Y.Map<unknown>, key: string, value: unknown): void 
   }
 }
 
+function setRecordIfChanged(
+  ynode: Y.Map<unknown>,
+  key: string,
+  value: Record<string, unknown>
+): void {
+  const current = ynode.get(key)
+  if (!isPlainRecord(current) || JSON.stringify(current) !== JSON.stringify(value)) {
+    ynode.set(key, value)
+  }
+}
+
+function setStringArrayIfChanged(
+  ynode: Y.Map<unknown>,
+  key: string,
+  value: readonly string[]
+): void {
+  const current = ynode.get(key)
+  if (
+    !Array.isArray(current) ||
+    current.length !== value.length ||
+    current.some((item, index) => item !== value[index])
+  ) {
+    ynode.set(key, [...value])
+  }
+}
+
 export function syncNodePropsToYMap(
   node: SceneNode,
   ynode: Y.Map<unknown>,
   graph: SceneGraph,
   state: GraphSyncState
 ): void {
+  const scopedOriginalSourceId = originalStableIdForScopedInstanceDescendant(graph, state, node)
   const remoteStableId =
-    node.id === graph.rootId ? stableIdForNode(node) : ensureRemoteMapping(state, node)
+    node.id === graph.rootId
+      ? stableIdForNode(node)
+      : ensureRemoteMappingForNode(graph, state, node)
   setIfChanged(ynode, 'id', remoteStableId)
 
   const parentStableId =
     node.id === graph.rootId
       ? state.remoteRootStableId
-      : stableIdForRuntimeId(graph, state, node.parentId)
+      : remoteStableIdForRuntimeId(graph, state, node.parentId)
   setIfChanged(ynode, 'parentId', parentStableId)
 
-  const componentStableId = stableIdForRuntimeId(graph, state, node.componentId)
+  const parentInstanceBranch = parentInstanceBranchForRemoteParent(graph, state, node)
+  if (parentInstanceBranch === null) {
+    ynode.delete(YJS_PARENT_INSTANCE_ID_KEY)
+    ynode.delete(YJS_PARENT_INSTANCE_PATH_KEY)
+  } else {
+    setIfChanged(ynode, YJS_PARENT_INSTANCE_ID_KEY, parentInstanceBranch.ownerStableId)
+    if (parentInstanceBranch.nestedStablePath.length === 0) {
+      ynode.delete(YJS_PARENT_INSTANCE_PATH_KEY)
+    } else {
+      setStringArrayIfChanged(
+        ynode,
+        YJS_PARENT_INSTANCE_PATH_KEY,
+        parentInstanceBranch.nestedStablePath
+      )
+    }
+  }
+
+  const componentStableId = remoteStableIdForRuntimeId(graph, state, node.componentId)
   setIfChanged(ynode, 'componentId', componentStableId)
 
-  if (node.type === 'INSTANCE' && Object.keys(node.overrides).length > 0) {
+  if (node.type === 'INSTANCE') {
     const remapped = remapOverridesToRemote(graph, state, node.overrides)
-    if (Object.keys(remapped).length > 0) {
-      setIfChanged(ynode, 'overrides', remapped)
-    } else {
-      ynode.delete('overrides')
-    }
+    setRecordIfChanged(ynode, 'overrides', remapped)
   } else {
     ynode.delete('overrides')
   }
@@ -126,7 +170,16 @@ export function syncNodePropsToYMap(
   for (const [key, value] of Object.entries(node)) {
     if (key === 'id' || key === 'parentId' || key === 'componentId' || key === 'overrides') continue
     if (key === 'source') {
-      setIfChanged(ynode, 'sourceId', node.source.id)
+      setIfChanged(
+        ynode,
+        'sourceId',
+        scopedOriginalSourceId === null ? node.source.id : remoteStableId
+      )
+      if (scopedOriginalSourceId === null) {
+        ynode.delete(YJS_ORIGINAL_SOURCE_ID_KEY)
+      } else {
+        setIfChanged(ynode, YJS_ORIGINAL_SOURCE_ID_KEY, scopedOriginalSourceId)
+      }
       setIfChanged(ynode, 'sourceFormat', node.source.format)
       setIfChanged(ynode, 'sourceFig', JSON.stringify(node.source.fig))
       continue
@@ -135,7 +188,7 @@ export function syncNodePropsToYMap(
       const childStableIds = (value as string[])
         .map((id) => {
           const child = graph.getNode(id)
-          return child ? stableIdForNode(child) : null
+          return child ? remoteStableIdForRuntimeId(graph, state, child.id) : null
         })
         .filter((id): id is string => id !== null)
       setIfChanged(ynode, 'childIds', JSON.stringify(childStableIds))
@@ -175,49 +228,55 @@ function remapOverridesToRemote(
   const remapped: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(overrides)) {
     const { childId, prop } = splitOverrideKey(key)
-    const stableId = stableIdForRuntimeId(graph, state, childId)
+    if (copyBareOverride(remapped, key, value, childId, prop)) continue
+    const stableId = stableOverrideChildIdForRemote(graph, state, childId)
     if (stableId === null) continue
-    remapped[`${stableId}:${prop}`] = value
+    const remappedValue = remapOverrideValueToRemote(graph, state, prop, value)
+    if (remappedValue !== INVALID_YJS_NODE_VALUE) remapped[`${stableId}:${prop}`] = remappedValue
   }
   return remapped
 }
 
-function parseFigmaPayload(value: unknown): SourceMetadata['fig'] | undefined {
-  if (!isRecord(value)) return undefined
-  // Validate known fields — reject unexpected types to prevent type confusion
-  // from malformed or malicious remote peer data
-  if (value.rawSize !== null && typeof value.rawSize !== 'object') return undefined
-  if (value.rawTransform !== null && typeof value.rawTransform !== 'object') return undefined
-  if (value.rawNodeFields !== undefined && typeof value.rawNodeFields !== 'object') return undefined
-  if (value.layout !== null && typeof value.layout !== 'object') return undefined
-  if (value.symbolOverrides !== undefined && !Array.isArray(value.symbolOverrides)) return undefined
-  if (
-    value.componentPropAssignments !== undefined &&
-    !Array.isArray(value.componentPropAssignments)
-  )
-    return undefined
-  if (value.derivedSymbolData !== undefined && !Array.isArray(value.derivedSymbolData))
-    return undefined
-  if (
-    value.derivedSymbolDataLayoutVersion !== null &&
-    typeof value.derivedSymbolDataLayoutVersion !== 'number'
-  )
-    return undefined
-  if (value.uniformScaleFactor !== null && typeof value.uniformScaleFactor !== 'number')
-    return undefined
-  // Merge validated fields over defaults
-  return { ...createDefaultSource().fig, ...value } as SourceMetadata['fig']
+function remapOverrideValueToRemote(
+  graph: SceneGraph,
+  state: GraphSyncState,
+  prop: string,
+  value: unknown
+): unknown {
+  if (!canStoreInstanceDescendantOverrideProp(prop)) return INVALID_YJS_NODE_VALUE
+  if (prop === 'boundVariables' && isStringRecord(value)) {
+    return remapBoundVariablesToRemote(graph, state, value)
+  }
+  if (prop === 'overrides' && isPlainRecord(value)) {
+    return remapOverridesToRemote(graph, state, value)
+  }
+  return validateYNodePropertyValue(prop, value)
 }
 
-function tryParseSourceFig(value: unknown): SourceMetadata['fig'] | undefined {
-  const str = asString(value)
-  if (str === undefined) return undefined
-  try {
-    const parsed: unknown = JSON.parse(str)
-    return parseFigmaPayload(parsed)
-  } catch {
-    return undefined
+function copyBareOverride(
+  remapped: Record<string, unknown>,
+  key: string,
+  value: unknown,
+  childId: string,
+  prop: string
+): boolean {
+  if (childId !== '') return false
+  const validated = validateYNodeBareOverrideValue(key, prop, value)
+  if (validated !== INVALID_YJS_NODE_VALUE) remapped[key] = validated
+  return true
+}
+
+function stableOverrideChildIdForRemote(
+  graph: SceneGraph,
+  state: GraphSyncState,
+  childId: string
+): string | null {
+  const runtimeStableId = remoteStableIdForRuntimeId(graph, state, childId)
+  if (runtimeStableId !== null) return runtimeStableId
+  if (state.remoteToLocal.has(childId) || findNodeByStableId(graph, childId) !== undefined) {
+    return childId
   }
+  return null
 }
 
 function filterProps(props: NodeProps, exclude: readonly string[]): NodeProps {
@@ -233,6 +292,9 @@ function filterProps(props: NodeProps, exclude: readonly string[]): NodeProps {
 const CREATE_EXCLUDED_KEYS = [
   'id',
   'parentId',
+  YJS_PARENT_INSTANCE_ID_KEY,
+  YJS_PARENT_INSTANCE_PATH_KEY,
+  YJS_ORIGINAL_SOURCE_ID_KEY,
   'componentId',
   'sourceFormat',
   'sourceFig',
@@ -246,11 +308,8 @@ export function buildCreateProps(
   props: NodeProps,
   remoteStableId: string
 ): Partial<SceneNode> {
-  const parentStableId = asString(props.parentId)
-  const parentId =
-    parentStableId !== undefined
-      ? (toRuntimeId(graph, state, parentStableId) ?? graph.rootId)
-      : graph.rootId
+  const parentResolution = resolveRemoteParentId(graph, state, props)
+  const parentId = parentResolution.parentId ?? graph.rootId
 
   let componentId: string | null = null
   if ('componentId' in props) {
@@ -296,19 +355,18 @@ export function buildUpdateProps(
   graph: SceneGraph,
   state: GraphSyncState,
   props: NodeProps,
-  existing: SceneNode
+  existing: SceneNode,
+  remoteStableId: string
 ): Partial<SceneNode> {
   const exclude: string[] = ['type', 'childIds']
   let parentId: string | undefined
   let componentId: string | null | undefined
 
   if ('parentId' in props) {
-    const raw = props.parentId
-    if (typeof raw === 'string') {
-      parentId = toRuntimeId(graph, state, raw)
-      if (parentId === undefined) {
-        exclude.push('parentId')
-      }
+    const parentResolution = resolveRemoteParentId(graph, state, props)
+    parentId = parentResolution.parentId
+    if (parentId === undefined) {
+      exclude.push('parentId')
     }
   }
 
@@ -333,13 +391,8 @@ export function buildUpdateProps(
   }
 
   const overridesValue = update.overrides
-  if (overridesValue !== undefined && isRecord(overridesValue)) {
-    update.overrides = remapOverridesToLocal(
-      graph,
-      state,
-      overridesValue,
-      stableIdForNode(existing)
-    )
+  if (overridesValue !== undefined && isPlainRecord(overridesValue)) {
+    update.overrides = remapOverridesToLocal(graph, state, overridesValue, remoteStableId)
   }
 
   // Remap boundVariables variable IDs from stable IDs to local runtime IDs.
@@ -350,7 +403,7 @@ export function buildUpdateProps(
       graph,
       state,
       update.boundVariables as Record<string, string>,
-      stableIdForNode(existing)
+      remoteStableId
     )
   }
 
@@ -361,15 +414,35 @@ export function remapOverridesToLocal(
   graph: SceneGraph,
   state: GraphSyncState,
   overrides: Record<string, unknown> | undefined,
-  instanceRemoteStableId: string
+  instanceRemoteStableId: string,
+  nestedInstanceStablePath?: readonly string[]
 ): Record<string, unknown> {
   if (overrides === undefined) return {}
   const remapped: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(overrides)) {
     const { childId, prop } = splitOverrideKey(key)
-    const localChildId = toRuntimeId(graph, state, childId)
+    if (copyBareOverride(remapped, key, value, childId, prop)) continue
+    const validatedValue = validateRemoteOverrideValue(prop, value)
+    if (validatedValue === INVALID_YJS_NODE_VALUE) continue
+    if (isMalformedRemoteNodeKey(childId)) continue
+    const localChildId = resolveInstanceOverrideChildIdForPath(
+      graph,
+      state,
+      instanceRemoteStableId,
+      nestedInstanceStablePath,
+      childId
+    )
     if (localChildId !== undefined) {
-      remapped[`${localChildId}:${prop}`] = value
+      const localChildStableId = localOverrideChildStableId(graph, localChildId, childId)
+      remapped[`${localChildStableId}:${prop}`] = remapOverrideValueToLocal(
+        graph,
+        state,
+        prop,
+        validatedValue,
+        localChildStableId,
+        instanceRemoteStableId,
+        nestedInstanceStablePath
+      )
       continue
     }
     let set = state.pendingOverrideKeys.get(childId)
@@ -377,7 +450,113 @@ export function remapOverridesToLocal(
       set = new Set()
       state.pendingOverrideKeys.set(childId, set)
     }
-    set.add({ remoteStableId: instanceRemoteStableId, prop, value })
+    set.add({
+      remoteStableId: instanceRemoteStableId,
+      nestedInstanceStablePath: cloneNestedInstanceStablePath(nestedInstanceStablePath),
+      prop,
+      value: validatedValue
+    })
   }
   return remapped
+}
+
+function validateRemoteOverrideValue(prop: string, value: unknown): unknown {
+  if (!canStoreInstanceDescendantOverrideProp(prop)) return INVALID_YJS_NODE_VALUE
+  if (prop === 'overrides') return validateRemoteOverridesRecord(value)
+  return validateYNodePropertyValue(prop, value)
+}
+
+function validateRemoteOverridesRecord(value: unknown): unknown {
+  if (!isPlainRecord(value)) return INVALID_YJS_NODE_VALUE
+  const result: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    const { childId, prop } = splitOverrideKey(key)
+    if (childId === '') {
+      const validated = validateYNodeBareOverrideValue(key, prop, entry)
+      if (validated !== INVALID_YJS_NODE_VALUE) result[key] = validated
+      continue
+    }
+    const validated = validateRemoteOverrideValue(prop, entry)
+    if (validated !== INVALID_YJS_NODE_VALUE) result[key] = validated
+  }
+  return result
+}
+
+function localOverrideChildStableId(
+  graph: SceneGraph,
+  localChildId: string,
+  remoteChildStableId: string
+): string {
+  const localChild = graph.getNode(localChildId)
+  if (localChild !== undefined) return stableIdForNode(localChild)
+  return rawStableIdFromRemoteNodeKey(remoteChildStableId) ?? remoteChildStableId
+}
+
+function resolveInstanceOverrideChildIdForPath(
+  graph: SceneGraph,
+  state: GraphSyncState,
+  instanceRemoteStableId: string,
+  nestedInstanceStablePath: readonly string[] | undefined,
+  childStableId: string
+): string | undefined {
+  if (nestedInstanceStablePath === undefined || nestedInstanceStablePath.length === 0) {
+    return resolveInstanceOverrideChildId(graph, state, instanceRemoteStableId, childStableId)
+  }
+
+  const instanceId = state.remoteToLocal.get(instanceRemoteStableId)
+  const instance = instanceId === undefined ? undefined : graph.getNode(instanceId)
+  if (instance?.type !== 'INSTANCE') return undefined
+  const nestedInstance = findInstanceDescendantByStablePath(
+    graph,
+    instance,
+    nestedInstanceStablePath
+  )
+  if (nestedInstance?.type !== 'INSTANCE') return undefined
+  return findInstanceDescendantByStableId(graph, nestedInstance, childStableId)?.id
+}
+
+function remapOverrideValueToLocal(
+  graph: SceneGraph,
+  state: GraphSyncState,
+  prop: string,
+  value: unknown,
+  childStableId: string,
+  instanceRemoteStableId: string,
+  nestedInstanceStablePath?: readonly string[]
+): unknown {
+  if (prop === 'boundVariables' && isStringRecord(value)) {
+    return remapBoundVariablesToLocal(
+      graph,
+      state,
+      value,
+      childStableId,
+      instanceRemoteStableId,
+      nestedInstanceStablePath
+    )
+  }
+  if (prop === 'overrides' && isPlainRecord(value)) {
+    return remapOverridesToLocal(
+      graph,
+      state,
+      value,
+      instanceRemoteStableId,
+      extendNestedInstanceStablePath(nestedInstanceStablePath, childStableId)
+    )
+  }
+  return value
+}
+
+function cloneNestedInstanceStablePath(
+  nestedInstanceStablePath: readonly string[] | undefined
+): string[] | undefined {
+  return nestedInstanceStablePath === undefined || nestedInstanceStablePath.length === 0
+    ? undefined
+    : [...nestedInstanceStablePath]
+}
+
+function extendNestedInstanceStablePath(
+  nestedInstanceStablePath: readonly string[] | undefined,
+  childStableId: string
+): string[] {
+  return [...(nestedInstanceStablePath ?? []), childStableId]
 }

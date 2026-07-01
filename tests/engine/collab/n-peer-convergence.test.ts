@@ -3,6 +3,41 @@ import { describe, expect, test } from 'bun:test'
 import { createPeerMesh } from '#tests/helpers/peer-mesh'
 
 describe('N-peer collaboration convergence', () => {
+  test('fresh joiner adopts host document without retaining local default page', () => {
+    const mesh = createPeerMesh(2)
+    const joinerOriginalPageId = mesh.peers[1].store.state.currentPageId
+    mesh.peers[1].store.graph.createNode('RECTANGLE', joinerOriginalPageId, {
+      name: 'Joiner Local Draft',
+      width: 25,
+      height: 25
+    })
+
+    const hostPage = mesh.peers[0].store.graph.getPages()[0]
+    mesh.peers[0].store.graph.createNode('RECTANGLE', hostPage.id, {
+      name: 'Host Canonical Rect',
+      width: 100,
+      height: 100
+    })
+
+    mesh.peers[0].sync.syncAllNodesToYjs()
+    mesh.syncFullMesh()
+
+    const hostPages = mesh.peers[0].store.graph.getPages()
+    const joinerPages = mesh.peers[1].store.graph.getPages()
+    const adoptedHostPage = mesh.findHostPage(1)
+
+    expect(joinerPages).toHaveLength(hostPages.length)
+    expect(joinerPages.some((page) => page.id === joinerOriginalPageId)).toBe(false)
+    expect(adoptedHostPage).toBeDefined()
+    expect(mesh.peers[1].store.state.currentPageId).toBe(adoptedHostPage?.id)
+
+    const joinerNodeNames = [...mesh.peers[1].store.graph.getAllNodes()].map((node) => node.name)
+    expect(joinerNodeNames).toContain('Host Canonical Rect')
+    expect(joinerNodeNames).not.toContain('Joiner Local Draft')
+
+    mesh.dispose()
+  })
+
   test('3-peer convergence: all peers see the same nodes after full mesh sync', () => {
     const mesh = createPeerMesh(3)
 

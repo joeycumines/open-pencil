@@ -1,5 +1,7 @@
 import type * as Y from 'yjs'
 
+import type { SceneNode } from '@open-pencil/core/scene-graph'
+
 import type { EditorStore } from '@/app/editor/active-store'
 import { YJS_JSON_FIELDS } from '@/constants'
 
@@ -16,7 +18,7 @@ export type GraphBindingOptions = {
   getYnodes: () => YNodes | null
   getSuppressGraphSync: () => boolean
   setSuppressYjsEvents: (value: boolean) => void
-  syncNodeToYjs: (nodeId: string) => void
+  syncNodeToYjs: (nodeId: string, changes?: Partial<SceneNode>) => void
   syncVariableToYjs: (variableId: string) => void
   syncCollectionToYjs: (collectionId: string) => void
 }
@@ -37,6 +39,7 @@ export type YjsObserverOptions = {
   getSuppressYjsEvents: () => boolean
   setSuppressGraphSync: (value: boolean) => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
+  updatePeersList?: () => void
   reconcileRemoteRoot?: ReconcileRootFn
 }
 
@@ -49,6 +52,10 @@ export type YjsGraphSyncOptions = {
   getYcollections: () => YCollections | null
   setSuppressYjsEvents: (value: boolean) => void
 }
+
+export const YJS_PARENT_INSTANCE_ID_KEY = 'parentInstanceId'
+export const YJS_PARENT_INSTANCE_PATH_KEY = 'parentInstancePath'
+export const YJS_ORIGINAL_SOURCE_ID_KEY = 'originalSourceId'
 
 export const EXCLUDED_SYNC_KEYS = new Set<string>([
   'source',
@@ -64,6 +71,9 @@ export const YJS_NODE_PROPERTY_KEYS = new Set<string>([
   'type',
   'name',
   'parentId',
+  YJS_PARENT_INSTANCE_ID_KEY,
+  YJS_PARENT_INSTANCE_PATH_KEY,
+  YJS_ORIGINAL_SOURCE_ID_KEY,
   'childIds',
   'x',
   'y',
@@ -206,5 +216,6 @@ export const JSON_PROPERTY_KEYS = new Set<string>([
   'dashPattern',
   'overrides',
   'childIds',
+  YJS_PARENT_INSTANCE_PATH_KEY,
   'boundVariables'
 ])

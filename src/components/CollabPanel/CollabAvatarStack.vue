@@ -8,6 +8,18 @@ import { useI18n } from '@open-pencil/vue'
 
 const collab = useCollabPanelContext()
 const { dialogs } = useI18n()
+
+function peerTooltip(peer: (typeof collab.peers)[number]) {
+  if (peer.selectionStatus === 'unsupported') {
+    return `${peer.name}: selection sharing unavailable (incompatible collaboration protocol)`
+  }
+  if (peer.selectionStatus === 'malformed') {
+    return `${peer.name}: selection sharing hidden (malformed collaboration payload)`
+  }
+  return collab.followingPeer === peer.clientId
+    ? dialogs.value.followingPeerStop({ name: peer.name })
+    : dialogs.value.clickToFollowPeer({ name: peer.name })
+}
 </script>
 
 <template>
@@ -22,15 +34,7 @@ const { dialogs } = useI18n()
       </div>
     </Tip>
 
-    <Tip
-      v-for="peer in collab.peers"
-      :key="peer.clientId"
-      :label="
-        collab.followingPeer === peer.clientId
-          ? dialogs.followingPeerStop({ name: peer.name })
-          : dialogs.clickToFollowPeer({ name: peer.name })
-      "
-    >
+    <Tip v-for="peer in collab.peers" :key="peer.clientId" :label="peerTooltip(peer)">
       <div
         data-test-id="collab-peer-avatar"
         class="flex size-6 cursor-pointer items-center justify-center rounded-full border-2 text-[10px] font-semibold text-white transition-all"

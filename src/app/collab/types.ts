@@ -1,11 +1,15 @@
 import type { Color } from '@open-pencil/core/types'
 
+export type RemotePeerSelectionStatus = 'ok' | 'unsupported' | 'malformed'
+
 export interface RemotePeer {
   clientId: number
   name: string
   color: Color
   cursor?: { x: number; y: number; pageId: string }
   selection?: string[]
+  selectionStatus: RemotePeerSelectionStatus
+  selectionStatusReason?: string
 }
 
 export interface CollabState {

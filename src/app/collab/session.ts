@@ -6,6 +6,7 @@ import type { Awareness } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
 import { randomIndex } from '@open-pencil/core/random'
+import type { SceneNode } from '@open-pencil/core/scene-graph'
 
 import { connectCollabRoom } from '@/app/collab/room'
 import type { CollabState } from '@/app/collab/types'
@@ -35,7 +36,7 @@ type CollabSyncCallbacks = {
   tickFollow: () => void
   broadcastAwareness: () => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
-  syncNodeToYjs: (nodeId: string) => void
+  syncNodeToYjs: (nodeId: string, changes?: Partial<SceneNode>) => void
   syncVariableToYjs: (variableId: string) => void
   syncCollectionToYjs: (collectionId: string) => void
   reconcileRemoteRoot?: ReconcileRootFn
@@ -202,6 +203,7 @@ export function connectCollabSession({
       runtime.suppressGraphSync = value
     },
     applyYjsToGraph,
+    updatePeersList,
     reconcileRemoteRoot
   })
 

@@ -389,6 +389,36 @@ const noShortcutTextInLabels = createTextRule(
   }
 )
 
+const COLLAB_IDENTIFIER_ENCODER_ALLOWLIST = new Set([
+  'src/app/collab/yjs-sync/remote-node-key.ts',
+  'src/app/collab/yjs-sync/serialize.ts',
+  'src/app/collab/yjs-sync/variable/sync.ts'
+])
+
+const COLLAB_IDENTIFIER_ENCODER_PATTERN =
+  /JSON\.stringify\s*\(|['"`][^'"`]*(?::orphan:|:branch:|open-pencil:instance-selection)[^'"`]*['"`]/gu
+
+const noUnapprovedCollabIdentifierEncoders = createTextRule(
+  'open-pencil/no-unapproved-collab-identifier-encoders',
+  (sourceRel, content) => {
+    if (!sourceRel.startsWith('src/app/collab/') || !sourceRel.endsWith('.ts')) return []
+    if (COLLAB_IDENTIFIER_ENCODER_ALLOWLIST.has(sourceRel)) return []
+
+    const diagnostics: Array<{ message: string; line?: number; column?: number }> = []
+    for (const match of content.matchAll(COLLAB_IDENTIFIER_ENCODER_PATTERN)) {
+      const before = content.slice(0, match.index)
+      const lines = before.split('\n')
+      diagnostics.push({
+        message:
+          'Use the collab remote-node-key codec for string-boundary node identities; JSON.stringify and ad hoc :orphan:/:branch: prefixes are only allowed in approved codec/value-serialization modules.',
+        line: lines.length,
+        column: lines.at(-1)?.length ?? 0
+      })
+    }
+    return diagnostics
+  }
+)
+
 const noUiImportsInCore = createImportRule(
   'open-pencil/no-ui-imports-in-core',
   (sourceRel, specifier) => {
@@ -431,6 +461,7 @@ export const openPencilArchitecturePlugin = {
     noPropertyPanelInternalsOutsidePanel,
     noShortcutTextInLabels,
     noHardcodedMacOSShortcutGlyphs,
+    noUnapprovedCollabIdentifierEncoders,
     noUiImportsInCore
   ]
 }

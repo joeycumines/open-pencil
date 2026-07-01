@@ -4,12 +4,17 @@ import type * as awarenessProtocol from 'y-protocols/awareness'
 import { randomIndex } from '@open-pencil/core/random'
 import type { Color } from '@open-pencil/core/types'
 
+import { parseSelectionPayload, type AwarenessSelectionRef } from '@/app/collab/awareness-selection'
 import type { EditorStore } from '@/app/editor/active-store'
 import { PEER_COLORS, ROOM_ID_CHARS, ROOM_ID_LENGTH } from '@/constants'
 
 import type { RemotePeer } from './types'
 
 type Awareness = awarenessProtocol.Awareness
+
+export type RawRemotePeer = Omit<RemotePeer, 'selection'> & {
+  selection?: AwarenessSelectionRef[]
+}
 
 type CursorState = {
   x: number
@@ -21,20 +26,24 @@ type CursorState = {
 export function buildRemotePeers(
   states: Map<number, Record<string, unknown>>,
   localClientId: number
-): RemotePeer[] {
-  const peers: RemotePeer[] = []
+): RawRemotePeer[] {
+  const peers: RawRemotePeer[] = []
 
   states.forEach((peerState, clientId) => {
     if (clientId === localClientId) return
     const user = peerState.user as { name?: string; color?: Color } | undefined
     if (!user) return
-    peers.push({
+    const selection = parseSelectionPayload(peerState.selection)
+    const peer: RawRemotePeer = {
       clientId,
       name: user.name || 'Anonymous',
       color: user.color || PEER_COLORS[clientId % PEER_COLORS.length],
       cursor: peerState.cursor as RemotePeer['cursor'],
-      selection: peerState.selection as string[]
-    })
+      selectionStatus: selection.status,
+      selectionStatusReason: selection.status === 'ok' ? undefined : selection.reason
+    }
+    if (selection.status === 'ok') peer.selection = selection.refs
+    peers.push(peer)
   })
 
   return peers

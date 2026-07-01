@@ -10,7 +10,14 @@ import {
   createInitialCollabState
 } from '@/app/collab/session'
 import { DEFAULT_COLLAB_STATE, type CollabState, type RemotePeer } from '@/app/collab/types'
-import { applyYnodeToGraph, createYjsGraphSync, stableIdForNode } from '@/app/collab/yjs-sync'
+import {
+  applyYnodeToGraph,
+  createYjsGraphSync,
+  fallbackRootPageId,
+  remoteNodeKeyForStableId,
+  removeLocalRootChildrenForRemoteAdoption,
+  stableIdForNode
+} from '@/app/collab/yjs-sync'
 import type { EditorStore } from '@/app/editor/active-store'
 
 export { COLLAB_KEY, useCollabInjected } from '@/app/collab/context'
@@ -27,11 +34,16 @@ function setHostRootStableId(store: EditorStore): void {
   const root = graph.getNode(graph.rootId)
   if (root === undefined) return
   const state = graph.getSyncState()
-  const hostRootStableId = stableIdForNode(root)
+  const hostRootStableId = remoteNodeKeyForStableId(stableIdForNode(root))
   state.remoteRootStableId = hostRootStableId
   state.remoteToLocal.set(hostRootStableId, graph.rootId)
   state.localToRemote.set(graph.rootId, hostRootStableId)
   state.rootMapped = true
+}
+
+function switchToFirstAvailablePage(store: EditorStore): void {
+  const pageId = fallbackRootPageId(store.graph, store.state.currentPageId)
+  if (pageId !== null) void store.switchPage(pageId)
 }
 
 function reconcileRemoteRoot(
@@ -50,12 +62,15 @@ function reconcileRemoteRoot(
     const prevRootStableId = state.remoteRootStableId
     if (prevRootStableId !== null && prevRootStableId < remoteRootStableId) return
     // We yield — reset root mapping and adopt the remote root
+    removeLocalRootChildrenForRemoteAdoption(graph, state)
     if (prevRootStableId !== null) {
       state.remoteToLocal.delete(prevRootStableId)
       state.localToRemote.delete(graph.rootId)
     }
     state.rootMapped = false
     state.remoteRootStableId = null
+  } else {
+    removeLocalRootChildrenForRemoteAdoption(graph, state)
   }
 
   state.remoteRootStableId = remoteRootStableId
@@ -72,6 +87,7 @@ function reconcileRemoteRoot(
     }
   }
   state.pendingUntilRoot.clear()
+  switchToFirstAvailablePage(store)
 }
 
 export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {

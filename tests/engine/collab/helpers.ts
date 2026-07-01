@@ -9,6 +9,10 @@ import {
   applyYjsCollectionsToGraph,
   applyYjsVariablesToGraph,
   createYjsGraphSync,
+  fallbackRootPageId,
+  isMalformedRemoteNodeKey,
+  removeLocalRootChildrenForRemoteAdoption,
+  remoteNodeKeyForStableId,
   stableIdForNode,
   yNodeToProps,
   type ReconcileRootFn
@@ -21,6 +25,8 @@ import {
  */
 export interface TestStore {
   graph: SceneGraph
+  state: { currentPageId: string }
+  switchPage: (pageId: string) => void
   requestRender: () => void
   onEditorEvent: <K extends keyof EditorEvents>(event: K, handler: EditorEvents[K]) => () => void
 }
@@ -60,6 +66,8 @@ function createNodeEventBridge(graph: SceneGraph) {
         })
       case 'variable:created':
         return graph.onNodeEvents({ variableCreated: handler as (v: Variable) => void })
+      case 'variable:updated':
+        return graph.onNodeEvents({ variableUpdated: handler as (v: Variable) => void })
       case 'variable:deleted':
         return graph.onNodeEvents({ variableDeleted: handler as (id: string) => void })
       case 'collection:created':
@@ -76,13 +84,27 @@ function createNodeEventBridge(graph: SceneGraph) {
 
 export function createTestStore(graph?: SceneGraph): TestStore {
   const g = graph ?? new SceneGraph()
+  const firstPage = g.getPages()[0]
+  const state = { currentPageId: firstPage?.id ?? g.rootId }
   return {
     graph: g,
+    state,
+    switchPage: (pageId: string) => {
+      const page = g.getNode(pageId)
+      if (page?.type === 'CANVAS') {
+        state.currentPageId = pageId
+      }
+    },
     requestRender: () => {
       // no-op render stub for collab tests
     },
     onEditorEvent: createNodeEventBridge(g)
   }
+}
+
+function switchToFirstAvailablePage(targetStore: TestStore): void {
+  const pageId = fallbackRootPageId(targetStore.graph, targetStore.state.currentPageId)
+  if (pageId !== null) targetStore.state.currentPageId = pageId
 }
 
 export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
@@ -114,10 +136,13 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
       const currentRemote = state.remoteRootStableId
       if (currentRemote === remoteRootStableId) return
       if (currentRemote !== null && currentRemote < remoteRootStableId) return
+      removeLocalRootChildrenForRemoteAdoption(graph, state)
       if (currentRemote !== null) state.remoteToLocal.delete(currentRemote)
       state.localToRemote.delete(graph.rootId)
       state.rootMapped = false
       state.remoteRootStableId = null
+    } else {
+      removeLocalRootChildrenForRemoteAdoption(graph, state)
     }
     state.remoteRootStableId = remoteRootStableId
     state.remoteToLocal.set(remoteRootStableId, graph.rootId)
@@ -131,6 +156,7 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
       }
     }
     state.pendingUntilRoot.clear()
+    switchToFirstAvailablePage(targetStore)
   }
 
   return {
@@ -147,13 +173,52 @@ export function createTestYjsSync(store: TestStore, ydoc: Y.Doc) {
   }
 }
 
+export function createRemoteCollectionMap(
+  collectionStableId: string,
+  modeStableId: string,
+  variableStableIds: string[] = []
+): Y.Map<unknown> {
+  const ycol = new Y.Map<unknown>()
+  ycol.set('id', collectionStableId)
+  ycol.set('name', 'Remote Collection')
+  ycol.set('defaultModeId', modeStableId)
+  ycol.set(
+    'modes',
+    JSON.stringify([
+      { modeId: modeStableId, name: 'Default', sourceId: modeStableId, sourceFormat: null }
+    ])
+  )
+  ycol.set('variableIds', JSON.stringify(variableStableIds))
+  ycol.set('sourceId', collectionStableId)
+  ycol.set('sourceFormat', null)
+  return ycol
+}
+
+export function createRemoteVariableMap(
+  variableStableId: string,
+  collectionStableId: string,
+  valuesByMode: Record<string, unknown>,
+  name = 'Remote Token'
+): Y.Map<unknown> {
+  const yvar = new Y.Map<unknown>()
+  yvar.set('name', name)
+  yvar.set('type', 'FLOAT')
+  yvar.set('description', '')
+  yvar.set('hiddenFromPublishing', false)
+  yvar.set('collectionId', collectionStableId)
+  yvar.set('sourceId', variableStableId)
+  yvar.set('sourceFormat', null)
+  yvar.set('valuesByMode', JSON.stringify(valuesByMode))
+  return yvar
+}
+
 export function makeHostRootState(store: TestStore): string {
   const root = store.graph.getNode(store.graph.rootId)
   if (root === undefined) {
     throw new Error('host graph has no root')
   }
   const state = store.graph.getSyncState()
-  const hostRootStableId = stableIdForNode(root)
+  const hostRootStableId = remoteNodeKeyForStableId(stableIdForNode(root))
   state.remoteRootStableId = hostRootStableId
   state.remoteToLocal.set(hostRootStableId, store.graph.rootId)
   state.localToRemote.set(store.graph.rootId, hostRootStableId)
@@ -184,7 +249,7 @@ export function observeTargetDoc(
               const ynode = ynodes.get(remoteStableId)
               if (ynode === undefined) continue
               const parentId = (ynode.get('parentId') as string | undefined) ?? null
-              if (parentId === remoteStableId) {
+              if (parentId === remoteStableId && !isMalformedRemoteNodeKey(remoteStableId)) {
                 // Root candidate found — reconcile even if we already have a root
                 // (handles split-brain when both peers called shareCurrentDoc)
                 if (state.remoteRootStableId !== remoteStableId) {
@@ -200,6 +265,7 @@ export function observeTargetDoc(
     suppressGraphSync = true
     try {
       applyYjsToGraph(events)
+      switchToFirstAvailablePage(store)
     } finally {
       suppressGraphSync = false
     }
@@ -241,7 +307,7 @@ export function observeTargetDoc(
     const state = graph.getSyncState()
     suppressGraphSync = true
     try {
-      applyYjsCollectionsToGraph(graph, state, ycollections, events)
+      applyYjsCollectionsToGraph(graph, state, ycollections, yvariables, events)
     } finally {
       suppressGraphSync = false
     }
@@ -282,10 +348,13 @@ export const reconcileRemoteRoot: ReconcileRootFn = (store, remoteRootStableId, 
     const currentRemote = state.remoteRootStableId
     if (currentRemote === remoteRootStableId) return
     if (currentRemote !== null && currentRemote < remoteRootStableId) return
+    removeLocalRootChildrenForRemoteAdoption(graph, state)
     if (currentRemote !== null) state.remoteToLocal.delete(currentRemote)
     state.localToRemote.delete(graph.rootId)
     state.rootMapped = false
     state.remoteRootStableId = null
+  } else {
+    removeLocalRootChildrenForRemoteAdoption(graph, state)
   }
   state.remoteRootStableId = remoteRootStableId
   state.remoteToLocal.set(remoteRootStableId, graph.rootId)
@@ -299,4 +368,5 @@ export const reconcileRemoteRoot: ReconcileRootFn = (store, remoteRootStableId, 
     }
   }
   state.pendingUntilRoot.clear()
+  switchToFirstAvailablePage(store)
 }
