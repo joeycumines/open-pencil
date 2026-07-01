@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { computeAllLayouts, computeLayout, SceneGraph } from '@open-pencil/core'
+import {
+  computeAllLayouts,
+  computeLayout,
+  createDefaultSource,
+  SceneGraph
+} from '@open-pencil/core'
 
 import { getNodeOrThrow } from '#tests/helpers/assert'
 import { autoFrame, pageId, rect } from '#tests/helpers/layout'
@@ -111,9 +116,9 @@ describe('nested auto layout', () => {
       primaryAxisSizing: 'FIXED',
       counterAxisSizing: 'FIXED',
       paddingTop: 20,
-      paddingBottom: 20
+      paddingBottom: 20,
+      source: { ...createDefaultSource(), format: 'fig' }
     })
-    graph.updateNode(instance.id, { source: { ...instance.source, format: 'fig' } })
     const fixedChild = autoFrame(graph, instance.id, {
       width: 80,
       height: 80,

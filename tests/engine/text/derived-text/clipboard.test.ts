@@ -34,7 +34,7 @@ describe('clipboard derived text export', () => {
 
     const fontDigestMap = await buildFontDigestMap(graph)
     const blobs: Uint8Array[] = []
-    const derived = await buildDerivedTextDataV4(
+    const derivedPromise = buildDerivedTextDataV4(
       text,
       fontDigestMap,
       {
@@ -53,6 +53,8 @@ describe('clipboard derived text export', () => {
       },
       blobs
     )
+    expect(derivedPromise).toBeInstanceOf(Promise)
+    const derived = await derivedPromise
 
     const derivedTextData = expectDefined(derived, 'derived text data')
     const firstGlyph = expectDefined(derivedTextData.glyphs[0], 'first glyph')

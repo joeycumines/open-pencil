@@ -29,6 +29,41 @@ function reorderCreatedAtReplacementIndex(
   }
 }
 
+function remappedExistingRootIds(ctx: EditorContext, ids: string[], idMap: Map<string, string>) {
+  const remapped: string[] = []
+  for (const id of ids) {
+    const remappedId = idMap.get(id)
+    if (remappedId && ctx.graph.getNode(remappedId)) remapped.push(remappedId)
+  }
+  return remapped
+}
+
+function deletedSnapshotIds(entries: DeletedEntry[]) {
+  const ids = new Set<string>()
+  for (const entry of entries) {
+    for (const id of entry.subtree.keys()) ids.add(id)
+  }
+  return ids
+}
+
+function remapSelectionAfterDeletedRestore(
+  ctx: EditorContext,
+  selection: Set<string>,
+  restoredIds: Map<string, string>,
+  deletedIds: Set<string>
+) {
+  const remapped = new Set<string>()
+  for (const id of selection) {
+    if (deletedIds.has(id)) {
+      const restoredId = restoredIds.get(id)
+      if (restoredId && ctx.graph.getNode(restoredId)) remapped.add(restoredId)
+      continue
+    }
+    if (ctx.graph.getNode(id)) remapped.add(id)
+  }
+  return remapped
+}
+
 function pushPasteReplaceUndo(
   ctx: EditorContext,
   created: string[],
@@ -37,20 +72,33 @@ function pushPasteReplaceUndo(
 ) {
   const createdSnapshots = collectSubtrees(ctx.graph, created)
   const pageId = ctx.state.currentPageId
+  const deletedIds = deletedSnapshotIds(deleted)
+  let currentCreated = [...created]
+  let currentDeleted: string[] = []
   ctx.undo.push({
     label: 'Paste to replace',
     forward: () => {
-      for (const { id } of deleted) ctx.graph.deleteNode(id, { permanent: true })
-      recreateSnapshots(ctx, createdSnapshots, pageId)
-      reorderCreatedAtReplacementIndex(ctx, created, deleted)
+      deleteIds(ctx, currentDeleted)
+      currentDeleted = []
+      const restoredCreatedIds = recreateSnapshots(ctx, createdSnapshots, pageId)
+      currentCreated = remappedExistingRootIds(ctx, created, restoredCreatedIds)
+      reorderCreatedAtReplacementIndex(ctx, currentCreated, deleted)
       computeAllLayouts(ctx.graph, pageId)
-      ctx.setSelectedIds(new Set(created))
+      ctx.setSelectedIds(new Set(currentCreated))
     },
     inverse: () => {
-      deleteIds(ctx, created)
-      restoreDeletedEntries(ctx, deleted)
+      deleteIds(ctx, currentCreated)
+      currentCreated = []
+      const restoredDeletedIds = restoreDeletedEntries(ctx, deleted)
+      currentDeleted = remappedExistingRootIds(
+        ctx,
+        deleted.map((entry) => entry.id),
+        restoredDeletedIds
+      )
       computeAllLayouts(ctx.graph, pageId)
-      ctx.setSelectedIds(prevSelection)
+      ctx.setSelectedIds(
+        remapSelectionAfterDeletedRestore(ctx, prevSelection, restoredDeletedIds, deletedIds)
+      )
     }
   })
 }

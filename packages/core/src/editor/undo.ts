@@ -7,6 +7,7 @@ import type { Rect, Vector } from '#core/types'
 
 import { restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
 import { collectNodePositions, pushPositionUndo } from './history/position'
+import { remapRestoredSnapshotReferences } from './history/restore-references'
 import {
   restorePageFromSnapshot as restorePageSnapshot,
   snapshotPage as createPageSnapshot,
@@ -64,29 +65,35 @@ export function createUndoActions(ctx: EditorContext) {
       const subtree = snapshotSubtree(ctx.graph, id)
       for (const [nodeId, snapshot] of subtree) snapshots.set(nodeId, snapshot)
     }
-    const nextSelection = new Set(rootIds)
+    let currentRootIds = [...rootIds]
 
     ctx.undo.push({
       label: 'Duplicate',
       forward: () => {
+        const restoredRootIds: string[] = []
+        const oldToNew = new Map<string, string>()
         for (const id of rootIds) {
-          if (ctx.graph.getNode(id)) continue
           const snapshot = snapshots.get(id)
           if (!snapshot) continue
-          restoreSubtree(
+          const restored = restoreSubtree(
             ctx.graph,
             snapshot,
             snapshot.parentId ?? ctx.state.currentPageId,
-            snapshots
+            snapshots,
+            oldToNew
           )
-          ctx.runLayoutForNode(id)
+          restoredRootIds.push(restored.rootId)
+          ctx.runLayoutForNode(restored.rootId)
         }
-        ctx.setSelectedIds(new Set(nextSelection))
+        remapRestoredSnapshotReferences(ctx.graph, snapshots.values(), oldToNew)
+        currentRootIds = restoredRootIds
+        ctx.setSelectedIds(new Set(currentRootIds))
       },
       inverse: () => {
-        for (const id of rootIds.toReversed()) {
+        for (const id of currentRootIds.toReversed()) {
           ctx.graph.deleteNode(id, { permanent: true })
         }
+        currentRootIds = []
         ctx.setSelectedIds(new Set(previousSelection))
       }
     })

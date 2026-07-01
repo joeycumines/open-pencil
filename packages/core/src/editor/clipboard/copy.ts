@@ -1,4 +1,8 @@
-import { buildFigmaClipboardHTML, buildOpenPencilClipboardHTML } from '#core/clipboard'
+import {
+  buildFigmaClipboardHTML,
+  buildFigmaClipboardHTMLSync,
+  buildOpenPencilClipboardHTML
+} from '#core/clipboard'
 import type { EditorContext } from '#core/editor/types'
 import type { SceneNode } from '#core/scene-graph'
 
@@ -7,11 +11,19 @@ export function createClipboardCopyActions(ctx: EditorContext) {
     if (selectedNodes.length === 0) return
 
     const names = selectedNodes.map((n) => n.name).join('\n')
-    clipboardData.setData('text/html', buildOpenPencilClipboardHTML(selectedNodes, ctx.graph))
+    const openPencilHTML = buildOpenPencilClipboardHTML(selectedNodes, ctx.graph)
+    let clipboardHTML = openPencilHTML
+    try {
+      const syncFigmaHTML = buildFigmaClipboardHTMLSync(selectedNodes, ctx.graph)
+      if (syncFigmaHTML) clipboardHTML = `${openPencilHTML}${syncFigmaHTML}`
+    } catch {
+      clipboardHTML = openPencilHTML
+    }
+    clipboardData.setData('text/html', clipboardHTML)
     clipboardData.setData('text/plain', names)
 
-    const html = await buildFigmaClipboardHTML(selectedNodes, ctx.graph)
-    if (html) clipboardData.setData('text/html', html)
+    const figmaHTML = await buildFigmaClipboardHTML(selectedNodes, ctx.graph).catch(() => null)
+    if (figmaHTML) clipboardData.setData('text/html', `${openPencilHTML}${figmaHTML}`)
   }
 
   return { writeCopyData }

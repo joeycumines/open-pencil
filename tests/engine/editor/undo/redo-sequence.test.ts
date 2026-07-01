@@ -1,6 +1,14 @@
 import { describe, test, expect } from 'bun:test'
 
+import { createDefaultSource } from '@open-pencil/core/scene-graph'
+
 import { expectDefined, getNodeOrThrow } from '#tests/helpers/assert'
+import {
+  assertRestoredComponentInstanceLink,
+  createComponentInstanceBundle,
+  createRuntimeIdOccupant,
+  restoredComponentInstanceBundle
+} from '#tests/helpers/component-instance-restore'
 import { createHistoryFrame, setupEditorPage } from '#tests/helpers/editor-history'
 
 describe('undo/redo multi-step sequences', () => {
@@ -104,6 +112,53 @@ describe('undo/redo multi-step sequences', () => {
     expect(getNodeOrThrow(editor.graph, dupTextId).text).toBe('Hello')
   })
 
+  test('duplicate remaps selected top-level instance to selected top-level component copy', () => {
+    const { editor, pageId } = setupEditorPage()
+    const bundle = createComponentInstanceBundle(editor, pageId)
+
+    editor.select([bundle.component.id, bundle.instance.id])
+    editor.duplicateSelected()
+
+    const duplicatedIds = [...editor.state.selectedIds]
+    const duplicatedComponent = expectDefined(
+      duplicatedIds
+        .map((id) => editor.graph.getNode(id))
+        .find((node) => node?.type === 'COMPONENT'),
+      'duplicated component'
+    )
+    const duplicatedInstance = expectDefined(
+      duplicatedIds.map((id) => editor.graph.getNode(id)).find((node) => node?.type === 'INSTANCE'),
+      'duplicated instance'
+    )
+
+    expect(duplicatedInstance.componentId).toBe(duplicatedComponent.id)
+    expect(editor.graph.getInstances(duplicatedComponent.id).map((node) => node.id)).toContain(
+      duplicatedInstance.id
+    )
+    expect(editor.graph.getInstances(bundle.component.id).map((node) => node.id)).not.toContain(
+      duplicatedInstance.id
+    )
+
+    editor.undo.undo()
+    expect(editor.graph.getNode(duplicatedComponent.id)).toBeUndefined()
+    expect(editor.graph.getNode(duplicatedInstance.id)).toBeUndefined()
+
+    editor.undo.redo()
+    const restoredIds = [...editor.state.selectedIds]
+    const restoredComponent = expectDefined(
+      restoredIds.map((id) => editor.graph.getNode(id)).find((node) => node?.type === 'COMPONENT'),
+      'restored duplicated component'
+    )
+    const restoredInstance = expectDefined(
+      restoredIds.map((id) => editor.graph.getNode(id)).find((node) => node?.type === 'INSTANCE'),
+      'restored duplicated instance'
+    )
+    expect(restoredInstance.componentId).toBe(restoredComponent.id)
+    expect(editor.graph.getInstances(restoredComponent.id).map((node) => node.id)).toContain(
+      restoredInstance.id
+    )
+  })
+
   test('page snapshot restore preserves node IDs', () => {
     const { editor, pageId } = setupEditorPage()
     const frame = createHistoryFrame(editor, pageId)
@@ -120,6 +175,80 @@ describe('undo/redo multi-step sequences', () => {
     expect(editor.graph.getNode(frame.id)).not.toBeUndefined()
     expect(editor.graph.getNode(child.id)).not.toBeUndefined()
     expect(getNodeOrThrow(editor.graph, frame.id).childIds).toEqual([child.id])
+  })
+
+  test('page snapshot restore uses returned IDs when old runtime IDs are occupied elsewhere', async () => {
+    const { editor, pageId } = setupEditorPage()
+    const frame = createHistoryFrame(editor, pageId, { name: 'Restored frame' })
+    const child = editor.graph.createNode('RECTANGLE', frame.id, {
+      name: 'Restored child',
+      width: 200,
+      height: 150
+    })
+    const snapshot = editor.snapshotPage()
+
+    editor.graph.deleteNode(frame.id, { permanent: true })
+    const otherPageId = editor.addPage('Other page')
+    await editor.switchPage(otherPageId)
+    const occupant = editor.graph.createNode('RECTANGLE', otherPageId, {
+      id: frame.id,
+      source: { ...createDefaultSource(), id: frame.id },
+      name: 'Occupies old frame runtime id',
+      width: 20,
+      height: 20
+    })
+    await editor.switchPage(pageId)
+
+    editor.restorePageFromSnapshot(snapshot)
+
+    expect(occupant.id).toBe(frame.id)
+    const restoredFrame = expectDefined(
+      editor.graph.getChildren(pageId).find((node) => node.name === 'Restored frame'),
+      'restored frame'
+    )
+    const restoredChild = expectDefined(
+      editor.graph.getChildren(restoredFrame.id).find((node) => node.name === child.name),
+      'restored child'
+    )
+    expect(restoredFrame.id).not.toBe(frame.id)
+    expect(restoredFrame.id).not.toBe(occupant.id)
+    expect(getNodeOrThrow(editor.graph, occupant.id).parentId).toBe(otherPageId)
+    expect(restoredFrame.childIds).toEqual([restoredChild.id])
+    expect(restoredChild.parentId).toBe(restoredFrame.id)
+  })
+
+  test('page snapshot restore remaps component and instance references when old ids are occupied', async () => {
+    const { editor, pageId } = setupEditorPage()
+    const bundle = createComponentInstanceBundle(editor, pageId)
+    const snapshot = editor.snapshotPage()
+
+    editor.graph.deleteNode(bundle.component.id, { permanent: true })
+    editor.graph.deleteNode(bundle.instance.id, { permanent: true })
+    const otherPageId = editor.addPage('Component occupants')
+    await editor.switchPage(otherPageId)
+    createRuntimeIdOccupant(editor, otherPageId, bundle.component.id, 'Snapshot component occupant')
+    createRuntimeIdOccupant(
+      editor,
+      otherPageId,
+      bundle.componentChild.id,
+      'Snapshot component child occupant'
+    )
+    createRuntimeIdOccupant(
+      editor,
+      otherPageId,
+      bundle.instanceChild.id,
+      'Snapshot instance child occupant'
+    )
+    await editor.switchPage(pageId)
+
+    editor.restorePageFromSnapshot(snapshot)
+
+    const restored = restoredComponentInstanceBundle(editor)
+    expect(restored.component.id).not.toBe(bundle.component.id)
+    expect(restored.componentChild.id).not.toBe(bundle.componentChild.id)
+    expect(restored.instanceChild.id).not.toBe(bundle.instanceChild.id)
+    expect(editor.graph.getNode(bundle.component.id)?.name).toBe('Snapshot component occupant')
+    assertRestoredComponentInstanceLink(editor, restored)
   })
 
   test('delete frame with children → undo restores subtree', () => {
@@ -182,5 +311,109 @@ describe('undo/redo multi-step sequences', () => {
     const liveReplacement = editor.graph.getNode(replacementId)
     expect(liveReplacement?.id).toBe(replacementId)
     expect(liveReplacement?.name).toBe('Replacement')
+  })
+
+  test('delete undo selects and parents restored subtree when old root ID is occupied', () => {
+    const { editor, pageId } = setupEditorPage()
+    const deletedFrame = createHistoryFrame(editor, pageId, { name: 'Deleted frame' })
+    const deletedFrameStableId = expectDefined(deletedFrame.source.id, 'deleted frame stable id')
+    const deletedChild = editor.graph.createNode('RECTANGLE', deletedFrame.id, {
+      name: 'Deleted child',
+      width: 20,
+      height: 20
+    })
+    editor.select([deletedFrame.id])
+    editor.deleteSelected()
+    expect(editor.graph.getNode(deletedFrame.id)).toBeUndefined()
+
+    const occupant = editor.graph.createNode('RECTANGLE', pageId, {
+      id: deletedFrame.id,
+      source: { ...createDefaultSource(), id: `occupant-${deletedFrame.id}` },
+      name: 'Occupies deleted runtime id',
+      width: 10,
+      height: 10
+    })
+
+    editor.undo.undo()
+
+    expect(occupant.id).toBe(deletedFrame.id)
+    const restoredFrame = expectDefined(
+      editor.graph.getChildren(pageId).find((node) => node.name === deletedFrame.name),
+      'restored deleted frame'
+    )
+    const restoredChild = expectDefined(
+      editor.graph.getChildren(restoredFrame.id).find((node) => node.name === deletedChild.name),
+      'restored deleted child'
+    )
+    expect(restoredFrame.id).not.toBe(deletedFrame.id)
+    expect(restoredFrame.id).not.toBe(occupant.id)
+    expect(editor.graph.stableIdToRuntimeId(deletedFrameStableId)).toBe(restoredFrame.id)
+    expect(getNodeOrThrow(editor.graph, occupant.id).name).toBe('Occupies deleted runtime id')
+    expect(restoredFrame.childIds).toEqual([restoredChild.id])
+    expect(restoredChild.parentId).toBe(restoredFrame.id)
+    expect(editor.state.selectedIds).toEqual(new Set([restoredFrame.id]))
+  })
+
+  test('delete undo remaps restored component and instance references when old ids are occupied', () => {
+    const { editor, pageId } = setupEditorPage()
+    const bundle = createComponentInstanceBundle(editor, pageId)
+
+    editor.select([bundle.component.id, bundle.instance.id])
+    editor.deleteSelected()
+    createRuntimeIdOccupant(editor, pageId, bundle.component.id, 'Deleted component occupant')
+    createRuntimeIdOccupant(
+      editor,
+      pageId,
+      bundle.componentChild.id,
+      'Deleted component child occupant'
+    )
+    createRuntimeIdOccupant(
+      editor,
+      pageId,
+      bundle.instanceChild.id,
+      'Deleted instance child occupant'
+    )
+
+    editor.undo.undo()
+
+    const restored = restoredComponentInstanceBundle(editor)
+    expect(restored.component.id).not.toBe(bundle.component.id)
+    expect(restored.componentChild.id).not.toBe(bundle.componentChild.id)
+    expect(restored.instanceChild.id).not.toBe(bundle.instanceChild.id)
+    expect(editor.graph.getNode(bundle.component.id)?.name).toBe('Deleted component occupant')
+    assertRestoredComponentInstanceLink(editor, restored)
+    expect(editor.state.selectedIds).toEqual(new Set([restored.component.id, restored.instance.id]))
+  })
+
+  test('duplicate redo remaps restored component and instance references when old ids are occupied', () => {
+    const { editor, pageId } = setupEditorPage()
+    const bundle = createComponentInstanceBundle(editor, pageId)
+
+    editor.select([bundle.component.id, bundle.instance.id])
+    editor.commitDuplicateMove([bundle.component.id, bundle.instance.id], new Set())
+
+    editor.undo.undo()
+    createRuntimeIdOccupant(editor, pageId, bundle.component.id, 'Duplicate component occupant')
+    createRuntimeIdOccupant(
+      editor,
+      pageId,
+      bundle.componentChild.id,
+      'Duplicate component child occupant'
+    )
+    createRuntimeIdOccupant(
+      editor,
+      pageId,
+      bundle.instanceChild.id,
+      'Duplicate instance child occupant'
+    )
+
+    editor.undo.redo()
+
+    const restored = restoredComponentInstanceBundle(editor)
+    expect(restored.component.id).not.toBe(bundle.component.id)
+    expect(restored.componentChild.id).not.toBe(bundle.componentChild.id)
+    expect(restored.instanceChild.id).not.toBe(bundle.instanceChild.id)
+    expect(editor.graph.getNode(bundle.component.id)?.name).toBe('Duplicate component occupant')
+    assertRestoredComponentInstanceLink(editor, restored)
   })
 })

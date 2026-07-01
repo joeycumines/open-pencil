@@ -1,3 +1,4 @@
+import { remapRestoredSnapshotReferences } from '#core/editor/history/restore-references'
 import type { EditorContext } from '#core/editor/types'
 import type { SceneNode } from '#core/scene-graph'
 
@@ -38,6 +39,10 @@ export function recreateSnapshots(ctx: EditorContext, snapshots: SceneNode[], pa
     const resolvedParentId = originalIdToNewId.get(parentId) ?? parentId
     recreate(snapshot, resolvedParentId)
   }
+
+  remapRestoredSnapshotReferences(ctx.graph, snapshots, originalIdToNewId)
+
+  return originalIdToNewId
 }
 
 export function deleteIds(ctx: EditorContext, ids: string[]) {
@@ -45,9 +50,18 @@ export function deleteIds(ctx: EditorContext, ids: string[]) {
 }
 
 export function restoreDeletedEntries(ctx: EditorContext, entries: DeletedEntry[]) {
+  const restoredIds = new Map<string, string>()
+  const snapshots: SceneNode[] = []
   for (const { id, parentId, index, subtree } of [...entries].reverse()) {
+    for (const snapshot of subtree.values()) snapshots.push(snapshot)
     const rootSnap = subtree.get(id)
-    if (rootSnap) restoreSubtree(ctx.graph, rootSnap, parentId, subtree)
-    if (index >= 0) ctx.graph.reorderChild(id, parentId, index)
+    if (!rootSnap) continue
+    const result = restoreSubtree(ctx.graph, rootSnap, parentId, subtree, restoredIds)
+    for (const [oldId, newId] of result.oldToNew) restoredIds.set(oldId, newId)
+    if (index >= 0) ctx.graph.reorderChild(result.rootId, parentId, index)
   }
+
+  remapRestoredSnapshotReferences(ctx.graph, snapshots, restoredIds)
+
+  return restoredIds
 }

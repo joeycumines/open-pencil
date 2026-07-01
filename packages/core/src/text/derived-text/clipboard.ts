@@ -124,12 +124,12 @@ function computeLineBreaks(
   return computeFallbackBreaks(node.text, textGlyphs, fallbackAdvance, node.width)
 }
 
-export async function buildDerivedTextDataV4(
+export function buildDerivedTextDataV4Sync(
   node: SceneNode,
   digestMap: Map<string, Uint8Array>,
   shaped?: ShapedClipboardText | null,
   blobs?: Uint8Array[]
-): Promise<NodeChange['derivedTextData']> {
+): NodeChange['derivedTextData'] {
   const style = weightToStyle(node.fontWeight, node.italic)
   const normalizedFamily = normalizeFontFamily(node.fontFamily)
   const key = `${normalizedFamily}|${style}`
@@ -227,4 +227,13 @@ export async function buildDerivedTextDataV4(
     baselines: shaped ? shaped.baselines : fallbackBaselines,
     logicalIndexToCharacterOffsetMap: shaped?.logicalIndexToCharacterOffsetMap ?? fallbackOffsets
   })
+}
+
+export function buildDerivedTextDataV4(
+  node: SceneNode,
+  digestMap: Map<string, Uint8Array>,
+  shaped?: ShapedClipboardText | null,
+  blobs?: Uint8Array[]
+): Promise<NodeChange['derivedTextData']> {
+  return Promise.resolve(buildDerivedTextDataV4Sync(node, digestMap, shaped, blobs))
 }

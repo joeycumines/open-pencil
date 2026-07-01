@@ -212,7 +212,7 @@ export function createEditor(options?: EditorOptions) {
       const sourceId = node.source.id
       if (sourceId === null) continue
       const oldRuntimeId = oldStableToRuntime.get(sourceId)
-      if (oldRuntimeId !== undefined && oldRuntimeId !== node.id) {
+      if (oldRuntimeId !== undefined) {
         translation.set(oldRuntimeId, node.id)
       }
     }

@@ -1,6 +1,6 @@
 import { canMakeBooleanSourceNode, hasVisibleStrokeSourceNode } from '#core/canvas/boolean'
 import { flattenNodesToVectorProps, outlineStrokeNodesToVectorProps } from '#core/canvas/flatten'
-import { restoreSubtree, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
+import { restoreSubtreeEntries, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
 import type { EditorContext } from '#core/editor/types'
 import type { SceneNode } from '#core/scene-graph'
 
@@ -47,26 +47,34 @@ export function flattenSelected(
   ctx.graph.insertChildAt(vector.id, parentId, firstIndex)
   for (const id of childIds) ctx.graph.deleteNode(id, { permanent: true })
   ctx.setSelectedIds(new Set([vector.id]))
+  let currentVectorId = vector.id
+  let currentChildIds = [...childIds]
 
   ctx.undo.push({
     label,
     forward: () => {
       // M-07: Use mode: 'restore' so the undo can reuse the same runtime ID
       const restored = ctx.graph.createNode('VECTOR', parentId, vectorSnapshot, { mode: 'restore' })
+      currentVectorId = restored.id
       ctx.graph.insertChildAt(restored.id, parentId, firstIndex)
-      for (const id of childIds) ctx.graph.deleteNode(id, { permanent: true })
+      for (const id of currentChildIds) ctx.graph.deleteNode(id, { permanent: true })
+      currentChildIds = []
       ctx.setSelectedIds(new Set([restored.id]))
     },
     inverse: () => {
-      ctx.graph.deleteNode(vector.id, { permanent: true })
-      for (let i = 0; i < childSnapshots.length; i++) {
-        const { id, subtree } = childSnapshots[i]
-        const root = subtree.get(id)
-        if (!root) continue
-        restoreSubtree(ctx.graph, root, parentId, subtree)
-        ctx.graph.insertChildAt(id, parentId, firstIndex + i)
+      ctx.graph.deleteNode(currentVectorId, { permanent: true })
+      const { rootIds: restoredChildIds, oldToNew: restoredSelection } = restoreSubtreeEntries(
+        ctx.graph,
+        parentId,
+        childSnapshots
+      )
+      for (let i = 0; i < restoredChildIds.length; i++) {
+        const restoredRootId = restoredChildIds[i]
+        if (!restoredRootId) continue
+        ctx.graph.insertChildAt(restoredRootId, parentId, firstIndex + i)
       }
-      ctx.setSelectedIds(prevSelection)
+      currentChildIds = restoredChildIds
+      ctx.setSelectedIds(new Set([...prevSelection].map((id) => restoredSelection.get(id) ?? id)))
     }
   })
 

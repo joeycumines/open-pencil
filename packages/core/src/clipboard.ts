@@ -18,7 +18,7 @@ import {
 import { decodeBinarySchema, compileSchema, ByteBuffer } from './kiwi/schema-runtime'
 import { randomInt } from './random'
 import type { SceneGraph, SceneNode } from './scene-graph'
-import { buildDerivedTextDataV4 } from './text/derived-text/clipboard'
+import { buildDerivedTextDataV4, buildDerivedTextDataV4Sync } from './text/derived-text/clipboard'
 
 interface FigmaClipboardMeta {
   fileKey: string
@@ -287,35 +287,39 @@ export function importClipboardNodes(
   return createdIds
 }
 
-export async function buildFigmaClipboardHTML(
-  nodes: SceneNode[],
-  graph: SceneGraph
-): Promise<string | null> {
-  const compiled = getCompiledSchema()
-  const schemaDeflated = deflateSync(getSchemaBytes())
-  const fontDigestMap = await buildFontDigestMap(graph)
+interface FigmaClipboardPayload {
+  nodeChanges: KiwiNodeChange[]
+  exportedTextNodes: SceneNode[]
+  blobs: Uint8Array[]
+  pasteID: number
+}
 
+function collectExportedTextNodes(node: SceneNode, graph: SceneGraph, out: SceneNode[]): void {
+  if (node.type === 'TEXT') out.push(node)
+  for (const childId of node.childIds) {
+    const child = graph.getNode(childId)
+    if (child) collectExportedTextNodes(child, graph, out)
+  }
+}
+
+function buildFigmaClipboardPayload(
+  nodes: SceneNode[],
+  graph: SceneGraph,
+  fontDigestMap: Map<string, Uint8Array>
+): FigmaClipboardPayload {
   const docGuid = { sessionID: 0, localID: 0 }
   const canvasGuid = { sessionID: 0, localID: 1 }
   const localIdCounter = { value: 100 }
+  const exportedTextNodes: SceneNode[] = []
+  const blobs: Uint8Array[] = []
 
   const nodeChanges: KiwiNodeChange[] = [
     makeDocumentNodeChange(docGuid, graph.documentColorSpace),
     makeCanvasNodeChange(canvasGuid, docGuid, '!', 'Page 1')
   ]
 
-  const exportedTextNodes: SceneNode[] = []
-  const collectTextNodes = (node: SceneNode) => {
-    if (node.type === 'TEXT') exportedTextNodes.push(node)
-    for (const childId of node.childIds) {
-      const child = graph.getNode(childId)
-      if (child) collectTextNodes(child)
-    }
-  }
-
-  const blobs: Uint8Array[] = []
   for (let i = 0; i < nodes.length; i++) {
-    collectTextNodes(nodes[i])
+    collectExportedTextNodes(nodes[i], graph, exportedTextNodes)
     nodeChanges.push(
       ...sceneNodeToKiwi(
         nodes[i],
@@ -330,34 +334,33 @@ export async function buildFigmaClipboardHTML(
     )
   }
 
-  const textNodeQueue = [...exportedTextNodes]
-  await Promise.all(
-    nodeChanges.map(async (change) => {
-      if (change.type !== 'TEXT') return
-      const source = textNodeQueue.shift()
-      if (!source) return
-      change.textAutoResize = 'NONE'
-      change.textUserLayoutVersion = 5
-      change.lineHeight = {
-        value: source.lineHeight ?? 100,
-        units: source.lineHeight ? 'PIXELS' : 'PERCENT'
-      }
-      const shaped = await shapeTextForClipboard(source).catch(() => null)
-      change.derivedTextData = await buildDerivedTextDataV4(source, fontDigestMap, shaped, blobs)
-    })
-  )
+  return { nodeChanges, exportedTextNodes, blobs, pasteID: randomInt() }
+}
+
+function prepareTextClipboardChange(change: KiwiNodeChange, source: SceneNode): void {
+  change.textAutoResize = 'NONE'
+  change.textUserLayoutVersion = 5
+  change.lineHeight = {
+    value: source.lineHeight ?? 100,
+    units: source.lineHeight ? 'PIXELS' : 'PERCENT'
+  }
+}
+
+function encodeFigmaClipboardPayload(payload: FigmaClipboardPayload): string {
+  const compiled = getCompiledSchema()
+  const schemaDeflated = deflateSync(getSchemaBytes())
 
   const msg: Record<string, unknown> = {
     type: 'NODE_CHANGES',
     sessionID: 0,
     ackID: 0,
-    pasteID: randomInt(),
+    pasteID: payload.pasteID,
     pasteFileKey: 'openpencil',
-    nodeChanges
+    nodeChanges: payload.nodeChanges
   }
 
-  if (blobs.length > 0) {
-    msg.blobs = blobs.map((bytes) => ({ bytes }))
+  if (payload.blobs.length > 0) {
+    msg.blobs = payload.blobs.map((bytes) => ({ bytes }))
   }
 
   const dataRaw = compiled.encodeMessage(msg)
@@ -366,7 +369,7 @@ export async function buildFigmaClipboardHTML(
 
   const meta: FigmaClipboardMeta = {
     fileKey: 'openpencil',
-    pasteID: msg.pasteID as number,
+    pasteID: payload.pasteID,
     dataType: 'scene'
   }
   const metaB64 = btoa(JSON.stringify(meta))
@@ -376,6 +379,49 @@ export async function buildFigmaClipboardHTML(
     `<span data-metadata="<!--(figmeta)${metaB64}(/figmeta)-->"></span>` +
     `<span data-buffer="<!--(figma)${bufferB64}(/figma)-->"></span>`
   )
+}
+
+export function buildFigmaClipboardHTMLSync(nodes: SceneNode[], graph: SceneGraph): string | null {
+  const fontDigestMap = new Map<string, Uint8Array>()
+  const payload = buildFigmaClipboardPayload(nodes, graph, fontDigestMap)
+
+  const textNodeQueue = [...payload.exportedTextNodes]
+  for (const change of payload.nodeChanges) {
+    if (change.type !== 'TEXT') continue
+    const source = textNodeQueue.shift()
+    if (!source) continue
+    prepareTextClipboardChange(change, source)
+    change.derivedTextData = buildDerivedTextDataV4Sync(source, fontDigestMap, null, payload.blobs)
+  }
+
+  return encodeFigmaClipboardPayload(payload)
+}
+
+export async function buildFigmaClipboardHTML(
+  nodes: SceneNode[],
+  graph: SceneGraph
+): Promise<string | null> {
+  const fontDigestMap = await buildFontDigestMap(graph)
+  const payload = buildFigmaClipboardPayload(nodes, graph, fontDigestMap)
+
+  const textNodeQueue = [...payload.exportedTextNodes]
+  await Promise.all(
+    payload.nodeChanges.map(async (change) => {
+      if (change.type !== 'TEXT') return
+      const source = textNodeQueue.shift()
+      if (!source) return
+      prepareTextClipboardChange(change, source)
+      const shaped = await shapeTextForClipboard(source).catch(() => null)
+      change.derivedTextData = await buildDerivedTextDataV4(
+        source,
+        fontDigestMap,
+        shaped,
+        payload.blobs
+      )
+    })
+  )
+
+  return encodeFigmaClipboardPayload(payload)
 }
 
 export {

@@ -3,6 +3,14 @@ import { describe, expect, test } from 'bun:test'
 import { buildOpenPencilClipboardHTML } from '@open-pencil/core/clipboard'
 import { createEditor } from '@open-pencil/core/editor'
 import type { Editor } from '@open-pencil/core/editor'
+import { createDefaultSource } from '@open-pencil/core/scene-graph'
+
+import {
+  assertRestoredComponentInstanceLink,
+  componentInstanceClipboardHtml,
+  createComponentInstanceBundle,
+  restoredComponentInstanceBundle
+} from '#tests/helpers/component-instance-restore'
 
 function copiedRectangleHtml(name = 'Pasted') {
   const source = createEditor()
@@ -47,6 +55,30 @@ function createTarget(editor: Editor, parentId = editor.state.currentPageId) {
   })
 }
 
+function createRuntimeIdOccupant(editor: Editor, parentId: string, id: string, name: string) {
+  return editor.graph.createNode('RECTANGLE', parentId, {
+    id,
+    name,
+    x: 300,
+    y: 300,
+    width: 10,
+    height: 10,
+    source: { ...createDefaultSource(), id: `occupant-${id}` }
+  })
+}
+
+function nodesNamed(editor: Editor, name: string) {
+  return [...editor.graph.nodes.values()].filter((node) => node.name === name)
+}
+
+function singleNodeNamed(editor: Editor, name: string) {
+  const matches = nodesNamed(editor, name)
+  expect(matches).toHaveLength(1)
+  const [node] = matches
+  if (!node) throw new Error(`Expected node named ${name}`)
+  return node
+}
+
 describe('paste to replace', () => {
   test('replaces selected nodes with pasted OpenPencil nodes', async () => {
     const html = copiedRectangleHtml()
@@ -87,6 +119,91 @@ describe('paste to replace', () => {
     expect(editor.graph.getNode(target.id)).toBeUndefined()
     expect(editor.graph.getNode(createdId)?.parentId).toBe(pageId)
     expect(editor.state.selectedIds).toEqual(new Set([createdId]))
+  })
+
+  test('redo tracks recreated pasted runtime ids when the old pasted id is occupied', async () => {
+    const html = copiedRectangleHtml()
+    const editor = createEditor()
+    const pageId = editor.state.currentPageId
+    const target = createTarget(editor)
+
+    editor.select([target.id])
+    await editor.pasteFromHTML(html, undefined, { replaceSelection: true })
+    const [createdId] = [...editor.state.selectedIds]
+
+    editor.undo.undo()
+    const occupant = createRuntimeIdOccupant(editor, pageId, createdId, 'Created id occupant')
+    expect(occupant.id).toBe(createdId)
+
+    editor.undo.redo()
+
+    const restoredPasted = singleNodeNamed(editor, 'Pasted')
+    expect(restoredPasted.id).not.toBe(createdId)
+    expect(editor.graph.getNode(createdId)?.name).toBe('Created id occupant')
+    expect(editor.state.selectedIds).toEqual(new Set([restoredPasted.id]))
+
+    editor.undo.undo()
+
+    expect(editor.graph.getNode(occupant.id)?.name).toBe('Created id occupant')
+    expect(nodesNamed(editor, 'Pasted')).toHaveLength(0)
+    expect(nodesNamed(editor, 'Target')).toHaveLength(1)
+  })
+
+  test('redo remaps restored pasted component and instance references when old ids are occupied', async () => {
+    const source = createEditor()
+    const sourceBundle = createComponentInstanceBundle(source, source.state.currentPageId)
+    const html = componentInstanceClipboardHtml(source, sourceBundle)
+    const editor = createEditor()
+    const pageId = editor.state.currentPageId
+    const target = createTarget(editor)
+
+    editor.select([target.id])
+    await editor.pasteFromHTML(html, undefined, { replaceSelection: true })
+    const pasted = restoredComponentInstanceBundle(editor)
+    const oldComponentId = pasted.component.id
+    const oldComponentChildId = pasted.componentChild.id
+    const oldInstanceChildId = pasted.instanceChild.id
+
+    editor.undo.undo()
+    createRuntimeIdOccupant(editor, pageId, oldComponentId, 'Replace component occupant')
+    createRuntimeIdOccupant(editor, pageId, oldComponentChildId, 'Replace component child occupant')
+    createRuntimeIdOccupant(editor, pageId, oldInstanceChildId, 'Replace instance child occupant')
+
+    editor.undo.redo()
+
+    const restored = restoredComponentInstanceBundle(editor)
+    expect(restored.component.id).not.toBe(oldComponentId)
+    expect(restored.componentChild.id).not.toBe(oldComponentChildId)
+    expect(restored.instanceChild.id).not.toBe(oldInstanceChildId)
+    expect(editor.graph.getNode(oldComponentId)?.name).toBe('Replace component occupant')
+    assertRestoredComponentInstanceLink(editor, restored)
+  })
+
+  test('undo tracks restored target runtime ids when the old target id is occupied', async () => {
+    const html = copiedRectangleHtml()
+    const editor = createEditor()
+    const pageId = editor.state.currentPageId
+    const target = createTarget(editor)
+
+    editor.select([target.id])
+    await editor.pasteFromHTML(html, undefined, { replaceSelection: true })
+
+    const occupant = createRuntimeIdOccupant(editor, pageId, target.id, 'Target id occupant')
+    expect(occupant.id).toBe(target.id)
+
+    editor.undo.undo()
+
+    const restoredTarget = singleNodeNamed(editor, 'Target')
+    expect(restoredTarget.id).not.toBe(target.id)
+    expect(editor.graph.getNode(target.id)?.name).toBe('Target id occupant')
+    expect(editor.state.selectedIds).toEqual(new Set([restoredTarget.id]))
+
+    editor.undo.redo()
+
+    const restoredPasted = singleNodeNamed(editor, 'Pasted')
+    expect(editor.graph.getNode(occupant.id)?.name).toBe('Target id occupant')
+    expect(nodesNamed(editor, 'Target')).toHaveLength(0)
+    expect(editor.state.selectedIds).toEqual(new Set([restoredPasted.id]))
   })
 
   test('falls back to regular paste when all selected targets are locked', async () => {

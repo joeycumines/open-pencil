@@ -1,4 +1,10 @@
+import { remapRestoredSnapshotReferences } from '#core/editor/history/restore-references'
 import type { SceneGraph, SceneNode } from '#core/scene-graph'
+
+export interface SubtreeSnapshotEntry {
+  id: string
+  subtree: Map<string, SceneNode>
+}
 
 export function collectSubtrees(graph: SceneGraph, rootIds: string[]): SceneNode[] {
   const result: SceneNode[] = []
@@ -28,12 +34,41 @@ export function restoreSubtree(
   graph: SceneGraph,
   snapshot: SceneNode,
   parentId: string,
-  index: Map<string, SceneNode>
-): void {
+  index: Map<string, SceneNode>,
+  oldToNew: Map<string, string> = new Map()
+): { rootId: string; oldToNew: Map<string, string> } {
   const { parentId: _parentId, childIds, ...rest } = snapshot
-  graph.createNode(snapshot.type, parentId, { ...rest, id: snapshot.id }, { mode: 'restore' })
+  const restored = graph.createNode(
+    snapshot.type,
+    parentId,
+    { ...rest, id: snapshot.id },
+    { mode: 'restore' }
+  )
+  oldToNew.set(snapshot.id, restored.id)
   for (const childId of childIds) {
     const child = index.get(childId)
-    if (child) restoreSubtree(graph, child, snapshot.id, index)
+    if (child) restoreSubtree(graph, child, restored.id, index, oldToNew)
   }
+  return { rootId: restored.id, oldToNew }
+}
+
+export function restoreSubtreeEntries(
+  graph: SceneGraph,
+  parentId: string,
+  entries: SubtreeSnapshotEntry[]
+): { rootIds: string[]; oldToNew: Map<string, string> } {
+  const oldToNew = new Map<string, string>()
+  const snapshots: SceneNode[] = []
+  const rootIds: string[] = []
+
+  for (const { id, subtree } of entries) {
+    for (const snapshot of subtree.values()) snapshots.push(snapshot)
+    const root = subtree.get(id)
+    if (!root) continue
+    const restored = restoreSubtree(graph, root, parentId, subtree, oldToNew)
+    rootIds.push(restored.rootId)
+  }
+
+  remapRestoredSnapshotReferences(graph, snapshots, oldToNew)
+  return { rootIds, oldToNew }
 }

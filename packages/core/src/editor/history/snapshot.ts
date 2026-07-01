@@ -2,6 +2,8 @@ import type { EditorContext } from '#core/editor/types'
 import { computeAllLayouts } from '#core/layout'
 import type { SceneGraph, SceneNode } from '#core/scene-graph'
 
+import { remapRestoredSnapshotReferences } from './restore-references'
+
 export type PageSnapshot = Map<string, SceneNode>
 
 export function snapshotPage(graph: SceneGraph, pageId: string): PageSnapshot {
@@ -25,7 +27,9 @@ export function restorePageFromSnapshot(ctx: EditorContext, snapshot: PageSnapsh
   for (const childId of page.childIds.slice()) {
     ctx.graph.deleteNode(childId, { permanent: false })
   }
-  restoreChildren(ctx.graph, snapshot, pageId, pageSnap.childIds)
+  const oldToNew = new Map<string, string>()
+  restoreChildren(ctx.graph, snapshot, pageId, pageSnap.childIds, oldToNew)
+  remapRestoredSnapshotReferences(ctx.graph, snapshot.values(), oldToNew)
 
   ctx.graph.clearAbsPosCache()
   computeAllLayouts(ctx.graph, pageId)
@@ -38,14 +42,22 @@ function restoreChildren(
   graph: SceneGraph,
   snapshot: PageSnapshot,
   parentId: string,
-  childIds: string[]
+  childIds: string[],
+  oldToNew: Map<string, string>
 ): void {
-  for (const childId of childIds) {
+  for (let index = 0; index < childIds.length; index++) {
+    const childId = childIds[index]
     const snap = snapshot.get(childId)
     if (!snap) continue
     const { parentId: _snapParentId, childIds: snapChildIds, ...rest } = snap
-    graph.createNode(snap.type, parentId, { ...rest, childIds: [] }, { mode: 'restore' })
-    graph.reorderChild(snap.id, parentId, childIds.indexOf(childId))
-    restoreChildren(graph, snapshot, snap.id, snapChildIds)
+    const restored = graph.createNode(
+      snap.type,
+      parentId,
+      { ...rest, childIds: [] },
+      { mode: 'restore' }
+    )
+    oldToNew.set(snap.id, restored.id)
+    graph.reorderChild(restored.id, parentId, index)
+    restoreChildren(graph, snapshot, restored.id, snapChildIds, oldToNew)
   }
 }

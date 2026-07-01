@@ -1,5 +1,5 @@
 import { canMakeBooleanSourceNode } from '#core/canvas/boolean'
-import { restoreSubtree, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
+import { restoreSubtreeEntries, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
 import type { EditorContext } from '#core/editor/types'
 import { computeAbsoluteBounds } from '#core/geometry'
 import type { SceneNode } from '#core/scene-graph'
@@ -42,6 +42,8 @@ export function booleanOperationSelected(
   ctx.graph.insertChildAt(booleanId, parentId, firstIndex)
   for (const id of childIds) ctx.graph.reparentNode(id, booleanId)
   ctx.setSelectedIds(new Set([booleanId]))
+  let currentBooleanId = booleanId
+  let currentChildIds = [...childIds]
 
   ctx.undo.push({
     label: operationLabel(operation),
@@ -55,25 +57,27 @@ export function booleanOperationSelected(
         structuredClone({ ...booleanNode, childIds: [], id: booleanId }),
         { mode: 'restore' }
       )
+      currentBooleanId = restored.id
       ctx.graph.insertChildAt(restored.id, parentId, firstIndex)
-      for (const id of childIds) ctx.graph.reparentNode(id, restored.id)
+      for (const id of currentChildIds) ctx.graph.reparentNode(id, restored.id)
       ctx.setSelectedIds(new Set([restored.id]))
     },
     inverse: () => {
-      for (const { id, subtree } of childSnapshots) {
-        const root = subtree.get(id)
-        if (!root) continue
-        if (!ctx.graph.getNode(id)) restoreSubtree(ctx.graph, root, parentId, subtree)
-        else ctx.graph.reparentNode(id, parentId)
-      }
+      const { rootIds: restoredChildIds, oldToNew: restoredSelection } = restoreSubtreeEntries(
+        ctx.graph,
+        parentId,
+        childSnapshots
+      )
       for (let i = 0; i < childIds.length; i++) {
-        const id = childIds[i]
+        const id = restoredChildIds[i]
         const pos = origPositions[i]
+        if (!id) continue
         ctx.graph.insertChildAt(id, parentId, firstIndex + i)
         ctx.graph.updateNode(id, { x: pos.x, y: pos.y })
       }
-      ctx.graph.deleteNode(booleanId, { permanent: true })
-      ctx.setSelectedIds(prevSelection)
+      currentChildIds = restoredChildIds
+      ctx.graph.deleteNode(currentBooleanId, { permanent: true })
+      ctx.setSelectedIds(new Set([...prevSelection].map((id) => restoredSelection.get(id) ?? id)))
     }
   })
 
