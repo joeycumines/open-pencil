@@ -51,7 +51,7 @@
 ### Breaking
 
 - `startServer()` is now async, returns `Promise<ServerHandle { app, server, socketPath, httpPort, close }>` instead of `{ app, wss, httpPort, close }`
-- `WS_PORT` and `AUTOMATION_WS_PORT` removed; WebSocket uses the unified HTTP port
+- `WS_PORT` removed and `AUTOMATION_WS_PORT` constant removed; WebSocket uses the unified HTTP port
 
 ### Fixes
 
