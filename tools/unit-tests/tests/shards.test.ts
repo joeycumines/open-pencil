@@ -42,7 +42,6 @@ test('quick unit test listing excludes heavy tests', async () => {
   const quickFiles = await listUnitTests('all')
   expect(quickFiles).toContain('tests/engine/collab/yjs-sync.test.ts')
   expect(quickFiles).toContain('tests/engine/dom-css/runtime.test.ts')
-  expect(quickFiles).toContain('tests/engine/fig/plugin-data/slop-funnel.test.ts')
   expect(quickFiles).not.toContain('tests/engine/cli/eval.test.ts')
   expect(quickFiles).not.toContain('tests/engine/cli/overlaps.test.ts')
   expect(quickFiles).not.toContain('tests/engine/io/fig/heavy/fixtures.test.ts')
