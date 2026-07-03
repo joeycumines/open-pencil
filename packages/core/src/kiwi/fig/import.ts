@@ -1,7 +1,10 @@
 import { isNotNil } from 'es-toolkit/predicate'
 
+import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '@open-pencil/kiwi/fig/codec'
+import { SceneGraph } from '@open-pencil/scene-graph'
+import type { VariableType, VariableValue } from '@open-pencil/scene-graph'
+
 import { BLACK } from '#core/constants'
-import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '#core/kiwi/fig/codec'
 import { populateAndApplyOverrides } from '#core/kiwi/fig/instance-overrides'
 import type { InstanceNodeChange } from '#core/kiwi/fig/instance-overrides'
 import { setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
@@ -13,8 +16,6 @@ import {
   VARIABLE_BINDING_FIELDS_INVERSE
 } from '#core/kiwi/fig/node-change/convert'
 import { applyStyleRefsToFields } from '#core/kiwi/fig/node-change/style-refs'
-import { SceneGraph } from '#core/scene-graph'
-import type { VariableType, VariableValue } from '#core/scene-graph'
 
 type AssetRef = { key: string; version?: string }
 type AliasRef = { guid?: GUID; assetRef?: AssetRef }
@@ -388,7 +389,7 @@ function applyStyleRefs(changeMap: Map<string, NodeChange>): void {
 }
 
 export interface FigImportOptions {
-  populate?: 'all' | 'first-page'
+  populate?: 'all' | 'first-page' | 'none'
 }
 
 function rememberLazyFigImportContext(
@@ -403,6 +404,27 @@ function rememberLazyFigImportContext(
     guidToNodeId,
     blobs,
     populatedRootIds: new Set(populatedRootIds)
+  })
+}
+
+function populateImportedInstances(
+  graph: SceneGraph,
+  changeMap: Map<string, NodeChange>,
+  guidToNodeId: Map<string, string>,
+  blobs: Uint8Array[],
+  activeRootIds: string[] | undefined,
+  shouldPopulateInstances: boolean
+): void {
+  if (!shouldPopulateInstances) return
+
+  graph.preserveSourceMetadataDuring(() => {
+    populateAndApplyOverrides(
+      graph,
+      changeMap as Map<string, InstanceNodeChange>,
+      guidToNodeId,
+      blobs,
+      activeRootIds
+    )
   })
 }
 
@@ -475,17 +497,17 @@ export function importNodeChanges(
       ? [firstPageId, ...componentPageIds].filter(isNotNil)
       : undefined
 
-  graph.preserveSourceMetadataDuring(() => {
-    populateAndApplyOverrides(
-      graph,
-      changeMap as Map<string, InstanceNodeChange>,
-      guidToNodeId,
-      blobs,
-      activeRootIds
-    )
-  })
+  const shouldPopulateInstances = options.populate !== 'none'
+  populateImportedInstances(
+    graph,
+    changeMap,
+    guidToNodeId,
+    blobs,
+    activeRootIds,
+    shouldPopulateInstances
+  )
 
-  if (activeRootIds)
+  if (shouldPopulateInstances && activeRootIds)
     rememberLazyFigImportContext(graph, changeMap, guidToNodeId, blobs, activeRootIds)
 
   setVariableColorResolver(null)

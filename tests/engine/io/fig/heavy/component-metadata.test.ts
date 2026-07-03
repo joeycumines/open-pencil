@@ -1,16 +1,16 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+
+import { parseFigBuffer } from '@open-pencil/kiwi/fig/parse'
 
 import { importNodeChanges } from '#core/kiwi'
-import { parseFigBuffer } from '#core/kiwi/fig/parse/core'
 
 import { expectDefined } from '#tests/helpers/assert'
+import { readFixtureArrayBuffer } from '#tests/helpers/fig-fixtures'
 import { HEAVY_TEST_TIMEOUT_MS, heavy } from '#tests/helpers/test-utils'
 
 function importFixture(name: string) {
-  const buffer = readFileSync(`tests/fixtures/${name}`).buffer
-  const { nodeChanges, blobs, images } = parseFigBuffer(buffer)
-  return importNodeChanges(nodeChanges, blobs, new Map(images))
+  const { nodeChanges, blobs, images } = parseFigBuffer(readFixtureArrayBuffer(name))
+  return importNodeChanges(nodeChanges, blobs, new Map(images), { populate: 'none' })
 }
 
 setDefaultTimeout(HEAVY_TEST_TIMEOUT_MS)
@@ -32,7 +32,7 @@ heavy('fig component metadata import', () => {
     expect(component.isSymbolPublishable).toBe(false)
   })
 
-  test('imports component set docs and variant property specs', async () => {
+  test('imports component set docs and variant property specs', () => {
     const graph = importFixture('material3.fig')
     const buttonSet = expectDefined(
       graph.getAllNodes().find((node) => node.type === 'COMPONENT_SET' && node.name === 'Button'),

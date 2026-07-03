@@ -1,7 +1,9 @@
+import type { Color } from '@open-pencil/scene-graph/primitives'
+
 import { populateLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
 import { computeAllLayouts } from '#core/layout'
+import { ensureTextFallbackPacksForNodes } from '#core/text/coverage'
 import { fontManager } from '#core/text/fonts'
-import type { Color } from '#core/types'
 
 import { createPageViewportStore } from './page-viewports'
 import type { EditorContext } from './types'
@@ -25,13 +27,12 @@ export function createPageActions(ctx: EditorContext) {
 
     const populated = populateLazyFigImportRoots(ctx.graph, [pageId])
 
-    const toLoad = fontManager.collectFontKeys(
-      ctx.graph,
-      ctx.graph.getChildren(pageId).map((n) => n.id)
-    )
+    const nodeIds = ctx.graph.getChildren(pageId).map((n) => n.id)
+    const toLoad = fontManager.collectFontKeys(ctx.graph, nodeIds)
     if (toLoad.length > 0) {
       await Promise.all(toLoad.map(([family, style]) => ctx.loadFont(family, style)))
     }
+    await ensureTextFallbackPacksForNodes(ctx.graph, nodeIds)
     if (ctx.getRenderer() || populated) {
       computeAllLayouts(ctx.graph, pageId)
     }
@@ -59,6 +60,17 @@ export function createPageActions(ctx: EditorContext) {
     }
   }
 
+  function movePage(pageId: string, index: number) {
+    const pages = ctx.graph.getPages()
+    const currentIndex = pages.findIndex((page) => page.id === pageId)
+    if (currentIndex === -1) return
+
+    const nextIndex = Math.max(0, Math.min(index, pages.length - 1))
+    if (nextIndex === currentIndex) return
+
+    ctx.graph.insertChildAt(pageId, ctx.graph.rootId, nextIndex)
+  }
+
   function renamePage(pageId: string, name: string) {
     ctx.graph.updateNode(pageId, { name })
   }
@@ -72,6 +84,7 @@ export function createPageActions(ctx: EditorContext) {
     switchPage,
     addPage,
     deletePage,
+    movePage,
     renamePage,
     setPageColor,
     clearPageViewports: pageViewportStore.clearPageViewports

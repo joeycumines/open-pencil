@@ -4,12 +4,11 @@ import { computed } from 'vue'
 import { useI18n, useSelectionState } from '@open-pencil/vue'
 
 import AppSelect from '@/components/ui/AppSelect.vue'
-import { useSectionUI } from '@/components/ui/section'
+import PanelSection from '@/components/ui/PanelSection.vue'
 import { useEditorStore } from '@/app/editor/active-store'
 
 const editor = useEditorStore()
 const { selectedNode: node } = useSelectionState()
-const sectionCls = useSectionUI()
 const { panels } = useI18n()
 
 const instanceComponent = computed(() => {
@@ -43,8 +42,12 @@ function switchVariant(propertyName: string, newValue: string) {
 </script>
 
 <template>
-  <div v-if="hasVariants" data-test-id="variant-section" :class="sectionCls.wrapper">
-    <label class="mb-1.5 block text-[11px] font-medium text-component">{{ panels.variants }}</label>
+  <PanelSection
+    v-if="hasVariants"
+    :label="panels.variants"
+    data-test-id="variant-section"
+    :ui="{ label: 'font-medium text-component' }"
+  >
     <div class="flex flex-col gap-1.5">
       <div
         v-for="[propName, options] in variantOptions"
@@ -53,11 +56,12 @@ function switchVariant(propertyName: string, newValue: string) {
       >
         <label class="text-[10px] text-muted">{{ propName }}</label>
         <AppSelect
+          data-test-id="app-select-trigger"
           :model-value="currentValues[propName] ?? ''"
           :options="[...options].map((v) => ({ value: v, label: v }))"
           @update:model-value="switchVariant(propName, $event)"
         />
       </div>
     </div>
-  </div>
+  </PanelSection>
 </template>

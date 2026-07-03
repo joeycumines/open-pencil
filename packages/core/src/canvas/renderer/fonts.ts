@@ -1,3 +1,5 @@
+import type { SceneGraph } from '@open-pencil/scene-graph'
+
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import {
   COMPONENT_LABEL_FONT_SIZE,
@@ -7,7 +9,7 @@ import {
   SECTION_TITLE_FONT_SIZE,
   SIZE_FONT_SIZE
 } from '#core/constants'
-import type { SceneGraph } from '#core/scene-graph'
+import { ensureTextFallbackPacksForNodes } from '#core/text/coverage'
 import { fontManager } from '#core/text/fonts'
 
 export function getFontProvider(r: SkiaRenderer) {
@@ -53,12 +55,14 @@ export async function loadFonts(
       r.invalidateAllPictures()
       onFallbackFontsLoaded?.()
     }
+    return undefined
   })
   void fontManager.ensureArabicFallback().then((families) => {
     if (!r.isDestroyed() && families.length > 0) {
       r.invalidateAllPictures()
       onFallbackFontsLoaded?.()
     }
+    return undefined
   })
 }
 
@@ -75,6 +79,7 @@ export async function prepareForExport(
 
   const fontKeys = fontManager.collectFontKeys(graph, nodeIds)
   await Promise.all(fontKeys.map(([family, style]) => fontManager.loadFont(family, style)))
+  await ensureTextFallbackPacksForNodes(graph, nodeIds)
 
   computeAllLayouts(graph, pageId)
 
