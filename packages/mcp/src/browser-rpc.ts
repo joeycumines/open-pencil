@@ -324,6 +324,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     browserWs = null
     browserRegistered = false
     clients.clear()
+    authenticatedClients.clear()
   }
 
   return {

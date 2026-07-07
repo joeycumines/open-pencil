@@ -156,7 +156,11 @@ export function clearInvalidatedTextRenderingData(
   if (node.type !== 'TEXT') return
   const changeKeys = Object.keys(changes)
   if (node.textPicture && changeKeys.some(invalidatesTextPicture)) node.textPicture = null
-  if (node.figmaDerivedTextGlyphs && changesInvalidateFigmaDerivedTextGlyphs(node, changes)) {
+  if (
+    node.figmaDerivedTextGlyphs &&
+    changes.figmaDerivedTextGlyphs === undefined &&
+    changesInvalidateFigmaDerivedTextGlyphs(node, changes)
+  ) {
     node.figmaDerivedTextGlyphs = null
   }
 }

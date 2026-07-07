@@ -13,8 +13,6 @@ import { expectDefined } from '#tests/helpers/assert'
 import { parseFixture } from '#tests/helpers/fig-fixtures'
 import { runsHeavyTests } from '#tests/helpers/test-utils'
 
-const MATERIAL3_TEXT_ROUNDTRIP_TIMEOUT_MS = 180_000
-
 setDefaultTimeout(60_000)
 
 describe('text node export', () => {
@@ -277,13 +275,13 @@ describe('text node export', () => {
   test.if(runsHeavyTests)(
     'material3.fig text nodes have derivedTextData after round-trip',
     async () => {
-      const original = await parseFixture('material3.fig', { populate: 'none' })
+      const original = await parseFixture('material3.fig')
 
       const textNodes = [...original.getAllNodes()].filter((n) => n.type === 'TEXT')
       expect(textNodes.length).toBeGreaterThan(0)
 
       const exported = await exportFigFile(original)
-      const reimported = await parseFigFile(exported.buffer as ArrayBuffer, { populate: 'none' })
+      const reimported = await parseFigFile(exported.buffer as ArrayBuffer)
 
       const reimportedText = [...reimported.getAllNodes()].filter((n) => n.type === 'TEXT')
       expect(reimportedText.length).toBe(textNodes.length)
@@ -291,7 +289,6 @@ describe('text node export', () => {
       for (const node of reimportedText.slice(0, 10)) {
         expect(node.text.length).toBeGreaterThan(0)
       }
-    },
-    MATERIAL3_TEXT_ROUNDTRIP_TIMEOUT_MS
+    }
   )
 })

@@ -200,7 +200,7 @@ OPENPENCIL_MCP_AUTH_TOKEN="" openpencil-mcp-http
 |---------|----------|------|
 | `PORT` | `7600` | Port TCP. Ustaw `0`, aby wyłączyć TCP (tylko gniazdo na macOS/Linux). ⚠️ W systemie Windows `PORT=0` wyłącza jedyny dostępny transport, przez co serwer staje się nieosiągalny. |
 | `OPENPENCIL_MCP_SOCKET` | Domyślna dla platformy | Nadpisuje ścieżkę gniazda (tylko macOS/Linux — Windows nie obsługuje gniazd Unix) |
-| `OPENPENCIL_MCP_DISCOVERY_PATH` | Domyślna dla platformy | Nadpisuje lokalizację pliku odkrywania (`mcp.json`) |
+| `OPENPENCIL_MCP_DISCOVERY_PATH` | Domyślna dla platformy | Nadpisuje lokalizację pliku odkrywania (`mcp.json`) (tylko serwer/test; aplikacja desktopowa oblicza własną domyślną ścieżkę dla platformy) |
 | `OPENPENCIL_MCP_TCP` | Przestarzała | Brak efektu — TCP jest kontrolowane przez `PORT` (>0 = włączone, 0 = wyłączone) |
 | `OPENPENCIL_MCP_AUTH_TOKEN` | Automatycznie generowany | Token uwierzytelniający serwera. Jeśli nieustawiony, jest generowany przy uruchomieniu. Jeśli ustawiony na pusty ciąg (`""`), uwierzytelnianie jest wyłączone. |
 | `OPENPENCIL_MCP_ROOT` | `cwd()` | Zakres katalogu dla narzędzi `open_file`, `new_document` i eksportu zapisującego pliki. `save_file` jest zawsze dostępne; ścieżka jest walidowana względem tego katalogu, gdy jest ustawiony |
@@ -230,7 +230,7 @@ Inna instancja OpenPencil (lub inny proces) używa portu 7600. Można:
 
 - Zamknąć drugą instancję
 - Ustawić `PORT=7601` (lub dowolny wolny port) przed uruchomieniem
-- Ustawić `PORT=0`, aby całkowicie wyłączyć TCP i używać transportu tylko przez gniazdo
+- Na macOS/Linux: ustawić `PORT=0`, aby wyłączyć TCP i używać transportu tylko przez gniazdo (na Windows `PORT=0` wyłącza jedyny dostępny transport — wybierz inny wolny port)
 
 ### Błędy "Stale socket" na macOS/Linux
 
@@ -275,7 +275,7 @@ npx skills add open-pencil/skills@open-pencil
 
 Działa z Claude Code, Cursor, Windsurf, Codex i każdym agentem obsługującym [skills](https://skills.sh). Umiejętność obejmuje CLI, narzędzia MCP, renderowanie JSX, eval oraz most automatyzacji uruchomionej aplikacji.
 
-## Narzędzia (90)
+## Narzędzia (91)
 
 ### Dokument
 
@@ -284,6 +284,7 @@ Działa z Claude Code, Cursor, Windsurf, Codex i każdym agentem obsługującym 
 | `open_file` | Otwórz plik `.fig` do edycji |
 | `save_file` | Zapisz bieżący dokument do pliku `.fig` |
 | `new_document` | Utwórz nowy pusty dokument |
+| `list_documents` | Wylistuj otwarte dokumenty/karty aplikacji i ich strony |
 
 Uwaga: `open_file`, `new_document` oraz narzędzia eksportu zapisujące pliki są zawsze dostępne — ich ścieżki są ograniczone do `OPENPENCIL_MCP_ROOT`, które domyślnie przyjmuje bieżący katalog roboczy (`cwd()`) gdy nie jest ustawione. `save_file` jest zawsze dostępne; jego ścieżka jest walidowana względem `OPENPENCIL_MCP_ROOT` tylko gdy katalog główny jest skonfigurowany.
 

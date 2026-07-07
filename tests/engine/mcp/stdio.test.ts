@@ -118,6 +118,7 @@ describe('MCP stdio transport', () => {
     // Fail-safe: clean up any leftover state from a failed previous test
     if (client) await client.close().catch(() => undefined)
     if (browser) browser.close()
+    if (transport) await transport.close().catch(() => undefined)
     if (handle) await handle.close().catch(() => undefined)
 
     graph = new SceneGraph()
@@ -230,15 +231,24 @@ describe('MCP stdio transport', () => {
     })
     expect(result.isError).not.toBe(true)
     const request = expectDefined(
-      browser.requests.find(
-        (item) => item.command === 'tool' && item.args?.name === 'create_shape'
-      ),
+      browser?.requests.find((item) => {
+        const args = item.args as { name?: string } | undefined
+        return item.command === 'tool' && args?.name === 'create_shape'
+      }),
       'tool request'
     )
-    expect(request.args?.document_id).toBe('doc-1')
-    expect(request.args?.page_id).toBe('page-1')
-    expect(request.args?.args?.document_id).toBeUndefined()
-    expect(request.args?.args?.page_id).toBeUndefined()
+    const requestArgs = request.args as
+      | {
+          name?: string
+          document_id?: string
+          page_id?: string
+          args?: Record<string, unknown>
+        }
+      | undefined
+    expect(requestArgs?.document_id).toBe('doc-1')
+    expect(requestArgs?.page_id).toBe('page-1')
+    expect(requestArgs?.args?.document_id).toBeUndefined()
+    expect(requestArgs?.args?.page_id).toBeUndefined()
   })
 
   test('list_documents via stdio returns open documents', async () => {
@@ -248,7 +258,7 @@ describe('MCP stdio transport', () => {
       documents: Array<{ id: string; current_page_id: string }>
     }
     expect(data.documents[0].id).toBe('doc-1')
-    expect(data.documents[0].current_page_id).toBe(browser.graph.getPages()[0].id)
+    expect(data.documents[0].current_page_id).toBe(browser?.graph.getPages()[0].id)
   })
 
   test('save_file via stdio succeeds', async () => {
