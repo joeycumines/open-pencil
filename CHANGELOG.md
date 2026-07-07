@@ -34,6 +34,15 @@
 - Add overlap analysis exports for automation consumers, including `computeOverlaps`, `analyzeOverlaps`, overlap result types, and parameter parsers from core subpath exports.
 - Add world-matrix visual bounds to overlap analysis, covering vector/stroke/text geometry, ancestor clipping, rotated clipping frames, and nested ancestor rotations.
 - Add the `@open-pencil/core/package.json` subpath export for package metadata consumers.
+- Add DOM/CSS import and authoring support so HTML, CSS, Tailwind, and JSX can be converted into editable OpenPencil documents from the app, CLI, and SDK.
+- Add Tailwind class serialization for DOM/CSS HTML export in the SDK and CLI.
+- Add standalone browser-openable HTML export with compiled CSS and optional external image/font assets.
+- Add richer Design JSX authoring for components, variables, structured fills, gradients, shadows, and blur effects.
+- Add overlap analysis for finding layout collisions and overflowing children from the CLI, AI tools, and MCP.
+- Add saved per-node export settings for repeat exports.
+- Add desktop image drag-and-drop into the Tauri app window.
+- Add open-document discovery for live CLI and MCP automation so agents can target the intended document and page.
+- Publish lower-level SceneGraph, Pen, Kiwi, Fig, and DOM/CSS functionality through clearer package boundaries for SDK and automation consumers.
 
 ### Security
 
@@ -75,6 +84,24 @@
 - Preserve rotated Figma transform origins for imported vector nodes.
 - Render complex text fills through vector glyph outlines so imported Figma text can use the normal fill pipeline for gradients, images, patterns, and other non-solid paints.
 - Fix file-backed CLI commands (`convert`, `eval --output`, `export`) to use Node `fs/promises` instead of Bun runtime APIs, so the published CLI works when installed and run under Node.
+- Fix live CLI and MCP automation drifting to the wrong open document or page when multiple files are open.
+- Improve Chinese, Japanese, and Korean text rendering with glyph-aware fallback fonts and outline rendering when needed.
+- Preserve imported Figma text sizing more accurately, especially auto-sized text inside auto-layout frames.
+- Match Figma auto-layout reflow when deleting children, hiding optional instance slots, or syncing component changes.
+- Fix desktop clipboard copy, cut, and paste when browser clipboard events are unavailable.
+- Fix desktop "Share This File" links so they use the public app URL.
+- Fix collaborators joining a room without receiving the current document contents.
+- Fix `.fig` round-trips that could corrupt files because of duplicate generated IDs.
+- Fix resizing groups and boolean operations so child layers scale with the parent.
+- Fix Hangul IME composition while editing text.
+- Improve large layer-tree responsiveness and keep expanded state stable while editing.
+- Improve AI provider setup with a connection test and clearer errors for OpenAI-compatible endpoints.
+- Fix published package type resolution for TypeScript consumers.
+- Fix clone operations sharing mutable data with the original, including fills, strokes, variable bindings, overrides, and vector networks.
+- Fix variable bindings left behind when fills or strokes are removed.
+- Improve Figma group, boolean, instance, rotated vector, complex text fill, layout grid, page guide, pattern/noise, and other imported visual details.
+- Fix file-backed CLI commands under Node by avoiding Bun-only filesystem APIs.
+- Improve overlap analysis accuracy for rotated stroked nodes, nested clipping, empty limits, and trimmed filter values.
 
 ## 0.13.2 — 2026-05-30
 

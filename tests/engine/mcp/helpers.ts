@@ -19,7 +19,7 @@ export interface HealthResponse {
 
 export interface MockBrowserRequest {
   command: string
-  args?: unknown
+  args?: { name?: string; document_id?: string; page_id?: string; args?: Record<string, unknown> }
 }
 
 export interface MockBrowser {
@@ -198,8 +198,8 @@ export function connectMockBrowser(
 
         try {
           const command = msg.command
-          requests.push({ command, args: msg.args })
-          const args = msg.args as { name?: string; args?: Record<string, unknown> } | undefined
+          requests.push({ command, args: msg.args as MockBrowserRequest['args'] })
+          const args = msg.args as MockBrowserRequest['args']
 
           let result: unknown
           if (command === 'tool' && args?.name) {
