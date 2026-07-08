@@ -1,6 +1,6 @@
 import * as Y from 'yjs'
 
-import { createDefaultSource } from '@open-pencil/core/scene-graph'
+import { createDefaultSource } from '@open-pencil/scene-graph'
 import type {
   GraphSyncState,
   SceneGraph,
@@ -9,7 +9,7 @@ import type {
   VariableCollection,
   VariableCollectionMode,
   VariableValue
-} from '@open-pencil/core/scene-graph'
+} from '@open-pencil/scene-graph'
 
 import type { YCollections, YVariables } from '../constants'
 

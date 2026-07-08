@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'bun:test'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import * as figMod from '@open-pencil/core/io/formats/fig'
 import * as layoutMod from '@open-pencil/core/layout'
-import { SceneGraph } from '@open-pencil/core/scene-graph'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { createTab, getActiveStore, openFileInNewTab, tabCount } from '@/app/tabs'
 

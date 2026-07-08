@@ -9,7 +9,7 @@ import {
   DialogTitle
 } from 'reka-ui'
 
-import type { SceneNode } from '@open-pencil/core/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 import { useI18n } from '@open-pencil/vue'
 
 import { nodeIcon } from '@/app/editor/icons'
@@ -155,6 +155,10 @@ function insertionPoint(component: SceneNode, parentId: string) {
   }
 }
 
+function openAssetDocs(asset: LocalAsset | null): void {
+  if (asset?.docsUrl) openExternalLink(asset.docsUrl)
+}
+
 function insertAsset(asset: LocalAsset) {
   if (!asset.componentId) return
   const component = editor.graph.getNode(asset.componentId)
@@ -181,7 +185,7 @@ function insertSelectedAsset() {
       <AppInput
         v-model="query"
         type="search"
-        test-id="assets-search"
+        data-test-id="assets-search"
         size="sm"
         :placeholder="panels.searchLocalComponents"
       />
@@ -377,9 +381,7 @@ function insertSelectedAsset() {
                 <button
                   data-test-id="asset-details-docs"
                   class="mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-component hover:bg-component/10"
-                  @click="
-                    selectedAsset.docsUrl ? openExternalLink(selectedAsset.docsUrl) : undefined
-                  "
+                  @click="openAssetDocs(selectedAsset)"
                 >
                   <icon-lucide-book-open class="size-3" />
                   {{ panels.openDocs }}

@@ -1,12 +1,12 @@
 import * as Y from 'yjs'
 
-import { createDefaultSource, splitOverrideKey } from '@open-pencil/core/scene-graph'
+import { createDefaultSource, splitOverrideKey } from '@open-pencil/scene-graph'
 import type {
   GraphSyncState,
   SceneGraph,
   SceneNode,
   SourceMetadata
-} from '@open-pencil/core/scene-graph'
+} from '@open-pencil/scene-graph'
 
 import {
   EXCLUDED_SYNC_KEYS,

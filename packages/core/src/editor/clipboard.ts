@@ -1,12 +1,13 @@
+import { createDefaultSource, joinOverrideKey, splitOverrideKey } from '@open-pencil/scene-graph'
+import type { SceneGraph, SceneNode, SourceMetadata } from '@open-pencil/scene-graph'
+import type { Vector } from '@open-pencil/scene-graph/primitives'
+
 import {
   importClipboardNodes,
   parseFigmaClipboard,
   parseOpenPencilClipboard
 } from '#core/clipboard'
 import { computeAllLayouts } from '#core/layout'
-import { createDefaultSource, joinOverrideKey, splitOverrideKey } from '#core/scene-graph'
-import type { SceneGraph, SceneNode, SourceMetadata } from '#core/scene-graph'
-import type { Vector } from '#core/types'
 
 import { createClipboardCopyActions } from './clipboard/copy'
 import { createClipboardExportActions } from './clipboard/export'
@@ -284,6 +285,7 @@ export function createClipboardActions(ctx: EditorContext) {
 
     const prevSelection = new Set(ctx.state.selectedIds)
     for (const { id } of entries) ctx.graph.deleteNode(id, { permanent: true })
+    computeAllLayouts(ctx.graph, ctx.state.currentPageId)
     let restoredIds = new Map<string, string>()
 
     ctx.undo.push({
@@ -293,10 +295,12 @@ export function createClipboardActions(ctx: EditorContext) {
           ctx.graph.deleteNode(restoredIds.get(id) ?? id, { permanent: true })
         }
         restoredIds = new Map()
+        computeAllLayouts(ctx.graph, ctx.state.currentPageId)
         ctx.setSelectedIds(new Set())
       },
       inverse: () => {
         restoredIds = restoreDeletedEntries(ctx, entries)
+        computeAllLayouts(ctx.graph, ctx.state.currentPageId)
         ctx.setSelectedIds(mapSelection(prevSelection, restoredIds))
       }
     })

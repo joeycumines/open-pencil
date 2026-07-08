@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import * as Y from 'yjs'
 
 import { createDefaultSource } from '@open-pencil/core'
-import type { SceneGraph, VariableCollection } from '@open-pencil/core/scene-graph'
+import type { SceneGraph, VariableCollection } from '@open-pencil/scene-graph'
 
 import {
   applyCollectionToGraph,

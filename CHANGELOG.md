@@ -2,71 +2,39 @@
 
 ## Unreleased
 
-### Added
-
-- Stable node identity system: every node has a `source.id` that survives graph rebuilds, runtime ID changes, and undo/redo cycles. Instance override keys use stable IDs, not runtime IDs, so overrides survive `replaceGraph()` and component re-population.
-- GUID remediation during .fig import: duplicate or missing Figma GUIDs are detected and assigned synthetic GUIDs with full reference remapping. Import diagnostics track duplicates, missing GUIDs, and reassignments.
-- Collaboration sync for variables and collections: design variables, collections, and modes are synced across peers via separate Yjs maps (`yvariables`, `ycollections`). Variable bindings (`boundVariables`) are remapped to stable IDs on sync and resolved on the joiner with pending queue for unresolved variables.
-- Delta-based collab property sync: only changed properties are written to Yjs, reducing a 60fps drag from ~100 Yjs ops to ~2 per frame.
-- Collab layer ordering sync: child ordering is synced via `childIds` as a stable-ID JSON array, so layer reordering propagates to joiners.
-- Collab root split-brain fix: when two peers both call `shareCurrentDoc`, the peer with the lexicographically smaller root stable ID wins and the other yields, ensuring convergence.
-- O(1) stable ID lookup index: `findRuntimeIdByStableId()` uses a lazy-built `stableIdToRuntimeIdMap` for constant-time lookup, eliminating O(n) linear scans.
-- FigmaAPI hardening: `FigmaNodeProxy` uses a live graph reference (not a stale snapshot), and `parseFigmaPayload()` validates the shape of remote `sourceFig` data before merging.
-- Pen import format tag: pen-imported nodes have `source.format = 'pen'`, distinguishing them from never-imported (`null`) and fig-imported (`'fig'`) nodes.
-- Export diagnostics: `FigExportDiagnostics` tracks reused vs. minted GUIDs during .fig export, attached to `graph.exportDiagnostics`.
-- SceneGraph events for variable lifecycle: `variable:created`, `variable:deleted`, `collection:created`, `collection:updated`, `collection:deleted` events on the graph emitter.
-- MCP server uses Unix domain socket as the primary transport on macOS/Linux, with optional TCP fallback for browser connections; Windows uses TCP exclusively
-- Discovery file (`mcp.json`) for stdio bridge and CLI auto-connection, stored with `0o600` permissions at the platform-default path
-- `OPENPENCIL_MCP_SOCKET` environment variable overrides the socket path in the discovery file; TCP is controlled by `PORT` (>0 = on, 0 = off)
-- Add JSX authoring support for components, component sets, and instances.
-- Add type-validated `bindVariable`/`unbindVariable` with event emission and indexed binding format (`fills/N/color` instead of `fills[N]`).
-- Add `unbind_variable` MCP tool for removing variable bindings.
-- Add `openpencil analyze overlaps`, the `analyze_overlaps` RPC command, and the `analyze_overlaps` ToolDef for heuristic overlap detection. The command reports sibling overlaps, children overflowing non-clipping parents, and overlay/backdrop patterns, with filters for page/page ID, scope, category, severity, min area/ratio, node type, hidden/locked/absolute nodes, result limit, and `--json` output.
-- Add overlap analysis exports for automation consumers, including `computeOverlaps`, `analyzeOverlaps`, overlap result types, and parameter parsers from core subpath exports.
-- Add world-matrix visual bounds to overlap analysis, covering vector/stroke/text geometry, ancestor clipping, rotated clipping frames, and nested ancestor rotations.
-- Add the `@open-pencil/core/package.json` subpath export for package metadata consumers.
-
-### Security
-
-- Auth token comparison uses `crypto.timingSafeEqual` to prevent timing attacks (applied to HTTP endpoints and WebSocket browser registration)
-- Auth token auto-generated on startup (32-hex random); no longer exposed via `/health` endpoint; stored in discovery file with `0o600` permissions
-- Restrictive file permissions: socket `0o600`, directory `0o700` (best-effort; subject to process umask); prevents access from other users but not from same-user processes
-- Path traversal protection hardened against symlink attacks via `fs.realpath` in `resolveSafePath`; symlink targets are validated against root before returning the user-provided normalized path
-
 ### Changed
 
-- `replaceGraph()` now clears the undo stack. Consumers relying on undo history surviving graph replacement must capture undo state before calling `replaceGraph()`.
-- `graph:replaced` event payload changed from `(graph: SceneGraph)` to `(payload: GraphReplacedPayload { graph, translation })`. Use `graphReplacedPayloadGraph()` compat helper for migration.
-- `SceneGraphEvents` now includes `variable:created`, `variable:deleted`, `collection:created`, `collection:updated`, `collection:deleted` events. `onNodeEvents()` accepts handlers for these via `variableCreated`, `variableDeleted`, `collectionCreated`, `collectionUpdated`, `collectionDeleted` fields.
-- `SourceMetadata.format` type widened from `'fig' | null` to `'fig' | 'pen' | null`.
-- `GraphSyncState` extended with `variableToLocal`, `localToVariable`, `collectionToLocal`, `localToCollection`, `modeToLocal`, `pendingVariableCollections`, `pendingVariableBindings` fields for collab variable sync.
-- `CollabRuntime` extended with `yvariables` and `ycollections` Yjs maps.
-- Stdio bridge connects via HTTP-over-socket instead of WebSocket
-- WebSocket upgrades happen on the same HTTP port (no separate WS_PORT)
-- Discovery file checks if the recorded PID is still running to detect stale entries (note: PID recycling may cause false positives on long-running systems)
-
-### Breaking
-
-- `startServer()` is now async, returns `Promise<ServerHandle { app, server, socketPath, httpPort, close }>` instead of `{ app, wss, httpPort, close }`
-- `WS_PORT` and `AUTOMATION_WS_PORT` removed; WebSocket uses the unified HTTP port
+- Add Figma-style page management in the Pages panel, including rename/delete actions and drag-and-drop page reordering.
+- Add DOM/CSS import and authoring support so HTML, CSS, Tailwind, and JSX can be converted into editable OpenPencil documents from the app, CLI, and SDK.
+- Add Tailwind class serialization for DOM/CSS HTML export in the SDK and CLI.
+- Add standalone browser-openable HTML export with compiled CSS and optional external image/font assets.
+- Add richer Design JSX authoring for components, variables, structured fills, gradients, shadows, and blur effects.
+- Add overlap analysis for finding layout collisions and overflowing children from the CLI, AI tools, and MCP.
+- Add saved per-node export settings for repeat exports.
+- Add desktop image drag-and-drop into the Tauri app window.
+- Add open-document discovery for live CLI and MCP automation so agents can target the intended document and page.
+- Publish lower-level SceneGraph, Pen, Kiwi, Fig, and DOM/CSS functionality through clearer package boundaries for SDK and automation consumers.
 
 ### Fixes
 
-- Increase per-test timeout for slow `gold-preview.fig` fixture tests (`clipboard roundtrip`, `group reclassification`, `glyph blob preservation`, `auto-layout text measurement`, and `render/canvas/cache`) so they no longer flake on slower CI runners.
-- Fix leaking `vi.mock` calls in tab/file IO tests that replaced `computeAllLayouts` with a no-op and broke unrelated layout/text tests in the same `bun test` process. Mocks are now scoped to each test with `vi.spyOn` and restored with `vi.restoreAllMocks()`.
-- Fix Rust path identity normalization to collapse duplicate slashes, strip trailing slashes, and preserve UNC `//` prefix so desktop file-association identity keys match the frontend `normalizeFilePath` contract.
-- Fix `downloadBlob` passing `Uint8Array.buffer` to `Blob`, which included adjacent bytes for subarray payloads; it now passes the typed-array view directly.
-- Fix `yieldToUI` leaving a dangling queued `requestAnimationFrame` callback when the `setTimeout` fallback resolved first, and fix a dangling `setTimeout` fallback when `requestAnimationFrame` is a synchronous no-op. The surviving callback always cancels the other side.
-- Fix clone operations (duplicate, instance creation, clipboard copy) sharing mutable references with the original — editing fills, strokes, variable bindings, overrides, or vector networks on one no longer corrupts the other.
-- Fix instance overrides shallow-copied on clone — override values containing objects are now deep-copied.
-- Fix stale variable bindings not cleaned up when fills/strokes arrays shrink — any indexed sub-path is now handled, not just `/color`.
-- Fix MCP tool calls failing immediately on first connect when the desktop app has not registered yet — `sendRpc` now waits up to 10 seconds for the app to connect before returning an error
-- Fix tooltips around inspector dropdowns/popovers without breaking floating menu anchoring.
-- Harden MCP calls with bounded page-tree responses, oversized-result errors, JSON HTTP responses, and stale WebSocket cleanup.
-- Improve Figma boolean imports by preserving XOR operations as editable exclude nodes and falling back to imported fill geometry when boolean path reconstruction cannot produce a path.
-- Preserve rotated Figma transform origins for imported vector nodes.
-- Render complex text fills through vector glyph outlines so imported Figma text can use the normal fill pipeline for gradients, images, patterns, and other non-solid paints.
-- Fix file-backed CLI commands (`convert`, `eval --output`, `export`) to use Node `fs/promises` instead of Bun runtime APIs, so the published CLI works when installed and run under Node.
+- Fix live CLI and MCP automation drifting to the wrong open document or page when multiple files are open.
+- Improve Chinese, Japanese, and Korean text rendering with glyph-aware fallback fonts and outline rendering when needed.
+- Preserve imported Figma text sizing more accurately, especially auto-sized text inside auto-layout frames.
+- Match Figma auto-layout reflow when deleting children, hiding optional instance slots, or syncing component changes.
+- Fix desktop clipboard copy, cut, and paste when browser clipboard events are unavailable.
+- Fix desktop "Share This File" links so they use the public app URL.
+- Fix collaborators joining a room without receiving the current document contents.
+- Fix `.fig` round-trips that could corrupt files because of duplicate generated IDs.
+- Fix resizing groups and boolean operations so child layers scale with the parent.
+- Fix Hangul IME composition while editing text.
+- Improve large layer-tree responsiveness and keep expanded state stable while editing.
+- Improve AI provider setup with a connection test and clearer errors for OpenAI-compatible endpoints.
+- Fix published package type resolution for TypeScript consumers.
+- Fix clone operations sharing mutable data with the original, including fills, strokes, variable bindings, overrides, and vector networks.
+- Fix variable bindings left behind when fills or strokes are removed.
+- Improve Figma group, boolean, instance, rotated vector, complex text fill, layout grid, page guide, pattern/noise, and other imported visual details.
+- Fix file-backed CLI commands under Node by avoiding Bun-only filesystem APIs.
+- Improve overlap analysis accuracy for rotated stroked nodes, nested clipping, empty limits, and trimmed filter values.
 
 ## 0.13.2 — 2026-05-30
 
@@ -76,9 +44,6 @@
 
 ### Fixes
 
-- Improve Figma boolean imports by preserving XOR operations as editable exclude nodes and falling back to imported fill geometry when boolean path reconstruction cannot produce a path.
-- Preserve rotated Figma transform origins for imported vector nodes.
-- Render complex text fills through vector glyph outlines so imported Figma text can use the normal fill pipeline for gradients, images, patterns, and other non-solid paints.
 - Fix the published MCP package so global installs include the `openpencil-mcp` and `openpencil-mcp-http` launchers required by desktop app integrations.
 
 ## 0.13.1 — 2026-05-29

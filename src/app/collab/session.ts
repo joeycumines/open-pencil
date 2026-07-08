@@ -6,7 +6,7 @@ import type { Awareness } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
 import { randomIndex } from '@open-pencil/core/random'
-import type { SceneNode } from '@open-pencil/core/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { connectCollabRoom } from '@/app/collab/room'
 import type { CollabState } from '@/app/collab/types'

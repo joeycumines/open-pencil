@@ -4,7 +4,7 @@ import {
   type GraphSyncState,
   type SceneGraph,
   type SceneNode
-} from '@open-pencil/core/scene-graph'
+} from '@open-pencil/scene-graph'
 
 import { YJS_NODE_PROPERTY_KEYS } from './constants'
 import { ensureRemoteMapping, stableIdForNode, stableIdForRuntimeId, toRuntimeId } from './mapping'

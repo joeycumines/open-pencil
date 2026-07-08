@@ -1,5 +1,6 @@
+import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+
 import { remapRestoredSnapshotReferences } from '#core/editor/history/restore-references'
-import type { SceneGraph, SceneNode } from '#core/scene-graph'
 
 export interface SubtreeSnapshotEntry {
   id: string

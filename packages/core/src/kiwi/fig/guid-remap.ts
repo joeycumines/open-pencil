@@ -1,4 +1,11 @@
-import type { Effect, NodeChange, GUID, Paint, VariableDataEntry } from '#core/kiwi/fig/codec'
+import type {
+  Effect,
+  NodeChange,
+  GUID,
+  Paint,
+  VariableDataEntry
+} from '@open-pencil/kiwi/fig/codec'
+
 import type {
   ComponentPropAssignment,
   ComponentPropDef,

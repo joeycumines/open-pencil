@@ -3,7 +3,6 @@ import { describe, expect, test } from 'bun:test'
 import type { SceneGraph } from '@open-pencil/core'
 import { SceneGraph as SceneGraphCtor } from '@open-pencil/core'
 import { createEditor } from '@open-pencil/core/editor'
-import { graphReplacedPayloadGraph } from '@open-pencil/core/editor/events/compat'
 
 describe('graph:replaced breaking payload', () => {
   test('payload destructures into graph and translation', () => {
@@ -31,8 +30,8 @@ describe('graph:replaced breaking payload', () => {
     const editor = createEditor({ graph: oldGraph, skipInitialGraphSetup: true })
 
     let migratedGraph: SceneGraph | null = null
-    editor.onEditorEvent('graph:replaced', (payload) => {
-      migratedGraph = graphReplacedPayloadGraph(payload)
+    editor.onEditorEvent('graph:replaced', ({ graph }) => {
+      migratedGraph = graph
     })
     editor.replaceGraph(newGraph)
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { SceneGraph } from '@open-pencil/core'
+import { stringToGuid } from '@open-pencil/kiwi/fig/guid'
 
 import {
   getCandidateCache,
@@ -22,7 +23,6 @@ import {
 } from '#core/kiwi/fig/instance-overrides/resolve'
 import { propagateOverridesTransitively } from '#core/kiwi/fig/instance-overrides/sync'
 import type { OverrideContext } from '#core/kiwi/fig/instance-overrides/types'
-import { stringToGuid } from '#core/kiwi/fig/node-change/guid'
 
 function buildCtx(graph: SceneGraph): OverrideContext {
   return {

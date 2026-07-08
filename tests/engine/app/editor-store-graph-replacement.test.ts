@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { effectScope } from 'vue'
 
-import { SceneGraph, type VectorNetwork } from '@open-pencil/core/scene-graph'
+import { SceneGraph, type VectorNetwork } from '@open-pencil/scene-graph'
 
 import { createEditorStore } from '@/app/editor/session'
 

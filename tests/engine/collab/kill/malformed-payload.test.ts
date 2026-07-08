@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import * as Y from 'yjs'
 
+import { copyEffects, copyFills } from '@open-pencil/scene-graph/copy'
+
 import {
   applyInstanceOverrideValuesToChildren,
   findInstanceDescendantByStableId
 } from '@/app/collab/yjs-sync'
-
-import { copyEffects, copyFills } from '#core/scene-graph/copy'
 
 import {
   createTestStore,

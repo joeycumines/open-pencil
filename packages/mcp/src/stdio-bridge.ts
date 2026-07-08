@@ -311,6 +311,7 @@ export function createStdioRpcBridge({
            */
           function attempt(allowAuthRetry: boolean) {
             httpRequest('POST', '/rpc', body)
+              // eslint-disable-next-line promise/always-return -- side-effect callback (resolve/reject)
               .then(({ status, data, req }) => {
                 // If the overall RPC timeout fired while the request was in-flight,
                 // the server may have already executed the tool. Destroying the
@@ -330,15 +331,10 @@ export function createStdioRpcBridge({
                     // still be protected by the overall 35-second timeout.
                     resolvedAuthToken = null
                     void readDiscoveryFile()
+                      // eslint-disable-next-line promise/always-return -- side-effect callback (resolve/reject)
                       .then((info) => {
                         if (settled) return
-                        if (info?.authToken) {
-                          resolvedAuthToken = info.authToken
-                          // Keep existing transport mode (socket path / port
-                          // doesn't change on server restart — only the token
-                          // does). Retry exactly once with the new token.
-                          attempt(false)
-                        } else {
+                        if (!info?.authToken) {
                           clearTimeout(timer)
                           // The discovery file exists but has no token; treat
                           // this like a reconnection event and clear any
@@ -351,7 +347,13 @@ export function createStdioRpcBridge({
                           settled = true
                           scheduleReconnect()
                           reject(new Error('Unauthorized'))
+                          return
                         }
+                        resolvedAuthToken = info.authToken
+                        // Keep existing transport mode (socket path / port
+                        // doesn't change on server restart — only the token
+                        // does). Retry exactly once with the new token.
+                        attempt(false)
                       })
                       .catch(() => {
                         if (settled) return

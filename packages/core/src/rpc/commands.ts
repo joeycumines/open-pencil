@@ -1,4 +1,4 @@
-import type { SceneGraph } from '#core/scene-graph'
+import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import {
   analyzeClustersCommand,
@@ -17,6 +17,16 @@ import {
 } from './read-commands'
 import type { RpcCommand } from './types'
 import { variablesCommand } from './variables-command'
+
+export type AutomationDocumentSummary = {
+  id: string
+  name: string
+  path?: string
+  active: boolean
+  current_page_id: string
+  current_page_name: string
+  pages: Array<{ id: string; name: string }>
+}
 
 export type { RpcCommand } from './types'
 export * from './read-commands'

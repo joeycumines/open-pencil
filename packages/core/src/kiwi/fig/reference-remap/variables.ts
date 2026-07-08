@@ -1,4 +1,4 @@
-import type { GUID, NodeChange } from '#core/kiwi/fig/codec'
+import type { GUID, NodeChange } from '@open-pencil/kiwi/fig/codec'
 
 import { remapComponentPropValue, remapGuid, type NodeChangeUpdates } from './shared'
 

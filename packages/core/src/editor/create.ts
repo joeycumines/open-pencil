@@ -2,13 +2,18 @@ import type { CanvasKit } from 'canvaskit-wasm'
 import { createNanoEvents } from 'nanoevents'
 import type { Emitter } from 'nanoevents'
 
+import {
+  SceneGraph,
+  migrateOverrideKeys,
+  setInstanceStructureChangeHandler
+} from '@open-pencil/scene-graph'
+import { UndoManager } from '@open-pencil/scene-graph/undo'
+
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { prefetchFigmaSchema } from '#core/clipboard'
 import { IS_BROWSER } from '#core/constants'
+import { clearInstanceOverrideCaches } from '#core/kiwi/fig/instance-overrides/cache'
 import { setTextMeasurer } from '#core/layout'
-import { SceneGraph } from '#core/scene-graph'
-import { migrateOverrideKeys } from '#core/scene-graph/override-key-migrate'
-import { UndoManager } from '#core/scene-graph/undo'
 import { TextEditor } from '#core/text/editor'
 import { fontManager } from '#core/text/fonts'
 
@@ -47,6 +52,7 @@ export { createDefaultEditorState } from './state'
 
 export function createEditor(options?: EditorOptions) {
   let _graph = options?.graph ?? new SceneGraph()
+  setInstanceStructureChangeHandler(() => clearInstanceOverrideCaches())
   const skipInitialGraphSetup = options?.skipInitialGraphSetup ?? false
   const undo = new UndoManager()
   const _loadFont = options?.loadFont ?? fontManager.loadFont.bind(fontManager)

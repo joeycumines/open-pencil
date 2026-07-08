@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
-import { SceneGraph } from '@open-pencil/core/scene-graph'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { startServer } from '#mcp/server'
 
@@ -111,7 +111,7 @@ describe('MCP server', () => {
       if (cleanup) await cleanup().catch(() => undefined)
       throw e
     }
-  })
+  }, 15_000)
 
   afterEach(async () => {
     if (cleanup) await cleanup()

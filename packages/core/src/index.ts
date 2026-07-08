@@ -1,4 +1,4 @@
-export type { GUID, Color, Vector, Matrix, Rect } from './types'
+export type { GUID, Color, Vector, Matrix, Rect } from '@open-pencil/scene-graph'
 export {
   computeBounds,
   computeAbsoluteBounds,
@@ -6,8 +6,9 @@ export {
   radToDeg,
   rotatePoint,
   rotatedCorners,
-  rotatedBBox
-} from './geometry'
+  rotatedBBox,
+  generateId
+} from '@open-pencil/scene-graph'
 export { randomHex, randomInt, randomIndex } from './random'
 
 export * from './constants'
@@ -75,9 +76,9 @@ export {
   type SceneGraphEvents,
   type DocumentColorSpace,
   type GraphSyncState
-} from './scene-graph'
-export { createGraphSyncState, resetGraphSyncState } from './scene-graph'
-export { migrateOverrideKeys } from './scene-graph'
+} from '@open-pencil/scene-graph'
+export { createGraphSyncState, resetGraphSyncState } from '@open-pencil/scene-graph'
+export { migrateOverrideKeys } from '@open-pencil/scene-graph'
 
 export { FigmaAPI, FigmaNodeProxy, computeImageHash, type FigmaFontName } from './figma-api'
 export {
@@ -251,8 +252,8 @@ export {
   type NearestResult,
   type NetworkNearestResult
 } from './vector/bezier'
-export { computeSelectionBounds, computeSnap, type SnapGuide } from './scene-graph/snap'
-export { UndoManager, type UndoEntry, type UndoManagerOptions } from './scene-graph/undo'
+export { computeSelectionBounds, computeSnap, type SnapGuide } from '@open-pencil/scene-graph/snap'
+export { UndoManager, type UndoEntry, type UndoManagerOptions } from '@open-pencil/scene-graph/undo'
 export { TextEditor, type TextCaret, type TextEditorState } from './text/editor'
 export {
   getStyleAt,
@@ -342,7 +343,23 @@ export {
   type RenderResult,
   sceneNodeToJSX,
   selectionToJSX,
-  type JSXFormat
+  type JSXFormat,
+  linearGradient,
+  radialGradient,
+  diamondGradient,
+  gradient,
+  solid,
+  angularGradient,
+  innerShadow,
+  dropShadow,
+  backgroundBlur,
+  foregroundBlur,
+  layerBlur,
+  defineVars,
+  designVar,
+  isVariable,
+  type DesignVariable,
+  type VarDef
 } from './design-jsx'
 export {
   parseFigmaClipboard,
@@ -407,8 +424,11 @@ export {
 export * from './io'
 export * from './lint'
 
-export { default as CODEGEN_PROMPT } from './tools/prompts/codegen.md'
-export { default as JSX_REFERENCE } from './tools/prompts/jsx-reference.md'
+import codegenPrompt from './tools/prompts/codegen.md'
+import jsxReference from './tools/prompts/jsx-reference.md'
+
+export { codegenPrompt as CODEGEN_PROMPT, jsxReference as JSX_REFERENCE }
+
 export {
   setPexelsApiKey,
   setUnsplashAccessKey,
@@ -423,5 +443,7 @@ export {
   getWorldHandles,
   getWorldMatrix,
   getAbsolutePosition
-} from './canvas/coordinate'
-export { default as TransformMatrix } from './canvas/matrix'
+} from '@open-pencil/scene-graph'
+import { TransformMatrix } from '@open-pencil/scene-graph'
+
+export { TransformMatrix }

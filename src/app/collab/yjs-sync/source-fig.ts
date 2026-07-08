@@ -1,5 +1,5 @@
-import { createDefaultSource } from '@open-pencil/core/scene-graph'
-import type { FigmaSourcePayload, SourceMetadata } from '@open-pencil/core/scene-graph'
+import { createDefaultSource } from '@open-pencil/scene-graph'
+import type { FigmaSourcePayload, SourceMetadata } from '@open-pencil/scene-graph'
 
 import { hasOnlyKeys, isFiniteNumber, isPlainRecord } from './validation-primitives'
 

@@ -1,6 +1,7 @@
+import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+
 import type { EditorContext } from '#core/editor/types'
 import { computeAllLayouts } from '#core/layout'
-import type { SceneGraph, SceneNode } from '#core/scene-graph'
 
 import { remapRestoredSnapshotReferences } from './restore-references'
 

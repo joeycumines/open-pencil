@@ -45,6 +45,8 @@ describe('Tauri font helpers', () => {
       return [{ family: 'System UI', styles: ['Regular', 'Bold'] }]
     })
 
+    vi.spyOn(fontManager, 'listFamilyOptions').mockResolvedValue([])
+
     const { listFamilies, listFonts } = await import('@/app/editor/fonts')
 
     await expect(listFamilies()).resolves.toEqual([{ family: 'System UI', source: 'local' }])

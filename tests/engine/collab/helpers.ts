@@ -2,7 +2,7 @@ import * as Y from 'yjs'
 
 import { SceneGraph } from '@open-pencil/core'
 import type { EditorEvents } from '@open-pencil/core/editor'
-import type { SceneNode, Variable, VariableCollection } from '@open-pencil/core/scene-graph'
+import type { SceneNode, Variable, VariableCollection } from '@open-pencil/scene-graph'
 
 import {
   applyYnodeToGraph,

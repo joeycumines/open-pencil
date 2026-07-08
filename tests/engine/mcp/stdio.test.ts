@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
-import { SceneGraph } from '@open-pencil/core/scene-graph'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { startServer, type ServerHandle } from '#mcp/server'
 

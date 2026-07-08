@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 
-import { createDefaultSource } from '@open-pencil/core/scene-graph'
+import { createDefaultSource } from '@open-pencil/scene-graph'
 
 import { expectDefined, getNodeOrThrow } from '#tests/helpers/assert'
 import {

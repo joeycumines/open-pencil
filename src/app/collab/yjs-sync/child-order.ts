@@ -1,4 +1,4 @@
-import type { GraphSyncState, SceneGraph, SceneNode } from '@open-pencil/core/scene-graph'
+import type { GraphSyncState, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { NodeProps } from './constants'
 import { toRuntimeId } from './mapping'

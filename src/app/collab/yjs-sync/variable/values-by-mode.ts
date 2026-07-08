@@ -1,9 +1,4 @@
-import type {
-  GraphSyncState,
-  SceneGraph,
-  Variable,
-  VariableValue
-} from '@open-pencil/core/scene-graph'
+import type { GraphSyncState, SceneGraph, Variable, VariableValue } from '@open-pencil/scene-graph'
 
 import { parseRemoteValuesByMode } from './payload'
 import { toModeRuntimeId, toVariableRuntimeId } from './sync'

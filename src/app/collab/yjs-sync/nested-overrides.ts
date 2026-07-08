@@ -1,4 +1,4 @@
-import { joinOverrideKey, type SceneGraph, type SceneNode } from '@open-pencil/core/scene-graph'
+import { joinOverrideKey, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import { findInstanceDescendantByStableId } from './instance-descendants'
 import { stableIdForNode } from './mapping'

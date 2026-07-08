@@ -7,7 +7,7 @@ import {
   parseFigFile,
   SceneGraph
 } from '@open-pencil/core'
-import type { JsonObject } from '@open-pencil/core/types'
+import type { JsonObject } from '@open-pencil/scene-graph/primitives'
 
 import { expectDefined } from '#tests/helpers/assert'
 import { parseFixture } from '#tests/helpers/fig-fixtures'
@@ -83,7 +83,7 @@ describe('text node export', () => {
 
     const { unzipSync, inflateSync } = await import('fflate')
     const { decodeBinarySchema, compileSchema, ByteBuffer } =
-      await import('#core/kiwi/schema-runtime')
+      await import('@open-pencil/kiwi/schema-runtime')
     const { parseFigKiwiChunks } = await import('@open-pencil/core')
 
     const graph = new SceneGraph()
@@ -145,7 +145,7 @@ describe('text node export', () => {
 
     const { unzipSync, inflateSync } = await import('fflate')
     const { decodeBinarySchema, compileSchema, ByteBuffer } =
-      await import('#core/kiwi/schema-runtime')
+      await import('@open-pencil/kiwi/schema-runtime')
     const { parseFigKiwiChunks } = await import('@open-pencil/core')
 
     const graph = new SceneGraph()
@@ -191,7 +191,7 @@ describe('text node export', () => {
 
     const { unzipSync, inflateSync } = await import('fflate')
     const { decodeBinarySchema, compileSchema, ByteBuffer } =
-      await import('#core/kiwi/schema-runtime')
+      await import('@open-pencil/kiwi/schema-runtime')
     const { parseFigKiwiChunks } = await import('@open-pencil/core')
 
     const graph = new SceneGraph()
@@ -240,7 +240,7 @@ describe('text node export', () => {
 
     const { unzipSync, inflateSync } = await import('fflate')
     const { decodeBinarySchema, compileSchema, ByteBuffer } =
-      await import('#core/kiwi/schema-runtime')
+      await import('@open-pencil/kiwi/schema-runtime')
     const { parseFigKiwiChunks } = await import('@open-pencil/core')
 
     const graph = new SceneGraph()

@@ -1,9 +1,4 @@
-import type { SkiaRenderer } from '#core/canvas'
-import { canMakeBooleanSourceNode } from '#core/canvas/boolean'
-import { flattenNodesToVectorProps } from '#core/canvas/flatten'
-import { IS_BROWSER } from '#core/constants'
-import { computeBounds } from '#core/geometry'
-import type { RasterExportFormat } from '#core/io/formats/raster'
+import { computeBounds } from '@open-pencil/scene-graph'
 import type {
   SceneGraph,
   SceneNode as CoreSceneNode,
@@ -12,9 +7,15 @@ import type {
   VariableCollection,
   VariableType,
   VariableValue
-} from '#core/scene-graph'
-import { copyFills, copyStrokes, copyEffects } from '#core/scene-graph/copy'
-import type { Rect, Vector } from '#core/types'
+} from '@open-pencil/scene-graph'
+import { copyFills, copyStrokes, copyEffects } from '@open-pencil/scene-graph/copy'
+import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
+
+import type { SkiaRenderer } from '#core/canvas'
+import { canMakeBooleanSourceNode } from '#core/canvas/boolean'
+import { flattenNodesToVectorProps } from '#core/canvas/flatten'
+import { IS_BROWSER } from '#core/constants'
+import type { RasterExportFormat } from '#core/io/formats/raster'
 
 import { computeImageHash } from './image-hash'
 import type {

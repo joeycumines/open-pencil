@@ -72,17 +72,21 @@ export function measureTextWithOpenType(
   const font = getParsedFont(family, style)
   if (!font) return null
 
-  const scale = fontSize / font.unitsPerEm
-  const lineGap = font.tables.os2?.sTypoLineGap ?? 0
-  const lineH = lineHeight ?? Math.ceil((font.ascender - font.descender + lineGap) * scale)
+  try {
+    const scale = fontSize / font.unitsPerEm
+    const lineGap = font.tables.os2?.sTypoLineGap ?? 0
+    const lineH = lineHeight ?? Math.ceil((font.ascender - font.descender + lineGap) * scale)
 
-  const singleLineWidth = font.getAdvanceWidth(text, fontSize)
+    const singleLineWidth = font.getAdvanceWidth(text, fontSize)
 
-  if (maxWidth && maxWidth > 0 && singleLineWidth > maxWidth) {
-    const lines = Math.ceil(singleLineWidth / maxWidth)
-    return { width: maxWidth, height: Math.ceil(lines * lineH) }
+    if (maxWidth && maxWidth > 0 && singleLineWidth > maxWidth) {
+      const lines = Math.ceil(singleLineWidth / maxWidth)
+      return { width: maxWidth, height: Math.ceil(lines * lineH) }
+    }
+    return { width: Math.ceil(singleLineWidth), height: lineH }
+  } catch {
+    return null
   }
-  return { width: Math.ceil(singleLineWidth), height: lineH }
 }
 
 export interface GlyphOutlineMetrics {
@@ -91,10 +95,26 @@ export interface GlyphOutlineMetrics {
   advance: number
 }
 
-export function fontHasGlyphSync(family: string, style: string, char: string): boolean {
+export type FontGlyphCoverage = 'has' | 'missing' | 'unknown'
+
+export function fontGlyphCoverageSync(
+  family: string,
+  style: string,
+  char: string
+): FontGlyphCoverage {
+  const bytes = fontManager.loadedData(family, style)
+  if (!bytes) return 'unknown'
   const font = getParsedFont(family, style)
-  if (!font) return false
-  return font.charToGlyphIndex(char) !== 0
+  if (!font) return 'unknown'
+  try {
+    return font.charToGlyphIndex(char) !== 0 ? 'has' : 'missing'
+  } catch {
+    return 'unknown'
+  }
+}
+
+export function fontHasGlyphSync(family: string, style: string, char: string): boolean {
+  return fontGlyphCoverageSync(family, style, char) === 'has'
 }
 
 export function getGlyphOutlineMetricsSync(
@@ -106,16 +126,23 @@ export function getGlyphOutlineMetricsSync(
   const font = getParsedFont(family, style)
   if (!font) return null
 
-  const glyphs = font.stringToGlyphs(text)
-  let x = 0
-  const scale = fontSize / font.unitsPerEm
-  return glyphs.map((glyph) => {
-    const commands = glyph.getPath(0, 0, fontSize).commands
-    const advance = (glyph.advanceWidth ?? 0) * scale
-    const metrics = { commands, x, advance }
-    x += advance
-    return metrics
-  })
+  try {
+    const glyphs = font.stringToGlyphs(text)
+    let x = 0
+    const scale = fontSize / font.unitsPerEm
+    return glyphs.map((glyph) => {
+      const commands = glyph.getPath(0, 0, fontSize).commands
+      const advance = (glyph.advanceWidth ?? 0) * scale
+      const metrics = { commands, x, advance }
+      x += advance
+      return metrics
+    })
+  } catch {
+    // opentype.js may throw for unsupported font substitution tables
+    // (e.g. substitutionType 62, lookupType 6). Return null to signal
+    // that glyph outline metrics are unavailable for this font.
+    return null
+  }
 }
 
 export async function probeGlyphOutlineCommands(
@@ -127,16 +154,24 @@ export async function probeGlyphOutlineCommands(
   const bytes = fontManager.loadedData(family, style)
   if (!bytes) return null
 
-  const font = (OpenTypeSync as OpenTypeModule).parse(bytes.slice(0))
-  const glyphs = font.stringToGlyphs(text)
-  const firstGlyph = glyphs.find((glyph: OutlineGlyph) => glyph.path.commands.length > 0)
-  const firstGlyphCommandSample = (firstGlyph?.getPath(0, 0, fontSize).commands ?? []).slice(0, 12)
+  try {
+    const font = (OpenTypeSync as OpenTypeModule).parse(bytes.slice(0))
+    const glyphs = font.stringToGlyphs(text)
+    const firstGlyph = glyphs.find((glyph: OutlineGlyph) => glyph.path.commands.length > 0)
+    const firstGlyphCommandSample = (firstGlyph?.getPath(0, 0, fontSize).commands ?? []).slice(
+      0,
+      12
+    )
 
-  return {
-    family,
-    style,
-    unitsPerEm: font.unitsPerEm,
-    commandCount: firstGlyph?.path.commands.length ?? 0,
-    firstGlyphCommandSample
+    return {
+      family,
+      style,
+      unitsPerEm: font.unitsPerEm,
+      commandCount: firstGlyph?.path.commands.length ?? 0,
+      firstGlyphCommandSample
+    }
+  } catch {
+    // opentype.js may throw for unsupported font substitution tables
+    return null
   }
 }

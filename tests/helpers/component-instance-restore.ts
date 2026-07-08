@@ -1,6 +1,6 @@
 import { buildOpenPencilClipboardHTML } from '@open-pencil/core/clipboard'
 import type { Editor } from '@open-pencil/core/editor'
-import { createDefaultSource, type SceneNode } from '@open-pencil/core/scene-graph'
+import { createDefaultSource, type SceneNode } from '@open-pencil/scene-graph'
 
 import { expectDefined, getNodeOrThrow } from './assert'
 

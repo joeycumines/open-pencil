@@ -1,10 +1,11 @@
+import type { NodeChange, Paint } from '@open-pencil/kiwi/fig/codec'
+import { guidToString, parseGuidOrNull, stringToGuid } from '@open-pencil/kiwi/fig/guid'
+import type { FigExportDiagnostics, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import type { Color, GUID, Matrix, Vector } from '@open-pencil/scene-graph/primitives'
+
 /* eslint-disable max-lines */
 import { bytesToHex } from '#core/bytes/hex'
-import type { NodeChange, Paint } from '#core/kiwi/fig/codec'
-import type { FigExportDiagnostics, SceneGraph, SceneNode } from '#core/scene-graph'
-import type { Color, GUID, Matrix, Vector } from '#core/types'
 
-import { guidToString, parseGuidOrNull, stringToGuid } from './guid'
 import {
   applyExportSettingsPluginData,
   mergePluginData,

@@ -1,8 +1,9 @@
-import type { NodeChange } from '#core/kiwi/fig/codec'
+import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
+import { createDefaultSource } from '@open-pencil/scene-graph'
+import type { SourceMetadata } from '@open-pencil/scene-graph'
+import type { GUID } from '@open-pencil/scene-graph/primitives'
+
 import { guidToString, stringToGuid } from '#core/kiwi/fig/node-change/convert'
-import { createDefaultSource } from '#core/scene-graph'
-import type { SourceMetadata } from '#core/scene-graph'
-import type { GUID } from '#core/types'
 
 export const mintFigmaSourceMetadata = (id: string, orderKey: string | null): SourceMetadata => ({
   ...createDefaultSource(),

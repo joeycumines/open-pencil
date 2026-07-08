@@ -3,7 +3,7 @@ import { shallowRef, computed, triggerRef } from 'vue'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import type { SceneGraph } from '@open-pencil/core/scene-graph'
+import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { setOpenPencilStore } from '@/app/browser-bridge'
 import { yieldToUI } from '@/app/document/io/browser'
@@ -48,6 +48,22 @@ export function getActiveStore(): EditorStore {
   const tab = tabsRef.value.find((t) => t.id === activeTabId.value)
   if (!tab) throw new Error('No active tab')
   return tab.store
+}
+
+export function getActiveTabId(): string {
+  return activeTabId.value
+}
+
+export function getTabById(tabId: string): Tab | undefined {
+  return tabsRef.value.find((tab) => tab.id === tabId)
+}
+
+export function getTabForStore(store: EditorStore): Tab | undefined {
+  return tabsRef.value.find((tab) => tab.store === store)
+}
+
+export function getTabsSnapshot(): Tab[] {
+  return [...tabsRef.value]
 }
 
 export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {

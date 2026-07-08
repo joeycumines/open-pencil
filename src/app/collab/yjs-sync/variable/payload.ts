@@ -1,5 +1,5 @@
-import type { Variable, VariableValue } from '@open-pencil/core/scene-graph'
-import type { Color } from '@open-pencil/core/types'
+import type { Variable, VariableValue } from '@open-pencil/scene-graph'
+import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { hasOnlyKeys, isFiniteNumber, isOneOf, isPlainRecord } from '../validation-primitives'
 import type { RemoteVariableCollectionModePayload } from './sync'

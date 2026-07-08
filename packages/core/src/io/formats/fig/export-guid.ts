@@ -1,10 +1,6 @@
-import {
-  FIGMA_SESSION_IMPORTED,
-  guidToString,
-  parseGuidOrNull
-} from '#core/kiwi/fig/node-change/guid'
-import type { FigExportDiagnostics, SceneGraph, SourceMetadata } from '#core/scene-graph'
-import type { GUID } from '#core/types'
+import { FIGMA_SESSION_IMPORTED, guidToString, parseGuidOrNull } from '@open-pencil/kiwi/fig/guid'
+import type { FigExportDiagnostics, SceneGraph, SourceMetadata } from '@open-pencil/scene-graph'
+import type { GUID } from '@open-pencil/scene-graph/primitives'
 
 interface ImportedGuidMax {
   session0: number

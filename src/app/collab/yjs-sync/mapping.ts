@@ -1,6 +1,6 @@
 import type * as Y from 'yjs'
 
-import type { GraphSyncState, SceneGraph, SceneNode } from '@open-pencil/core/scene-graph'
+import type { GraphSyncState, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { YNodes } from './constants'
 import { rawStableIdFromRemoteNodeKey, remoteNodeKeyForStableId } from './remote-node-key'

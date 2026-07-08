@@ -3,7 +3,7 @@ import {
   splitOverrideKey,
   type SceneGraph,
   type SceneNode
-} from '#core/scene-graph'
+} from '@open-pencil/scene-graph'
 
 type RestoredReferenceMaps = {
   runtimeBySnapshotId: Map<string, string>

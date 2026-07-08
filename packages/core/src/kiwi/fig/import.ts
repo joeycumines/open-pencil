@@ -1,7 +1,15 @@
 import { isNotNil } from 'es-toolkit/predicate'
 
+import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '@open-pencil/kiwi/fig/codec'
+import { createDefaultSource, SceneGraph } from '@open-pencil/scene-graph'
+import type {
+  FigImportDiagnostics,
+  Variable,
+  VariableType,
+  VariableValue
+} from '@open-pencil/scene-graph'
+
 import { BLACK } from '#core/constants'
-import type { NodeChange, VariableDataValuesEntry, Color, GUID } from '#core/kiwi/fig/codec'
 import { remapNodeChangeReferences } from '#core/kiwi/fig/guid-remap'
 import {
   collectImportedRuntimeIds,
@@ -15,14 +23,13 @@ import { setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
 import {
   guidToString,
   nodeChangeToProps,
+  shouldImportTextAsAutoSize,
   sortChildren,
   setVariableColorResolver,
   VARIABLE_BINDING_FIELDS_INVERSE
 } from '#core/kiwi/fig/node-change/convert'
 import { orderNodeChangesBySiblingPosition } from '#core/kiwi/fig/node-change/order'
 import { applyStyleRefsToFields } from '#core/kiwi/fig/node-change/style-refs'
-import { createDefaultSource, SceneGraph } from '#core/scene-graph'
-import type { FigImportDiagnostics, Variable, VariableType, VariableValue } from '#core/scene-graph'
 
 type AssetRef = { key: string; version?: string }
 type AliasRef = { guid?: GUID; assetRef?: AssetRef }
@@ -539,6 +546,12 @@ export function importNodeChanges(
 
     const { nodeType, ...props } = nodeChangeToProps(nc, blobs)
     if (nodeType === 'DOCUMENT' || nodeType === 'VARIABLE' || nc.type === 'VARIABLE_SET') return
+
+    const parentGuid = parentMap.get(ncId)
+    const parentNc = parentGuid ? changeMap.get(parentGuid) : undefined
+    if (shouldImportTextAsAutoSize(nc, parentNc)) {
+      props.textAutoResize = 'WIDTH_AND_HEIGHT'
+    }
 
     const parentId = canvasIdToPageId.get(graphParentId) ?? graphParentId
     const source = mintFigmaSourceMetadata(ncId, nc.parentIndex?.position ?? null)

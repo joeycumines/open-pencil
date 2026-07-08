@@ -1,4 +1,4 @@
-import type { NodeChange, GUID } from '#core/kiwi/fig/codec'
+import type { NodeChange, GUID } from '@open-pencil/kiwi/fig/codec'
 
 interface IndexedNodeChange {
   nc: NodeChange

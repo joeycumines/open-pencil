@@ -5,7 +5,7 @@ import type {
   SceneGraph,
   Variable,
   VariableCollection
-} from '@open-pencil/core/scene-graph'
+} from '@open-pencil/scene-graph'
 
 import type { YCollections, YVariables } from '../constants'
 import { findStableIdForYMap } from '../mapping'

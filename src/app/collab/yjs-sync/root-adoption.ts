@@ -1,4 +1,4 @@
-import type { GraphSyncState, SceneGraph } from '@open-pencil/core/scene-graph'
+import type { GraphSyncState, SceneGraph } from '@open-pencil/scene-graph'
 
 import { removeFromPendingQueues } from './graph-apply'
 

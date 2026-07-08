@@ -1,6 +1,7 @@
+import type { SceneGraph } from '@open-pencil/scene-graph'
+
 import { clearLookupCaches } from '#core/kiwi/fig/instance-overrides/cache'
 import type { OverrideContext } from '#core/kiwi/fig/instance-overrides/types'
-import type { SceneGraph } from '#core/scene-graph'
 
 import { buildClonesMap, syncChildrenDeep } from './clones'
 import { syncNodeProps } from './fields'

@@ -1,5 +1,11 @@
+import type {
+  Variable,
+  VariableCollection,
+  VariableType,
+  VariableValue
+} from '@open-pencil/scene-graph'
+
 import { randomHex } from '#core/random'
-import type { Variable, VariableCollection, VariableType, VariableValue } from '#core/scene-graph'
 
 import type { EditorContext } from './types'
 
@@ -83,6 +89,18 @@ export function createVariableActions(ctx: EditorContext) {
       .map((vid) => ctx.graph.variables.get(vid))
       .filter((v): v is Variable => v != null)
       .map((v) => structuredClone(v))
+    // Snapshot boundVariables entries on all nodes that reference any
+    // variable in this collection, so they can be restored on undo.
+    // removeVariable() strips these references during deletion.
+    const varIdSet = new Set(snapshot.variableIds)
+    const boundVarSnapshots: Array<{ nodeId: string; key: string; varId: string }> = []
+    for (const node of ctx.graph.nodes.values()) {
+      for (const [key, varId] of Object.entries(node.boundVariables)) {
+        if (typeof varId === 'string' && varIdSet.has(varId)) {
+          boundVarSnapshots.push({ nodeId: node.id, key, varId })
+        }
+      }
+    }
     ctx.graph.removeCollection(id)
     ctx.undo.push({
       label: 'Remove collection',
@@ -93,6 +111,13 @@ export function createVariableActions(ctx: EditorContext) {
       inverse: () => {
         ctx.graph.addCollection(snapshot)
         for (const v of variables) ctx.graph.addVariable(v)
+        // Restore boundVariables references that were stripped during deletion
+        for (const { nodeId, key, varId } of boundVarSnapshots) {
+          const node = ctx.graph.nodes.get(nodeId)
+          if (node) {
+            node.boundVariables = { ...node.boundVariables, [key]: varId }
+          }
+        }
         ctx.requestRender()
       }
     })

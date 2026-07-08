@@ -1,4 +1,5 @@
-import type { GUID, VariableAnyValue, VariableDataEntry } from '#core/kiwi/fig/codec'
+import type { GUID, VariableAnyValue, VariableDataEntry } from '@open-pencil/kiwi/fig/codec'
+
 import { stringToGuid } from '#core/kiwi/fig/identity'
 import type { ComponentPropValue } from '#core/kiwi/fig/instance-overrides/types'
 import { guidToString } from '#core/kiwi/fig/node-change/convert'

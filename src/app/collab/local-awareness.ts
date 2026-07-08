@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { Awareness } from 'y-protocols/awareness'
 
-import type { SceneNode } from '@open-pencil/core/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { buildRemotePeers, remotePeersToCursors, type RawRemotePeer } from '@/app/collab/awareness'
 import {

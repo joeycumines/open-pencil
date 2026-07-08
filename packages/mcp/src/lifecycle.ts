@@ -59,6 +59,19 @@ export async function startSocketListener(
   }
   await removeStaleSocket(resolvedPath)
 
+  // For explicit socket path overrides (tests, CLI), force-remove any
+  // leftover socket file. The removeStaleSocket check above may skip
+  // removal if the OS hasn't fully released the socket from a recently
+  // closed server, causing EADDRINUSE on listen(). Since the caller
+  // explicitly owns this path, unconditional unlink is safe.
+  if (socketPathOverride) {
+    try {
+      await unlink(resolvedPath)
+    } catch {
+      void 0 // ENOENT is fine — nothing to remove
+    }
+  }
+
   const server = createAppServer(app)
   wireUpgrade(server, wss)
 

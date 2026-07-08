@@ -1,10 +1,10 @@
 import { beforeAll, expect, setDefaultTimeout, test } from 'bun:test'
 
 import type { NodeChange } from '@open-pencil/core/kiwi'
-import type { Color } from '@open-pencil/core/types'
+import { parseFigBuffer } from '@open-pencil/kiwi/fig/parse'
+import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { resolveNodeType } from '#core/kiwi/fig/node-change/convert'
-import { parseFigBuffer } from '#core/kiwi/fig/parse/core'
 
 import { readFixtureBytes, VALID_NODE_TYPES } from '#tests/helpers/fig-fixtures'
 import { HEAVY_TEST_TIMEOUT_MS, heavy } from '#tests/helpers/test-utils'

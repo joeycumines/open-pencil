@@ -4,7 +4,7 @@ import type {
   SceneNode,
   Variable,
   VariableValue
-} from '@open-pencil/core/scene-graph'
+} from '@open-pencil/scene-graph'
 
 import {
   applyInstanceOverrideValuesToChildren,

@@ -1,4 +1,9 @@
-import type { GUID, NodeChange, VariableAnyValue, VariableDataEntry } from '#core/kiwi/fig/codec'
+import type {
+  GUID,
+  NodeChange,
+  VariableAnyValue,
+  VariableDataEntry
+} from '@open-pencil/kiwi/fig/codec'
 
 import {
   remapComponentPropValue,
