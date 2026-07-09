@@ -1,5 +1,3 @@
-import { expect } from 'bun:test'
-
 import { colorToCSS } from '@open-pencil/core/color'
 import type { DesignDocument } from '@open-pencil/dom-css'
 import type { SceneNode } from '@open-pencil/scene-graph'
@@ -9,8 +7,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
  * Shared across DOM/CSS conversion test files.
  */
 export function expectFrame(node: SceneNode | undefined) {
-  expect(node?.type).toBe('FRAME')
-  if (node?.type !== 'FRAME') throw new Error('Expected frame node')
+  if (node?.type !== 'FRAME') throw new Error(`Expected FRAME node, got ${node?.type ?? 'none'}`)
   return node
 }
 

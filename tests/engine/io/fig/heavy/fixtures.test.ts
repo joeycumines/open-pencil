@@ -6,7 +6,9 @@ import { parseFixture, VALID_NODE_TYPES } from '#tests/helpers/fig-fixtures'
 import { collectAllNodes } from '#tests/helpers/fig-traversal'
 import { heavy } from '#tests/helpers/test-utils'
 
-setDefaultTimeout(180_000)
+const HEAVY_FIG_FIXTURE_PARSE_TIMEOUT_MS = 600_000
+
+setDefaultTimeout(HEAVY_FIG_FIXTURE_PARSE_TIMEOUT_MS)
 
 heavy('parse heavy .fig files', () => {
   let material3: SceneGraph

@@ -288,7 +288,7 @@ try {
       [
         'node',
         'node_modules/.bin/openpencil',
-        'dom',
+        'import',
         cliDomInput,
         '--format',
         'json',
