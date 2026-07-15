@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises'
+import { chmod, mkdir } from 'node:fs/promises'
 import { homedir, platform } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -66,6 +66,7 @@ async function getPlatformDir(): Promise<string> {
   }
 
   await mkdir(dir, { recursive: true, mode: 0o700 })
+  if (!isWindows) await chmod(dir, 0o700)
   return dir
 }
 
@@ -84,6 +85,9 @@ export async function getSocketDir(): Promise<string> {
 
   if (socketOverride) {
     const dir = dirname(socketOverride)
+    // Create missing parents with restrictive permissions. Do NOT chmod
+    // existing directories — the override path is user-controlled and
+    // may be in a shared directory (e.g. /tmp for tests).
     await mkdir(dir, { recursive: true, mode: 0o700 })
     return dir
   }
@@ -131,7 +135,8 @@ export async function getSocketPath(): Promise<string> {
 export async function getDiscoveryPath(): Promise<string> {
   const override = process.env.OPENPENCIL_MCP_DISCOVERY_PATH?.trim()
   if (override) {
-    await mkdir(dirname(override), { recursive: true, mode: 0o700 })
+    const dir = dirname(override)
+    await mkdir(dir, { recursive: true, mode: 0o700 })
     return override
   }
   const dir = await getPlatformDir()
@@ -144,7 +149,7 @@ export async function getDiscoveryPath(): Promise<string> {
  * platforms but not on native Windows. WSL is detected as Linux.
  */
 export function platformHasUnixSockets(): boolean {
-  return process.platform !== 'win32'
+  return !isWindows
 }
 
 /**

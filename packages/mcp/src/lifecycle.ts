@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, unlink } from 'node:fs/promises'
+import { access, chmod, constants, mkdir, readFile, unlink } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { Server as HttpServer } from 'node:http'
 import { connect } from 'node:net'
@@ -50,25 +50,49 @@ export async function startSocketListener(
   const resolvedPath = socketPathOverride ?? (await getSocketPath())
   if (socketPathOverride) {
     // Create the parent directory for the caller-provided socket path.
-    // Skip getSocketDir() — it would create the platform-default directory
-    // (or the OPENPENCIL_MCP_SOCKET env dir) which is unrelated to this path.
-    await mkdir(dirname(resolvedPath), { recursive: true })
+    // For newly-created parent directories, request mode 0o700 to restrict
+    // access to the same OS user; existing directories are left unchanged
+    // (mkdir with recursive:true does not chmod existing dirs). The socket
+    // file itself is later chmodded to 0o600, and the auth token provides
+    // the primary defense against unauthorized access.
+    await mkdir(dirname(resolvedPath), { recursive: true, mode: 0o700 })
   } else {
     // Ensure the default platform socket directory exists.
     await getSocketDir()
   }
   await removeStaleSocket(resolvedPath)
 
+  // Bun on Linux silently replaces existing Unix socket files on listen().
+  // If removeStaleSocket left the file in place (live server detected),
+  // throw EADDRINUSE to match Node.js/macOS behavior.
+  const socketStillExists = await access(resolvedPath, constants.F_OK)
+    .then(() => true)
+    .catch(() => false)
+  if (socketStillExists) {
+    const err = new Error(
+      `listen EADDRINUSE: address already in use ${resolvedPath}`
+    ) as NodeJS.ErrnoException
+    err.code = 'EADDRINUSE'
+    throw err
+  }
+
   const server = createAppServer(app)
   wireUpgrade(server, wss)
 
   const ss = server
+  ss.on('error', (err) => console.error('[MCP] Socket server error:', err))
   await new Promise<void>((resolve, reject) => {
     ss.on('error', reject)
     ss.listen(resolvedPath, () => {
       ss.off('error', reject)
       resolve()
     })
+  }).catch((err) => {
+    ss.removeAllListeners('error')
+    server.close(() => {
+      void 0
+    })
+    throw err
   })
 
   // NOTE: There is a brief TOCTOU window between listen() and chmod() below
@@ -105,6 +129,7 @@ export async function startTcpListener(
   wireUpgrade(server, wss)
 
   const ts = server
+  ts.on('error', (err) => console.error('[MCP] TCP server error:', err))
   const actualPort = await new Promise<number>((resolve, reject) => {
     ts.on('error', reject)
     ts.listen(httpPort, host, () => {
@@ -113,6 +138,12 @@ export async function startTcpListener(
       const port = typeof addr === 'object' && addr ? addr.port : httpPort
       resolve(port)
     })
+  }).catch((err) => {
+    ts.removeAllListeners('error')
+    server.close(() => {
+      void 0
+    })
+    throw err
   })
 
   return { server, port: actualPort }
@@ -178,8 +209,6 @@ export async function cleanupSocket(socketPath: string | null): Promise<void> {
           // Only ECONNREFUSED and ENOENT mean "nobody is listening".
           // All other errors (EACCES, ECONNRESET, etc.) are treated as
           // "alive" to avoid unlinking a live replacement server's socket.
-          // This mirrors the conservative error handling in testSocketConnection
-          // (packages/mcp/src/transport/discovery.ts).
           const isDead = err.code === 'ECONNREFUSED' || err.code === 'ENOENT'
           finish(!isDead)
         })
@@ -221,23 +250,20 @@ export async function cleanupDiscovery(
   const discoveryPath = await getDiscoveryPath()
   try {
     const raw = await readFile(discoveryPath, 'utf-8')
-    const info = JSON.parse(raw) as {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return
+    const info = parsed as {
       authToken: string | null
       socketPath?: string | null
       httpPort?: number
       startedAt?: string
     }
-    // If any identifying field doesn't match, another server owns the file.
-    // Compare unconditionally (not truthy-gated) so that null/0 values
-    // are treated as required equality checks, not wildcards.
     if (info.authToken !== ownAuthToken) return
     if (info.socketPath !== ownSocketPath) return
     if (info.httpPort !== ownHttpPort) return
     if (info.startedAt !== ownStartedAt) return
   } catch {
-    // File doesn't exist or can't be parsed — fall through to removeDiscoveryFile
-    // which handles ENOENT gracefully.
-    void 0
+    return
   }
   await removeDiscoveryFile().catch((e) => {
     process.stderr.write(`  Discovery: cleanup warning (${e instanceof Error ? e.message : e})\n`)

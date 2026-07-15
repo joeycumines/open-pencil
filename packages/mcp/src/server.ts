@@ -15,7 +15,6 @@ import type { RpcJsonObject } from '#mcp/json'
 import { preprocessRpc } from '#mcp/jsx-preprocess'
 import { createMcpSessionManager } from '#mcp/mcp-sessions'
 import { registerTools } from '#mcp/tool/registration'
-import { getDiscoveryPath } from '#mcp/transport/paths'
 
 import packageJson from '../package.json' with { type: 'json' }
 import {
@@ -115,8 +114,7 @@ function createHonoApp(options: {
       status: browserRpc.isConnected() ? 'ok' : 'no_app',
       version: MCP_VERSION,
       installCommand: await mcpInstallCommand(),
-      authRequired: authToken !== null,
-      discoveryPath: await getDiscoveryPath()
+      authRequired: authToken !== null
     })
   )
 
@@ -177,9 +175,11 @@ function createHonoApp(options: {
         }
         return c.json({ error: 'MCP session not found' }, 404)
       }
-      const response = await existing.handleRequest(c.req.raw)
-      mcpSessions.deleteSession(sessionId)
-      return response
+      try {
+        return await existing.handleRequest(c.req.raw)
+      } finally {
+        mcpSessions.deleteSession(sessionId)
+      }
     }
     const transport = await mcpSessions.resolveTransport(sessionId)
     if ('error' in transport) {

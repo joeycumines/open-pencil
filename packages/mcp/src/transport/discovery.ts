@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto'
 import { access, constants, lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { createConnection } from 'node:net'
 
 import { getDiscoveryPath, getSocketPath, platformHasUnixSockets } from '#mcp/transport/paths'
 
@@ -115,6 +114,46 @@ export async function removeDiscoveryFile(): Promise<void> {
   }
 }
 
+// TCP health check is more reliable than Unix socket connections in some
+// runtimes (Bun on Linux). We read the discovery file directly instead of
+// using readDiscoveryFile() to bypass the isProcessAlive PID check — the
+// TCP fetch is a stronger liveness probe than process.kill(pid, 0).
+async function isSocketLiveViaTcp(socketPath: string): Promise<boolean> {
+  let discoveryPath: string
+  try {
+    discoveryPath = await getDiscoveryPath()
+  } catch {
+    return false
+  }
+  const raw = await readFile(discoveryPath, 'utf-8').catch(() => null)
+  if (!raw) return false
+  let info: DiscoveryInfo | null = null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object') {
+      info = validateDiscoveryFields(parsed as { [key: string]: unknown })
+    }
+  } catch {
+    return false
+  }
+  if (!info || info.socketPath !== socketPath) return false
+
+  // If TCP is disabled (httpPort <= 0), fall back to PID-based liveness check
+  if (info.httpPort <= 0) {
+    return isProcessAlive(info.pid)
+  }
+
+  return fetch(`http://127.0.0.1:${info.httpPort}/health`, {
+    signal: AbortSignal.timeout(2000)
+  })
+    .then(() => true)
+    .catch((e) => {
+      // A timeout means the process is likely alive but slow — don't delete its socket
+      if (e instanceof Error && e.name === 'TimeoutError') return true
+      return false
+    })
+}
+
 /**
  * Removes a stale Unix domain socket file if it exists and is not live.
  * A socket is considered stale if no process is listening on it.
@@ -145,60 +184,16 @@ export async function removeStaleSocket(socketPathOverride?: string): Promise<vo
     throw new Error(`Refusing to remove non-socket path: ${socketPath}`)
   }
 
-  // Test if the socket is live by attempting a connection
-  const isLive = await testSocketConnection(socketPath)
-  if (!isLive) {
-    try {
-      await unlink(socketPath)
-    } catch (e) {
-      // Another process may have removed it; safe to ignore
-      if (e instanceof Error && 'code' in e && (e as NodeJS.ErrnoException).code !== 'ENOENT') {
-        process.stderr.write(`Failed to remove stale socket: ${e.message}\n`)
-      }
+  if (await isSocketLiveViaTcp(socketPath)) return
+
+  // No live server claims this socket — remove the stale file.
+  try {
+    await unlink(socketPath)
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && (e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      process.stderr.write(`Failed to remove stale socket: ${e.message}\n`)
     }
   }
-}
-
-/**
- * Tests whether a Unix domain socket is live by attempting a brief connection.
- * Returns true if the connection succeeds (or at least isn't refused),
- * false if the socket is dead.
- */
-function testSocketConnection(socketPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection(socketPath)
-    let result: boolean | null = null
-
-    function finish(live: boolean) {
-      if (result !== null) return
-      result = live
-      clearTimeout(timeout)
-      socket.removeAllListeners()
-      socket.destroy()
-      // eslint-disable-next-line promise/no-multiple-resolved
-      resolve(live)
-    }
-
-    const timeout = setTimeout(() => {
-      finish(false) // Timeout = unreachable; treat as stale
-    }, 2000)
-
-    socket.on('connect', () => {
-      finish(true)
-    })
-
-    socket.on('error', (err: NodeJS.ErrnoException) => {
-      const isStale = err.code === 'ECONNREFUSED' || err.code === 'ENOENT'
-      finish(!isStale)
-    })
-
-    // If the socket closes without an explicit connect or error event
-    // (e.g., server shuts down mid-handshake), settle promptly instead
-    // of waiting the full timeout. This ensures cleanup is not delayed.
-    socket.on('close', () => {
-      finish(false)
-    })
-  })
 }
 
 /**

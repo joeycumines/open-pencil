@@ -37,7 +37,8 @@ function doRequest(
   info: DiscoveryInfo,
   path: string,
   method: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  forceTcp = false
 ): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
     const bodyJson = body ? JSON.stringify(body) : undefined
@@ -48,7 +49,7 @@ function doRequest(
 
     // Use the narrowed `useSocket` variable (string | false) to construct
     // request options so TypeScript knows socketPath is a string when truthy.
-    const useSocket = platformHasUnixSockets() && info.socketPath
+    const useSocket = !forceTcp && platformHasUnixSockets() && info.socketPath
     const reqOpts = useSocket
       ? { socketPath: useSocket, path, method, headers }
       : { hostname: '127.0.0.1', port: info.httpPort, path, method, headers }
@@ -86,8 +87,13 @@ function doRequest(
   })
 }
 
-async function doRpc<T>(info: DiscoveryInfo, command: string, args: unknown): Promise<T> {
-  const { status, data } = await doRequest(info, '/rpc', 'POST', { command, args })
+async function doRpc<T>(
+  info: DiscoveryInfo,
+  command: string,
+  args: unknown,
+  forceTcp = false
+): Promise<T> {
+  const { status, data } = await doRequest(info, '/rpc', 'POST', { command, args }, forceTcp)
 
   if (status === 401) {
     throw new UnauthorizedError(
@@ -112,14 +118,18 @@ class UnauthorizedError extends Error {
   }
 }
 
-function isTransientError(err: unknown): boolean {
-  if (err instanceof UnauthorizedError) return true
+function isSocketConnectionError(err: unknown): boolean {
   if (err instanceof Error) {
     const msg = err.message
-    if (msg.includes('ECONNREFUSED') || msg.includes('ENOENT')) return true
-    if (msg.includes('timed out')) return true
-    if (msg.includes('socket hang up')) return true
+    return msg.includes('ECONNREFUSED') || msg.includes('ENOENT')
   }
+  return false
+}
+
+function isTransientError(err: unknown): boolean {
+  if (err instanceof UnauthorizedError) return true
+  // Socket connection errors are handled separately by the TCP fallback
+  // in rpc() — they should not trigger a discovery re-read.
   return false
 }
 
@@ -129,10 +139,28 @@ export async function rpc<T = unknown>(command: string, args: unknown = {}): Pro
   try {
     return await doRpc<T>(info, command, args)
   } catch (err) {
-    // Only retry on transient errors (auth token rotation, connection refused,
-    // timeout). Application-level errors (bad command, 502, ok:false) are
-    // re-thrown immediately — retrying would just waste a round-trip.
-    if (!isTransientError(err)) throw err
+    // If the Unix socket is unavailable (ENOENT = file gone, ECONNREFUSED =
+    // server not listening), retry the same request over TCP without
+    // re-reading the discovery file — the file hasn't changed, the socket
+    // just isn't reachable.
+    if (
+      platformHasUnixSockets() &&
+      info.socketPath &&
+      info.httpPort > 0 &&
+      isSocketConnectionError(err)
+    ) {
+      try {
+        return await doRpc<T>(info, command, args, true)
+      } catch (tcpErr) {
+        // If TCP also fails with a transient error, fall through to
+        // discovery re-read instead of masking the original error.
+        if (!isTransientError(tcpErr) && !isSocketConnectionError(tcpErr)) throw tcpErr
+      }
+    }
+
+    // Auth token rotation or both socket and TCP failed: re-read
+    // discovery and retry once.
+    if (!isTransientError(err) && !isSocketConnectionError(err)) throw err
     cachedInfo = null
     return doRpc<T>(await resolveDiscovery(), command, args)
   }
