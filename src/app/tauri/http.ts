@@ -7,7 +7,7 @@ export interface ProxyHttpRequest {
   url: string
   method?: string
   headers?: ProxyHttpHeader[]
-  body?: number[]
+  body?: Uint8Array
   timeoutMs?: number
 }
 
@@ -28,9 +28,9 @@ function headersToProxyHeaders(headers: Headers): ProxyHttpHeader[] {
   return [...headers.entries()].map(([name, value]) => ({ name, value }))
 }
 
-async function requestBodyToBytes(request: Request): Promise<number[] | undefined> {
+async function requestBodyToBytes(request: Request): Promise<Uint8Array | undefined> {
   if (!request.body) return undefined
-  return [...new Uint8Array(await request.arrayBuffer())]
+  return new Uint8Array(await request.arrayBuffer())
 }
 
 export interface TauriFetchOptions {
@@ -39,7 +39,6 @@ export interface TauriFetchOptions {
 
 function abortError(reason?: unknown): Error | DOMException {
   if (reason instanceof Error) return reason
-  if (typeof DOMException !== 'undefined' && reason instanceof DOMException) return reason
   if (typeof DOMException !== 'undefined') {
     return new DOMException('The operation was aborted.', 'AbortError')
   }

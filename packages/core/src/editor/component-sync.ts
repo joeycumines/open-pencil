@@ -2,6 +2,15 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { computeAllLayouts } from '#core/layout'
 
+export function findAncestorComponentId(graph: SceneGraph, nodeId: string): string | null {
+  let current = graph.getNode(nodeId)
+  while (current) {
+    if (current.type === 'COMPONENT') return current.id
+    current = current.parentId ? graph.getNode(current.parentId) : undefined
+  }
+  return null
+}
+
 export function createComponentSyncScheduler(
   getGraph: () => SceneGraph,
   requestRender: () => void
@@ -14,14 +23,8 @@ export function createComponentSyncScheduler(
     nodeId: string,
     componentIds: Set<string>
   ) {
-    let current = graph.getNode(nodeId)
-    while (current) {
-      if (current.type === 'COMPONENT') {
-        componentIds.add(current.id)
-        break
-      }
-      current = current.parentId ? graph.getNode(current.parentId) : undefined
-    }
+    const componentId = findAncestorComponentId(graph, nodeId)
+    if (componentId) componentIds.add(componentId)
   }
 
   function collectInstanceAncestorComponents(
@@ -32,16 +35,10 @@ export function createComponentSyncScheduler(
     const instanceIds = graph.instanceIndex.get(componentId)
     if (!instanceIds) return
     for (const instanceId of instanceIds) {
-      let parentId = graph.getNode(instanceId)?.parentId ?? null
-      while (parentId) {
-        const parent = graph.getNode(parentId)
-        if (!parent) break
-        if (parent.type === 'COMPONENT') {
-          componentIds.add(parent.id)
-          break
-        }
-        parentId = parent.parentId
-      }
+      const parentId = graph.getNode(instanceId)?.parentId
+      if (!parentId) continue
+      const ancestorId = findAncestorComponentId(graph, parentId)
+      if (ancestorId) componentIds.add(ancestorId)
     }
   }
 
@@ -57,10 +54,7 @@ export function createComponentSyncScheduler(
         collectContainingComponent(graph, id, componentIds)
       }
 
-      const syncedComponentIds = new Set<string>()
       for (const compId of componentIds) {
-        if (syncedComponentIds.has(compId)) continue
-        syncedComponentIds.add(compId)
         graph.syncInstances(compId)
         collectInstanceAncestorComponents(graph, compId, componentIds)
       }

@@ -1,3 +1,4 @@
+import { computeAllLayouts } from '#core/layout'
 import { ensureTextFallbackPacksForNodes } from '#core/text/coverage'
 
 import {
@@ -13,13 +14,20 @@ export function createTextActions(ctx: EditorContext) {
   let activeSession: TextEditSession | null = null
 
   function requestTextFallbackFonts(nodeId: string): void {
-    void ensureTextFallbackPacksForNodes(ctx.graph, [nodeId]).then((loaded) => {
-      if (loaded) {
-        ctx.getRenderer()?.invalidateAllPictures()
-        ctx.requestRender()
-      }
-      return undefined
-    })
+    void ensureTextFallbackPacksForNodes(ctx.graph, [nodeId])
+      .then((loaded) => {
+        if (loaded) {
+          ctx.getRenderer()?.invalidateAllPictures()
+          computeAllLayouts(ctx.graph, ctx.state.currentPageId)
+          ctx.requestRender()
+        }
+        return undefined
+      })
+      .catch((err) => {
+        console.error(
+          `Failed to load fallback fonts: ${err instanceof Error ? err.message : String(err)}`
+        )
+      })
   }
 
   function startTextEditing(nodeId: string) {

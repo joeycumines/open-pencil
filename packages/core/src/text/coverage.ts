@@ -1,14 +1,15 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { DEFAULT_FONT_FAMILY } from '#core/constants'
-import type { FontFallbackScript } from '#core/text/fallbacks'
-import { fontManager, weightToStyle } from '#core/text/fonts'
-import { fontGlyphCoverageSync } from '#core/text/opentype'
+
+import type { FontFallbackScript } from './fallbacks'
+import { fontManager, weightToStyle } from './fonts'
+import { fontGlyphCoverageSync } from './opentype'
 
 const CJK_IDEOGRAPH_CHAR_RE = /[\u3400-\u9fff\uf900-\ufaff]/u
 const CJK_HIRAGANA_KATAKANA_RE = /[\u3040-\u30ff]/u
 const CJK_HANGUL_RE = /[\uac00-\ud7af]/u
-const CJK_CHAR_RE = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]/u
+export const CJK_CHAR_RE = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]/u
 const ARABIC_CHAR_RE = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/u
 
 // Common Traditional-only characters. This is a heuristic for fallback order, not language ID.

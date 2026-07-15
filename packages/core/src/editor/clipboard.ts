@@ -22,6 +22,7 @@ import { replaceTargetsWithCreated, selectedReplacementTargets } from './clipboa
 import { resolvePasteTarget } from './clipboard/paste-target'
 import { createClipboardPlacementActions } from './clipboard/placement'
 import { collectSubtrees, restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
+import { findAncestorComponentId } from './component-sync'
 import type { EditorContext } from './types'
 
 type PasteOptions = {
@@ -206,6 +207,7 @@ export function createClipboardActions(ctx: EditorContext) {
 
     const prevSelection = new Set(ctx.state.selectedIds)
     for (const { id } of entries) ctx.graph.deleteNode(id)
+    for (const { id } of syncedInstanceEntries) ctx.graph.deleteNode(id)
     relayoutParents()
 
     ctx.undo.push({
@@ -230,12 +232,23 @@ export function createClipboardActions(ctx: EditorContext) {
     const deletedComponentNodeIds = new Set<string>()
     const containingComponentIds = new Set<string>()
     for (const entry of entries) {
-      for (const id of entry.subtree.keys()) {
-        const componentId = containingComponentIdForNode(id)
-        if (!componentId || componentId === id) continue
-        deletedComponentNodeIds.add(id)
-        containingComponentIds.add(componentId)
+      const rootNode = entry.subtree.get(entry.id)
+      const rootOwnerId = rootNode?.parentId
+        ? findAncestorComponentId(ctx.graph, rootNode.parentId)
+        : null
+
+      const collect = (nodeId: string, ownerId: string | null) => {
+        const node = entry.subtree.get(nodeId)
+        if (!node) return
+        if (ownerId) {
+          deletedComponentNodeIds.add(nodeId)
+          containingComponentIds.add(ownerId)
+        }
+        const nextOwnerId = node.type === 'COMPONENT' ? null : ownerId
+        for (const childId of node.childIds) collect(childId, nextOwnerId)
       }
+
+      collect(entry.id, rootOwnerId)
     }
     if (deletedComponentNodeIds.size === 0 || containingComponentIds.size === 0) return []
 
@@ -247,15 +260,6 @@ export function createClipboardActions(ctx: EditorContext) {
       }
     }
     return sideEffects
-  }
-
-  function containingComponentIdForNode(id: string): string | null {
-    let current = ctx.graph.getNode(id)
-    while (current) {
-      if (current.type === 'COMPONENT') return current.id
-      current = current.parentId ? ctx.graph.getNode(current.parentId) : undefined
-    }
-    return null
   }
 
   function collectMappedInstanceDeletes(

@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { useI18n, useSelectionState } from '@open-pencil/vue'
 
 import AppSelect from '@/components/ui/AppSelect.vue'
-import PanelSection from '@/components/ui/PanelSection.vue'
+import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import { useEditorStore } from '@/app/editor/active-store'
 
 const editor = useEditorStore()
@@ -46,7 +46,7 @@ function switchVariant(propertyName: string, newValue: string) {
     v-if="hasVariants"
     :label="panels.variants"
     data-test-id="variant-section"
-    :ui="{ label: 'font-medium text-component' }"
+    :ui="{ title: 'text-component' }"
   >
     <div class="flex flex-col gap-1.5">
       <div
@@ -56,7 +56,7 @@ function switchVariant(propertyName: string, newValue: string) {
       >
         <label class="text-[10px] text-muted">{{ propName }}</label>
         <AppSelect
-          data-test-id="app-select-trigger"
+          :data-test-id="`variant-select-${propName}`"
           :model-value="currentValues[propName] ?? ''"
           :options="[...options].map((v) => ({ value: v, label: v }))"
           @update:model-value="switchVariant(propName, $event)"
