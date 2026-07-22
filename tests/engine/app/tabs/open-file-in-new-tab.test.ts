@@ -113,6 +113,40 @@ describe('openFileInNewTab', () => {
     expect(originalStore.getSourcePath()).toBeNull()
   })
 
+  test('preserves a reused tab that changes while the FIG read is pending', async () => {
+    const store = getActiveStore()
+    const originalPage = store.graph.getPages()[0]
+    if (!originalPage) throw new Error('Expected an initial page')
+    const initialTabCount = tabCount()
+    const readStarted = Promise.withResolvers<undefined>()
+    const read = Promise.withResolvers<SceneGraph>()
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      readStarted.resolve(undefined)
+      return read.promise
+    })
+
+    const opening = openFileInNewTab(
+      new File([], 'incoming.fig'),
+      undefined,
+      '/content/incoming.fig'
+    )
+    await readStarted.promise
+    store.renamePage(originalPage.id, 'Concurrent work')
+    read.resolve(new SceneGraph())
+
+    await expect(opening).rejects.toThrow('Open target changed while loading')
+    expect(tabCount()).toBe(initialTabCount)
+    expect(store.graph.getNode(originalPage.id)?.name).toBe('Concurrent work')
+    expect(store.getSourcePath()).toBeNull()
+    expect(store.state.documentName).toBe('Untitled')
+
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockResolvedValue(new SceneGraph())
+    await openFileInNewTab(new File([], 'next.fig'), undefined, '/content/next.fig')
+
+    expect(tabCount()).toBe(initialTabCount + 1)
+    expect(store.graph.getNode(originalPage.id)?.name).toBe('Concurrent work')
+  })
+
   test('concurrent opens of different files can overlap I/O', async () => {
     // Verify concurrency through explicit synchronization — no timing
     // thresholds, no Date.now(), no flakiness. The mock blocks each
@@ -373,11 +407,41 @@ describe('openFileInNewTab', () => {
     await openFileInNewTab(file, undefined, '/imports/card.html')
 
     expect(openDOMFile).toHaveBeenCalledWith(file, {
+      beforeApply: expect.any(Function),
       handle: undefined,
       path: '/imports/card.html'
     })
     expect(getActiveStore()).toBe(store)
     expect(store.getSourcePath()).toBe('/imports/card.html')
+  })
+
+  test('preserves a reused tab that changes while DOM conversion is pending', async () => {
+    const store = getActiveStore()
+    const originalPage = store.graph.getPages()[0]
+    if (!originalPage) throw new Error('Expected an initial page')
+    const conversionStarted = Promise.withResolvers<undefined>()
+    const proceed = Promise.withResolvers<undefined>()
+    vi.spyOn(store, 'openDOMFile').mockImplementation(async (_file, options) => {
+      conversionStarted.resolve(undefined)
+      await proceed.promise
+      const guardedOptions = options as typeof options & { beforeApply?: () => void }
+      guardedOptions.beforeApply?.()
+      store.replaceGraph(new SceneGraph())
+    })
+
+    const opening = openFileInNewTab(
+      new File(['<main>Hello</main>'], 'card.html', { type: 'text/html' }),
+      undefined,
+      '/imports/concurrent-card.html'
+    )
+    await conversionStarted.promise
+    store.renamePage(originalPage.id, 'Concurrent DOM work')
+    proceed.resolve(undefined)
+
+    await expect(opening).rejects.toThrow('Open target changed while loading')
+    expect(store.graph.getNode(originalPage.id)?.name).toBe('Concurrent DOM work')
+    expect(store.getSourcePath()).toBeNull()
+    expect(store.state.documentName).toBe('Untitled')
   })
 
   describe('when the file read fails', () => {

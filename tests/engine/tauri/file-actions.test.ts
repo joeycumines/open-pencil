@@ -54,6 +54,32 @@ describe('Tauri file actions', () => {
     }
   })
 
+  test('requires native proof for Windows drive paths with encoded dot segments', async () => {
+    const originalPlatform = process.platform
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    const ordinaryPath = 'C://root/design.fig'
+    const encodedDotPath = 'C://root/%2e/design.fig'
+    const store = createEditorStore()
+
+    try {
+      await mockTauriIPC((cmd, args) => {
+        expect(cmd).toBe('is_same_existing_native_file')
+        expect(args).toEqual({ firstPath: encodedDotPath, secondPath: ordinaryPath })
+        return false
+      })
+      store.setDocumentSource('design.fig', 'fig', undefined, ordinaryPath)
+      const tab = { id: 'windows-drive-path-tab', store }
+
+      await expect(findExistingTab([tab], undefined, encodedDotPath)).resolves.toBeNull()
+    } finally {
+      store.dispose()
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true
+      })
+    }
+  })
+
   test('chooses a design file through plugin-dialog', async () => {
     await mockTauriIPC((cmd, args) => {
       expect(cmd).toBe('plugin:dialog|open')

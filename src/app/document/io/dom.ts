@@ -23,6 +23,7 @@ type OpenDOMFileOptions = {
 }
 
 type DOMImportOptions = {
+  beforeApply?: () => void
   cssText?: string
   handle?: FileSystemFileHandle
   path?: string
@@ -31,6 +32,10 @@ type DOMImportOptions = {
 type DOMTextImportOptions = {
   cssText?: string
   documentName?: string
+}
+
+type ApplyDOMTextOptions = DOMTextImportOptions & {
+  beforeApply?: () => void
 }
 
 function documentNameFor(file: File): string {
@@ -43,11 +48,12 @@ export function createDOMOpenActions({
   setDocumentSource,
   fitCurrentPageToViewport
 }: OpenDOMFileOptions) {
-  async function applyDOMText(html: string, options: DOMTextImportOptions) {
+  async function applyDOMText(html: string, options: ApplyDOMTextOptions) {
     await yieldToUI()
     const pageName = options.documentName ?? 'DOM Import'
     const graph = await browserHTMLToSceneGraph(html, { cssText: options.cssText, pageName })
     await yieldToUI()
+    options.beforeApply?.()
     await applyImportedDocument(editor, graph)
     state.documentName = pageName
     await fitCurrentPageToViewport()
@@ -75,6 +81,7 @@ export function createDOMOpenActions({
       state.loading = true
       const html = await file.text()
       await applyDOMText(html, {
+        beforeApply: options.beforeApply,
         cssText: options.cssText,
         documentName: documentNameFor(file)
       })

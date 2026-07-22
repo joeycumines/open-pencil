@@ -46,7 +46,8 @@ function normalizeURL(path: string): string | null {
  *   while case-sensitive path bytes are preserved.
  */
 export function normalizeFilePath(path: string): string {
-  const normalizedURL = normalizeURL(path)
+  const isWindowsDrivePath = isWindowsLike() && /^[a-z]:[\\/]/i.test(path)
+  const normalizedURL = isWindowsDrivePath ? null : normalizeURL(path)
   if (normalizedURL) return normalizedURL
 
   let normalized: string

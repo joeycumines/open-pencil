@@ -45,6 +45,7 @@ type OpenRollbackState = {
   pageColor: EditorStore['state']['pageColor']
   panX: number
   panY: number
+  sceneVersion: number
   zoom: number
 }
 
@@ -123,8 +124,29 @@ function captureOpenRollbackState(store: EditorStore): OpenRollbackState {
     pageColor: structuredClone(store.state.pageColor),
     panX: store.state.panX,
     panY: store.state.panY,
+    sceneVersion: store.state.sceneVersion,
     zoom: store.state.zoom
   }
+}
+
+function isOpenRollbackStateCurrent(tab: Tab, rollback: OpenRollbackState): boolean {
+  const live = getLiveTab(tab)
+  if (!live) return false
+  const store = live.store
+  return (
+    store.graph === rollback.graph &&
+    store.state.sceneVersion === rollback.sceneVersion &&
+    !store.undo.canUndo &&
+    !store.undo.canRedo
+  )
+}
+
+function restoreOpenOwnedStateAfterDrift(tab: Tab, rollback: OpenRollbackState) {
+  const live = getLiveTab(tab)
+  if (!live) return
+  live.store.clearSourceIdentity()
+  live.store.state.documentName = rollback.documentName
+  live.store.state.loading = rollback.loading
 }
 
 function restoreOpenRollbackState(tab: Tab, rollback: OpenRollbackState) {
@@ -297,9 +319,17 @@ export async function openFileInNewTab(
 
   const { tab, reused, rollback, attempt } = decision
   const store = tab.store
+  let destructiveApplyStarted = false
+  const beforeDestructiveApply = () => {
+    if (!reused || !rollback) return
+    if (!isOpenRollbackStateCurrent(tab, rollback)) {
+      throw new Error('Open target changed while loading')
+    }
+    destructiveApplyStarted = true
+  }
   try {
     if (isDOMImportFile(file)) {
-      await store.openDOMFile(file, { handle, path })
+      await store.openDOMFile(file, { beforeApply: beforeDestructiveApply, handle, path })
       requireLiveTab(tab)
       attempt.resolve()
       return
@@ -323,6 +353,7 @@ export async function openFileInNewTab(
     requireLiveTab(tab)
     const firstPageId = imported.getPages()[0]?.id
     if (firstPageId) computeAllLayouts(imported, firstPageId)
+    beforeDestructiveApply()
     store.replaceGraph(imported)
     store.undo.clear()
     store.clearSelection()
@@ -340,7 +371,11 @@ export async function openFileInNewTab(
     // optimistic identity is removed.
     await fileOpenLock.run(handle, path, async () => {
       if (reused && rollback) {
-        restoreOpenRollbackState(tab, rollback)
+        if (destructiveApplyStarted || isOpenRollbackStateCurrent(tab, rollback)) {
+          restoreOpenRollbackState(tab, rollback)
+        } else {
+          restoreOpenOwnedStateAfterDrift(tab, rollback)
+        }
       } else if (getLiveTab(tab)) {
         closeTab(tab.id)
       }
