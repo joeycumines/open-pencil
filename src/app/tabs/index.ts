@@ -76,6 +76,7 @@ function isPristineTab(store: EditorStore): boolean {
   return (
     store.state.documentName === 'Untitled' &&
     !store.state.loading &&
+    store.state.sceneVersion === 0 &&
     !store.undo.canUndo &&
     !store.undo.canRedo &&
     !hasSourceIdentity(store) &&
@@ -227,12 +228,14 @@ export async function openFileInNewTab(
   handle?: FileSystemFileHandle,
   path?: string
 ): Promise<void> {
+  const activeTabAtRequest = activeTab.value
+
   // The global lock intentionally protects only identity/tab-reuse decisions,
   // not the actual disk/network I/O. This keeps duplicate tabs impossible
   // while still allowing multiple different files to load concurrently.
   const decision = await fileOpenLock.run<OpenDecision>(handle, path, async (existingTab) => {
     if (existingTab) {
-      switchTab(existingTab.id)
+      if (activeTab.value === activeTabAtRequest) switchTab(existingTab.id)
       const attempt = openAttemptsByTabId.get(existingTab.id)
       return attempt ? { kind: 'join', outcome: attempt.outcome } : { kind: 'existing' }
     }
@@ -288,13 +291,13 @@ export async function openFileInNewTab(
     if (firstPageId) computeAllLayouts(imported, firstPageId)
     store.replaceGraph(imported)
     store.undo.clear()
-    store.setDocumentSource(file.name, sourceFormat, handle, path)
     store.clearSelection()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     requireLiveTab(tab)
     await store.fitCurrentPageToViewport()
     requireLiveTab(tab)
+    store.setDocumentSource(file.name, sourceFormat, handle, path)
     store.state.loading = false
     attempt.resolve()
   } catch (error) {

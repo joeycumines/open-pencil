@@ -31,11 +31,8 @@ type DocumentSourceOptions = {
   getSavedVersion: () => number
   setSavedVersion: (version: number) => void
   setLastWriteTime: (time: number) => void
-  getSourceHandle: () => FileSystemFileHandle | null
   setSourceHandle: (handle: FileSystemFileHandle | null) => void
-  getSourcePath: () => string | null
   setSourcePath: (path: string | null) => void
-  getSourceFileName: () => string | null
   setSourceFileName: (name: string | null) => void
   getRenderer: () => Editor['renderer']
 }

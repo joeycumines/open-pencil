@@ -89,6 +89,23 @@ describe('openFileInNewTab', () => {
     expect(originalStore.getSourcePath()).toBeNull()
   })
 
+  test('does not reuse a tab whose default page was renamed without undo history', async () => {
+    const originalStore = getActiveStore()
+    const originalPage = originalStore.graph.getPages()[0]
+    if (!originalPage) throw new Error('Expected an initial page')
+    const initialTabCount = tabCount()
+
+    originalStore.renamePage(originalPage.id, 'User work')
+
+    expect(originalStore.undo.canUndo).toBe(false)
+    expect(originalStore.graph.nodes.size).toBe(2)
+    await openFileInNewTab(new File([], 'other.fig'), undefined, '/content/page-edit.fig')
+
+    expect(tabCount()).toBe(initialTabCount + 1)
+    expect(originalStore.graph.getNode(originalPage.id)?.name).toBe('User work')
+    expect(originalStore.getSourcePath()).toBeNull()
+  })
+
   test('concurrent opens of different files can overlap I/O', async () => {
     // Verify concurrency through explicit synchronization — no timing
     // thresholds, no Date.now(), no flakiness. The mock blocks each
@@ -245,6 +262,35 @@ describe('openFileInNewTab', () => {
     expect(reusedStore.getSourcePath()).toBe('/focus/older.fig')
   })
 
+  test('does not activate an existing match resolved after a newer tab action', async () => {
+    const existingStore = getActiveStore()
+    const storedHandle = {
+      name: 'existing.fig',
+      isSameEntry: vi.fn(async () => false)
+    } as FileSystemFileHandle
+    existingStore.updateSourceIdentity('existing.fig', storedHandle)
+
+    createTab()
+    const comparisonStarted = Promise.withResolvers<undefined>()
+    const comparison = Promise.withResolvers<boolean>()
+    const incomingHandle = {
+      name: 'existing.fig',
+      isSameEntry: vi.fn(() => {
+        comparisonStarted.resolve(undefined)
+        return comparison.promise
+      })
+    } as FileSystemFileHandle
+
+    const opening = openFileInNewTab(new File([], 'existing.fig'), incomingHandle)
+    await comparisonStarted.promise
+    const newerStore = createTab().store
+    comparison.resolve(true)
+    await opening
+
+    expect(getActiveStore()).toBe(newerStore)
+    expect(readFigFile).not.toHaveBeenCalled()
+  })
+
   test('routes HTML files through DOM import on the claimed tab', async () => {
     const store = getActiveStore()
     const openDOMFile = vi.spyOn(store, 'openDOMFile').mockResolvedValue(undefined)
@@ -346,6 +392,7 @@ describe('openFileInNewTab', () => {
       expect(store.state.panY).toBe(23)
       expect(store.state.zoom).toBe(1.75)
       expect(store.getSourcePath()).toBeNull()
+      expect(store.getDocumentFilePath()).toBeNull()
       expect(store.state.documentName).toBe('Untitled')
     })
   })

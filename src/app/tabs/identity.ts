@@ -165,7 +165,6 @@ async function findLiveExistingTab(
 
 type LockEntry = {
   done: Promise<void>
-  resolve: () => void
 }
 
 /**
@@ -199,7 +198,7 @@ export function createFileOpenLock(getTabs: () => readonly Tab[]) {
       const done = new Promise<void>((resolve) => {
         resolveDone = resolve
       })
-      const entry: LockEntry = { done, resolve: () => resolveDone?.() }
+      const entry: LockEntry = { done }
 
       // Register our entry before awaiting the previous one so any request that
       // starts while we wait chains behind us rather than racing us.

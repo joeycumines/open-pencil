@@ -12,6 +12,7 @@ use http::proxy_http_request;
 use menu::install_app_menu;
 use menu_events::handle_menu_event;
 use std::{
+    ffi::OsString,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -76,86 +77,17 @@ fn open_paths_from_args(args: Vec<String>, cwd: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Collapse runs of consecutive forward slashes into a single slash.
-fn collapse_duplicate_slashes(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut prev_slash = false;
-    for ch in s.chars() {
-        if ch == '/' {
-            if prev_slash {
-                continue;
-            }
-            prev_slash = true;
-        } else {
-            prev_slash = false;
-        }
-        out.push(ch);
-    }
-    out
-}
-
-fn strip_trailing_slash(s: &str) -> &str {
-    s.strip_suffix('/').unwrap_or(s)
-}
-
-/// Normalise a path for identity comparison on the current platform.
-///
-/// - Case is preserved because lexical paths do not prove the semantics of the
-///   backing volume or directory. Existing paths use physical-file proof when
-///   their lexical forms differ.
-/// - Duplicate forward slashes are collapsed and a single trailing forward
-///   slash is removed on all platforms.
-/// - Backslashes are converted to forward slashes only on Windows.
-/// - Windows verbatim prefixes (`\\?\` and `\\?\UNC\`) are stripped, and plain
-///   UNC paths (`\\server\share`) keep their leading `//` after normalization.
-/// - Non-UTF-8 paths are rejected before pending serialization because a lossy
-///   string cannot preserve file identity for the frontend.
-fn path_identity_key(path: &Path) -> String {
-    let lossy = path.to_string_lossy();
-    #[cfg(target_os = "windows")]
-    {
-        // Canonicalized Windows paths may carry the extended-length (`\\?\`) or
-        // extended-length UNC (`\\?\UNC\`) verbatim prefix. Strip it before
-        // slash normalization so the identity key matches ordinary paths sent
-        // by the frontend. Plain UNC paths (`\\server\share`) keep their leading
-        // `//` after normalization.
-        let raw = lossy.into_owned();
-        let (rest, is_unc) = if let Some(r) = raw.strip_prefix(r"\\?\UNC\") {
-            (r, true)
-        } else if let Some(r) = raw.strip_prefix(r"\\?\") {
-            (r, false)
-        } else if raw.starts_with("\\\\") {
-            (&raw[2..], true)
-        } else {
-            (raw.as_str(), false)
-        };
-
-        let slash_normalized = rest.replace('\\', "/");
-        let collapsed = collapse_duplicate_slashes(&slash_normalized);
-        let without_trailing = strip_trailing_slash(&collapsed);
-        let with_prefix = if is_unc {
-            format!("//{}", without_trailing)
-        } else {
-            without_trailing.to_string()
-        };
-
-        with_prefix
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let collapsed = collapse_duplicate_slashes(&lossy);
-        strip_trailing_slash(&collapsed).to_string()
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        let collapsed = collapse_duplicate_slashes(&lossy);
-        strip_trailing_slash(&collapsed).to_string()
-    }
+fn open_paths_from_os_args(args: impl IntoIterator<Item = OsString>, cwd: &Path) -> Vec<PathBuf> {
+    open_paths_from_args(
+        args.into_iter()
+            .filter_map(|arg| arg.into_string().ok())
+            .collect(),
+        cwd,
+    )
 }
 
 fn paths_refer_to_same_existing_file(first: &Path, second: &Path) -> bool {
-    path_identity_key(first) == path_identity_key(second)
-        || same_file::is_same_file(first, second).unwrap_or(false)
+    first == second || same_file::is_same_file(first, second).unwrap_or(false)
 }
 
 fn pending_path_string(path: &Path) -> Option<String> {
@@ -209,7 +141,7 @@ fn queue_open_paths<R: tauri::Runtime>(app: &tauri::AppHandle<R>, paths: Vec<Pat
 
 fn startup_open_paths() -> Vec<PathBuf> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    open_paths_from_args(std::env::args().skip(1).collect(), &cwd)
+    open_paths_from_os_args(std::env::args_os().skip(1), &cwd)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -283,125 +215,9 @@ mod tests {
     };
 
     use super::{
-        is_same_existing_native_file, path_identity_key, pending_contains_equivalent_path,
+        is_same_existing_native_file, open_paths_from_os_args, pending_contains_equivalent_path,
         pending_path_string, PendingOpenFile,
     };
-
-    #[test]
-    fn windows_normalizes_slashes_without_guessing_case_semantics() {
-        // These assertions target Windows behaviour, but constructing the same
-        // paths here is harmless on other platforms.
-        #[cfg(target_os = "windows")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new(r"C:\foo\bar.txt")),
-                "C:/foo/bar.txt"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"C:/foo\\bar.txt")),
-                "C:/foo/bar.txt"
-            );
-            assert_eq!(path_identity_key(Path::new(r"C:\foo\\bar\")), "C:/foo/bar");
-            assert_eq!(
-                path_identity_key(Path::new(r"C:/foo//bar.txt")),
-                "C:/foo/bar.txt"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"\\server\share\file.fig")),
-                "//server/share/file.fig"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"\\server\share\dir\\")),
-                "//server/share/dir"
-            );
-        }
-    }
-
-    #[test]
-    fn windows_strips_verbatim_prefix_before_normalizing() {
-        // These assertions target Windows behaviour, but constructing the same
-        // paths here is harmless on other platforms.
-        #[cfg(target_os = "windows")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new(r"\\?\C:\foo\bar.txt")),
-                "C:/foo/bar.txt"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"\\?\C:\foo\bar.txt\\")),
-                "C:/foo/bar.txt"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"\\?\UNC\server\share\file.fig")),
-                "//server/share/file.fig"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"\\?\UNC\server\share\file.fig\\")),
-                "//server/share/file.fig"
-            );
-            assert_eq!(
-                path_identity_key(Path::new(r"\\?\UNC\Server\Share\dir")),
-                "//Server/Share/dir"
-            );
-        }
-    }
-
-    #[test]
-    fn lexical_keys_preserve_case_when_volume_semantics_are_unproven() {
-        #[cfg(target_os = "macos")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new("/Users/Joey/File.txt")),
-                "/Users/Joey/File.txt"
-            );
-        }
-        #[cfg(target_os = "linux")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new("/Users/Joey/File.txt")),
-                "/Users/Joey/File.txt"
-            );
-        }
-    }
-
-    #[test]
-    fn collapses_slashes_and_strips_trailing_slash_respecting_case_sensitivity() {
-        #[cfg(target_os = "macos")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new("/Users/Joey//File.txt/")),
-                "/Users/Joey/File.txt"
-            );
-        }
-        #[cfg(target_os = "linux")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new("/Users/Joey//File.txt/")),
-                "/Users/Joey/File.txt"
-            );
-        }
-    }
-
-    #[test]
-    fn posix_preserves_backslash_as_legal_filename_character() {
-        // Backslash is a legal filename character on POSIX filesystems and must
-        // not be treated as a path separator. Lexical identity preserves case;
-        // existing paths use physical-file proof when representations differ.
-        #[cfg(target_os = "macos")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new("/Users/joeyc/my\\file.fig")),
-                "/Users/joeyc/my\\file.fig"
-            );
-        }
-        #[cfg(target_os = "linux")]
-        {
-            assert_eq!(
-                path_identity_key(Path::new("/Users/joeyc/my\\file.fig")),
-                "/Users/joeyc/my\\file.fig"
-            );
-        }
-    }
 
     #[test]
     fn native_identity_proves_hardlink_aliases_without_conflating_distinct_files() {
@@ -447,5 +263,31 @@ mod tests {
 
         let path = PathBuf::from(OsString::from_vec(b"/tmp/design-\xff.fig".to_vec()));
         assert_eq!(pending_path_string(&path), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn startup_args_skip_non_utf_path_without_dropping_valid_sibling() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+        static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
+        let directory = std::env::temp_dir().join(format!(
+            "open-pencil-startup-args-{}-{}",
+            std::process::id(),
+            NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&directory).expect("create startup argument test directory");
+        let invalid = directory.join(OsString::from_vec(b"invalid-\xff.fig".to_vec()));
+        let valid = directory.join("valid.fig");
+        fs::write(&valid, b"valid").expect("write valid sibling");
+        let expected = valid.canonicalize().expect("canonicalize valid sibling");
+
+        let paths = open_paths_from_os_args(
+            [invalid.into_os_string(), valid.into_os_string()],
+            Path::new("/unused"),
+        );
+        let _ = fs::remove_dir_all(directory);
+
+        assert_eq!(paths, vec![expected]);
     }
 }
