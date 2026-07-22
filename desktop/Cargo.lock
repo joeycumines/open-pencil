@@ -2781,6 +2781,7 @@ dependencies = [
  "fix-path-env",
  "font-kit",
  "reqwest 0.12.28",
+ "same-file",
  "serde",
  "serde_json",
  "tauri",

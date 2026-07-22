@@ -116,7 +116,6 @@ export function createDocumentSourceActions({
     const downloadName = downloadNameFromPath(path)
     setDownloadName(downloadName)
     state.documentName = documentNameFromFigPath(downloadName)
-    updateSourceIdentity(downloadName, undefined, path)
   }
 
   function updateSourceIdentity(fileName: string, handle?: FileSystemFileHandle, path?: string) {

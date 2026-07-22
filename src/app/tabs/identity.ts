@@ -1,3 +1,5 @@
+import { isTauri } from '@/app/tauri/env'
+
 import type { Tab } from './index'
 
 type OptionalGlobal = {
@@ -13,14 +15,15 @@ function isWindowsLike(): boolean {
   return optionalGlobal.navigator?.platform?.startsWith('Win') ?? false
 }
 
-function isMacOSLike(): boolean {
-  const nodePlatform = optionalGlobal.process?.platform
-  if (nodePlatform) return nodePlatform === 'darwin'
-  return optionalGlobal.navigator?.platform?.startsWith('Mac') ?? false
-}
-
-function isCaseInsensitiveFilesystem(): boolean {
-  return isWindowsLike() || isMacOSLike()
+function normalizeURL(path: string): string | null {
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(path) && !path.startsWith('blob:')) return null
+  try {
+    const url = new URL(path)
+    url.hash = ''
+    return url.href
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -35,10 +38,16 @@ function isCaseInsensitiveFilesystem(): boolean {
  * - On POSIX platforms, backslash is a legal filename character and is left
  *   untouched.
  * - Trailing slashes are removed on all platforms.
- * - On filesystems that are case-insensitive by default (Windows, macOS) the
- *   result is lowercased. Linux keeps the original casing.
+ * - Lexical paths preserve case because the client cannot prove whether the
+ *   backing volume or directory is case-sensitive. Existing Tauri paths use a
+ *   native physical-file comparison when their lexical forms differ.
+ * - Absolute URLs use URL semantics: host casing and fragments are normalized,
+ *   while case-sensitive path bytes are preserved.
  */
 export function normalizeFilePath(path: string): string {
+  const normalizedURL = normalizeURL(path)
+  if (normalizedURL) return normalizedURL
+
   let normalized: string
 
   if (isWindowsLike()) {
@@ -68,11 +77,43 @@ export function normalizeFilePath(path: string): string {
     normalized = path.replace(/\/+/g, '/').replace(/\/$/, '')
   }
 
-  if (isCaseInsensitiveFilesystem()) {
-    normalized = normalized.toLowerCase()
-  }
-
   return normalized
+}
+
+async function nativePathsReferToSameFile(firstPath: string, secondPath: string): Promise<boolean> {
+  if (!isTauri()) return false
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return (
+      (await invoke<boolean | null>('is_same_existing_native_file', {
+        firstPath,
+        secondPath
+      })) === true
+    )
+  } catch {
+    return false
+  }
+}
+
+async function pathsReferToSameFile(firstPath: string, secondPath: string): Promise<boolean> {
+  if (normalizeFilePath(firstPath) === normalizeFilePath(secondPath)) return true
+  return nativePathsReferToSameFile(firstPath, secondPath)
+}
+
+async function identitiesMatch(
+  handle: FileSystemFileHandle | undefined,
+  path: string | undefined,
+  storedHandle: FileSystemFileHandle | null,
+  storedPath: string | null
+): Promise<boolean> {
+  if (path && storedPath && (await pathsReferToSameFile(path, storedPath))) return true
+  if (!handle || !storedHandle) return false
+  if (handle === storedHandle) return true
+  try {
+    return await handle.isSameEntry(storedHandle)
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -95,37 +136,30 @@ export async function findExistingTab(
   handle: FileSystemFileHandle | undefined,
   path?: string
 ): Promise<Tab | null> {
-  if (path) {
-    const normalized = normalizeFilePath(path)
-    for (const tab of tabs) {
-      const tabPath = tab.store.getSourcePath() ?? tab.store.getFilePath()
-      if (tabPath && normalizeFilePath(tabPath) === normalized) {
-        return tab
-      }
-    }
-    // Path lookup found nothing. Fall through to the handle check below so an
-    // existing handle-only tab is not ignored when the request supplied both.
+  for (const tab of tabs) {
+    const storedHandle = tab.store.getSourceHandle()
+    const storedPath = tab.store.getSourcePath()
+    if (await identitiesMatch(handle, path, storedHandle, storedPath)) return tab
   }
+  return null
+}
 
-  if (handle) {
-    for (const tab of tabs) {
-      const tabHandle = tab.store.getSourceHandle() ?? tab.store.getFileHandle()
-      if (!tabHandle) continue
-      try {
-        if (await handle.isSameEntry(tabHandle)) {
-          return tab
-        }
-      } catch (error) {
-        void error
-        // Permission loss or other handle errors mean we cannot confirm they
-        // are the same file; treat as different.
-      }
-    }
-    return null
+async function findLiveExistingTab(
+  getTabs: () => readonly Tab[],
+  handle: FileSystemFileHandle | undefined,
+  path: string | undefined
+): Promise<Tab | null> {
+  for (const candidate of getTabs()) {
+    const storedHandle = candidate.store.getSourceHandle()
+    const storedPath = candidate.store.getSourcePath()
+    if (!(await identitiesMatch(handle, path, storedHandle, storedPath))) continue
+
+    const live = getTabs().find((tab) => tab.id === candidate.id && tab.store === candidate.store)
+    if (!live) continue
+    const currentHandle = live.store.getSourceHandle()
+    const currentPath = live.store.getSourcePath()
+    if (currentHandle === storedHandle && currentPath === storedPath) return live
   }
-
-  // No stable identity available. Opening a duplicate tab is the only safe
-  // behavior because filename is not a file identity.
   return null
 }
 
@@ -175,7 +209,7 @@ export function createFileOpenLock(getTabs: () => readonly Tab[]) {
         if (previous) {
           await previous.done
         }
-        const existingTab = await findExistingTab(getTabs(), handle, path)
+        const existingTab = await findLiveExistingTab(getTabs, handle, path)
         return operation(existingTab)
       }
 

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { saveExportedFile } from '@/app/document/export/files'
 import { watchTauriFile } from '@/app/document/io/watch-targets'
+import { createEditorStore } from '@/app/editor/session'
 import { chooseTauriOpenPath, readTauriDesignFile } from '@/app/shell/menu/files'
+import { findExistingTab } from '@/app/tabs/identity'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'
 
@@ -12,6 +14,20 @@ afterEach(async () => {
 })
 
 describe('Tauri file actions', () => {
+  test('uses native existing-file identity for different path representations', async () => {
+    await mockTauriIPC((cmd, args) => {
+      expect(cmd).toBe('is_same_existing_native_file')
+      expect(args).toEqual({ firstPath: '/aliases/design.fig', secondPath: '/real/design.fig' })
+      return true
+    })
+    const store = createEditorStore()
+    store.setDocumentSource('design.fig', 'fig', undefined, '/real/design.fig')
+    const tab = { id: 'native-path-tab', store }
+
+    await expect(findExistingTab([tab], undefined, '/aliases/design.fig')).resolves.toBe(tab)
+    store.dispose()
+  })
+
   test('chooses a design file through plugin-dialog', async () => {
     await mockTauriIPC((cmd, args) => {
       expect(cmd).toBe('plugin:dialog|open')

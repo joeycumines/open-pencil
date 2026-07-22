@@ -1,6 +1,7 @@
 import { useFileDialog } from '@vueuse/core'
 
 import { setOpenPencilOpenFileHandler } from '@/app/browser-bridge'
+import { downloadNameFromPath } from '@/app/document/io/names'
 import { openFileInNewTab } from '@/app/tabs'
 import { isTauri } from '@/app/tauri/env'
 import { IS_BROWSER } from '@/constants'
@@ -18,12 +19,17 @@ fileDialog.onChange((files) => {
 
 if (IS_BROWSER && 'window' in globalThis) {
   setOpenPencilOpenFileHandler(async (path: string) => {
-    const response = await fetch(path)
-    const blob = await response.blob()
-    const name = path.split('/').pop() ?? 'file.fig'
-    const file = new File([blob], name, { type: 'application/octet-stream' })
-    await openFileInNewTab(file, undefined, path)
+    await openRemoteFileFromPath(path)
   })
+}
+
+export async function openRemoteFileFromPath(path: string) {
+  const resourceUrl = new URL(path, window.location.href)
+  const response = await fetch(resourceUrl)
+  const blob = await response.blob()
+  const name = downloadNameFromPath(resourceUrl.pathname)
+  const file = new File([blob], name, { type: 'application/octet-stream' })
+  await openFileInNewTab(file, undefined, resourceUrl.href)
 }
 
 export async function readTauriDesignFile(path: string): Promise<File> {

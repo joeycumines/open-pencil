@@ -20,9 +20,118 @@ export interface Tab {
 const io = new IORegistry(BUILTIN_IO_FORMATS)
 
 const fileOpenLock = createFileOpenLock(() => tabsRef.value)
+const openAttemptsByTabId = new Map<string, OpenAttempt>()
+
+type OpenAttempt = {
+  outcome: Promise<void>
+  resolve: () => void
+  reject: (error: unknown) => void
+}
+
+type OpenRollbackState = {
+  graph: SceneGraph
+  currentPageId: string
+  enteredContainerId: string | null
+  documentName: string
+  loading: boolean
+  pageColor: EditorStore['state']['pageColor']
+  panX: number
+  panY: number
+  zoom: number
+}
+
+type OpenDecision =
+  | { kind: 'existing' }
+  | { kind: 'join'; outcome: Promise<void> }
+  | {
+      kind: 'owner'
+      tab: Tab
+      reused: boolean
+      rollback: OpenRollbackState | null
+      attempt: OpenAttempt
+    }
 
 function hasSourceIdentity(store: EditorStore): boolean {
   return !!(store.getSourcePath() || store.getSourceHandle() || store.getSourceFileName())
+}
+
+function hasDocumentContent(store: EditorStore): boolean {
+  const graph = store.graph
+  const pages = graph.getPages()
+  return (
+    graph.nodes.size !== 2 ||
+    pages.length !== 1 ||
+    pages.some((page) => graph.getChildren(page.id).length > 0) ||
+    graph.images.size > 0 ||
+    graph.variables.size > 0 ||
+    graph.variableCollections.size > 0 ||
+    graph.activeMode.size > 0 ||
+    graph.figKiwiVersion !== null ||
+    graph.figSchemaDeflated !== null ||
+    graph.documentColorSpace !== 'display-p3'
+  )
+}
+
+function isPristineTab(store: EditorStore): boolean {
+  return (
+    store.state.documentName === 'Untitled' &&
+    !store.state.loading &&
+    !store.undo.canUndo &&
+    !store.undo.canRedo &&
+    !hasSourceIdentity(store) &&
+    !hasDocumentContent(store)
+  )
+}
+
+function createOpenAttempt(): OpenAttempt {
+  let resolve: () => void = () => undefined
+  let reject: (error: unknown) => void = () => undefined
+  const outcome = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  void outcome.catch(() => undefined)
+  return { outcome, resolve, reject }
+}
+
+function getLiveTab(tab: Tab): Tab | undefined {
+  return tabsRef.value.find((candidate) => candidate.id === tab.id && candidate.store === tab.store)
+}
+
+function requireLiveTab(tab: Tab): Tab {
+  const live = getLiveTab(tab)
+  if (!live) throw new Error('File open target tab no longer exists')
+  return live
+}
+
+function captureOpenRollbackState(store: EditorStore): OpenRollbackState {
+  return {
+    graph: store.graph,
+    currentPageId: store.state.currentPageId,
+    enteredContainerId: store.state.enteredContainerId,
+    documentName: store.state.documentName,
+    loading: store.state.loading,
+    pageColor: structuredClone(store.state.pageColor),
+    panX: store.state.panX,
+    panY: store.state.panY,
+    zoom: store.state.zoom
+  }
+}
+
+function restoreOpenRollbackState(tab: Tab, rollback: OpenRollbackState) {
+  const live = getLiveTab(tab)
+  if (!live) return
+  const store = live.store
+  store.clearSourceIdentity()
+  if (store.graph !== rollback.graph) store.replaceGraph(rollback.graph)
+  store.state.currentPageId = rollback.currentPageId
+  store.state.enteredContainerId = rollback.enteredContainerId
+  store.state.documentName = rollback.documentName
+  store.state.loading = rollback.loading
+  store.state.pageColor = structuredClone(rollback.pageColor)
+  store.state.panX = rollback.panX
+  store.state.panY = rollback.panY
+  store.state.zoom = rollback.zoom
 }
 
 let nextTabId = 1
@@ -121,63 +230,50 @@ export async function openFileInNewTab(
   // The global lock intentionally protects only identity/tab-reuse decisions,
   // not the actual disk/network I/O. This keeps duplicate tabs impossible
   // while still allowing multiple different files to load concurrently.
-  type OpenContext = { tab: Tab; isUntouched: boolean; previousDocumentName: string | undefined }
-
-  const context = await fileOpenLock.run<OpenContext | null>(handle, path, async (existingTab) => {
+  const decision = await fileOpenLock.run<OpenDecision>(handle, path, async (existingTab) => {
     if (existingTab) {
       switchTab(existingTab.id)
-      return null
+      const attempt = openAttemptsByTabId.get(existingTab.id)
+      return attempt ? { kind: 'join', outcome: attempt.outcome } : { kind: 'existing' }
     }
 
     // Capture the current tab only after acquiring the global open lock so
     // that the file loads into the tab the user is currently looking at.
     const current = activeTab.value
-    const previousDocumentName = current?.store.state.documentName
-    const isUntouched =
-      current?.store.state.documentName === 'Untitled' &&
-      !current.store.undo.canUndo &&
-      // A tab with a redo stack is not "untouched" — overwriting it would
-      // destroy recoverable user work.
-      !current.store.undo.canRedo &&
-      !hasSourceIdentity(current.store)
-
-    const tab = isUntouched ? current : createTab()
+    const reused = current ? isPristineTab(current.store) : false
+    const tab = reused && current ? current : createTab()
+    const rollback = reused ? captureOpenRollbackState(tab.store) : null
+    const attempt = createOpenAttempt()
+    openAttemptsByTabId.set(tab.id, attempt)
 
     // Claim the source identity immediately so concurrent opens of the same
     // file observe a matching tab. Heavy I/O then happens after the lock.
     tab.store.updateSourceIdentity(file.name, handle, path)
-    return { tab, isUntouched, previousDocumentName }
+    return { kind: 'owner', tab, reused, rollback, attempt }
   })
 
-  if (!context) return
-
-  const { tab, isUntouched, previousDocumentName } = context
-  const store = tab.store
-  if (isDOMImportFile(file)) {
-    try {
-      await store.openDOMFile(file, { handle, path })
-    } catch (error) {
-      store.clearSourceIdentity()
-      if (isUntouched && previousDocumentName !== undefined) {
-        store.state.documentName = previousDocumentName
-      }
-      if (!isUntouched) {
-        closeTab(tab.id)
-      }
-      throw error
-    }
-    if (isUntouched) {
-      activateTab(tab)
-    }
+  if (decision.kind === 'existing') return
+  if (decision.kind === 'join') {
+    await decision.outcome
     return
   }
-  const documentName = file.name.replace(/\.[^.]+$/i, '')
 
-  store.state.documentName = documentName
-  store.state.loading = true
-  await yieldToUI()
-
+  const { tab, reused, rollback, attempt } = decision
+  const store = tab.store
   try {
+    if (isDOMImportFile(file)) {
+      await store.openDOMFile(file, { handle, path })
+      requireLiveTab(tab)
+      attempt.resolve()
+      return
+    }
+
+    const documentName = file.name.replace(/\.[^.]+$/i, '')
+    store.state.documentName = documentName
+    store.state.loading = true
+    await yieldToUI()
+    requireLiveTab(tab)
+
     const isFig = file.name.toLowerCase().endsWith('.fig')
     const { graph: imported, sourceFormat } = isFig
       ? { graph: await readFigFile(file, { populate: 'first-page' }), sourceFormat: 'fig' }
@@ -187,6 +283,7 @@ export async function openFileInNewTab(
           data: new Uint8Array(await file.arrayBuffer())
         })
 
+    requireLiveTab(tab)
     const firstPageId = imported.getPages()[0]?.id
     if (firstPageId) computeAllLayouts(imported, firstPageId)
     store.replaceGraph(imported)
@@ -195,27 +292,26 @@ export async function openFileInNewTab(
     store.clearSelection()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
+    requireLiveTab(tab)
     await store.fitCurrentPageToViewport()
-  } catch (error) {
-    // A failed read must not permanently taint the tab with a source identity
-    // that would block future attempts to open the same file.
-    store.clearSourceIdentity()
-    if (isUntouched && previousDocumentName !== undefined) {
-      store.state.documentName = previousDocumentName
-    }
+    requireLiveTab(tab)
     store.state.loading = false
-    if (!isUntouched) {
-      closeTab(tab.id)
-    }
+    attempt.resolve()
+  } catch (error) {
+    // Queue rollback behind identity decisions that were already invoked.
+    // Those duplicates must observe and join this owner's outcome before its
+    // optimistic identity is removed.
+    await fileOpenLock.run(handle, path, async () => {
+      if (reused && rollback) {
+        restoreOpenRollbackState(tab, rollback)
+      } else if (getLiveTab(tab)) {
+        closeTab(tab.id)
+      }
+    })
+    attempt.reject(error)
     throw error
-  }
-
-  store.state.loading = false
-
-  // When reusing an untouched existing tab we must explicitly activate it,
-  // because the active tab may have changed while we were loading.
-  if (isUntouched) {
-    activateTab(tab)
+  } finally {
+    if (openAttemptsByTabId.get(tab.id) === attempt) openAttemptsByTabId.delete(tab.id)
   }
 }
 

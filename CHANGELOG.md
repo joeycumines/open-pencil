@@ -40,7 +40,6 @@
 - Share public app links from the desktop collaboration panel and send the current document to newly joined collaborators.
 - Resolve published package types correctly for TypeScript consumers and keep file-backed CLI commands working under Node.
 - Reuse an existing tab for repeated or concurrent file opens when a canonical path or File System Access handle proves identity, keep same-named unidentifiable files distinct, and roll back failed identity claims.
-- Preserve `Uint8Array` slice bounds in browser downloads and clean up the losing timer or animation-frame callback when yielding to the UI.
 
 ### Security
 

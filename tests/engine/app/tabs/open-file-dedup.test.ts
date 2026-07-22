@@ -72,7 +72,7 @@ describe('normalizeFilePath', () => {
   test('converts backslashes to slashes on Windows', () => {
     const restore = overridePlatform('win32')
     try {
-      expect(normalizeFilePath('C:\\Users\\joeyc\\file.fig')).toBe('c:/users/joeyc/file.fig')
+      expect(normalizeFilePath('C:\\Users\\joeyc\\file.fig')).toBe('C:/Users/joeyc/file.fig')
     } finally {
       restore()
     }
@@ -88,16 +88,33 @@ describe('normalizeFilePath', () => {
     }
   })
 
-  test('folds case on macOS and Windows', () => {
+  test('preserves case when lexical paths cannot prove filesystem semantics', () => {
     let restore = overridePlatform('darwin')
     try {
-      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/users/joeyc/file.fig')
+      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/Users/JoeyC/File.fig')
     } finally {
       restore()
     }
     restore = overridePlatform('win32')
     try {
-      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/users/joeyc/file.fig')
+      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/Users/JoeyC/File.fig')
+    } finally {
+      restore()
+    }
+  })
+
+  test('normalizes URL hosts and fragments without folding path case', () => {
+    const restore = overridePlatform('win32')
+    try {
+      expect(normalizeFilePath('https://EXAMPLE.test/Design.fig#first')).toBe(
+        'https://example.test/Design.fig'
+      )
+      expect(normalizeFilePath('https://example.test/Design.fig#second')).toBe(
+        'https://example.test/Design.fig'
+      )
+      expect(normalizeFilePath('https://example.test/design.fig')).not.toBe(
+        normalizeFilePath('https://example.test/Design.fig')
+      )
     } finally {
       restore()
     }
@@ -115,9 +132,9 @@ describe('normalizeFilePath', () => {
   test('strips Windows extended-length prefix on local paths', () => {
     const restore = overridePlatform('win32')
     try {
-      expect(normalizeFilePath('\\\\?\\C:\\Users\\joeyc\\file.fig')).toBe('c:/users/joeyc/file.fig')
+      expect(normalizeFilePath('\\\\?\\C:\\Users\\joeyc\\file.fig')).toBe('C:/Users/joeyc/file.fig')
       expect(normalizeFilePath('\\\\?\\C:\\Users\\JOEYC\\file.fig\\')).toBe(
-        'c:/users/joeyc/file.fig'
+        'C:/Users/JOEYC/file.fig'
       )
     } finally {
       restore()
@@ -130,7 +147,7 @@ describe('normalizeFilePath', () => {
       expect(normalizeFilePath('\\\\?\\UNC\\server\\share\\file.fig')).toBe(
         '//server/share/file.fig'
       )
-      expect(normalizeFilePath('\\\\?\\UNC\\Server\\Share\\dir\\')).toBe('//server/share/dir')
+      expect(normalizeFilePath('\\\\?\\UNC\\Server\\Share\\dir\\')).toBe('//Server/Share/dir')
     } finally {
       restore()
     }
@@ -184,14 +201,30 @@ describe('findExistingTab', () => {
     expect(notFound).toBeNull()
   })
 
+  test('uses exact handle identity without consulting a failing host comparison', async () => {
+    const exact = {
+      kind: 'file',
+      name: 'exact.fig',
+      isSameEntry: vi.fn(() => {
+        throw new Error('host comparison should not run')
+      })
+    } as FileSystemFileHandle
+    const tab = makeTab()
+    tab.store.setDocumentSource('exact.fig', 'pen', exact)
+
+    await expect(findExistingTab([tab], exact)).resolves.toBe(tab)
+    expect(exact.isSameEntry).not.toHaveBeenCalled()
+  })
+
   test('treats a rejected isSameEntry as "not the same file"', async () => {
-    const bad = makeHandle('file.fig', async () => {
+    const stored = makeHandle('file.fig', async () => false)
+    const incoming = makeHandle('file.fig', async () => {
       throw new Error('permission denied')
     })
     const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', bad)
+    tab.store.setDocumentSource('file.fig', 'pen', stored)
 
-    const found = await findExistingTab([tab], bad)
+    const found = await findExistingTab([tab], incoming)
     expect(found).toBeNull()
   })
 
@@ -222,13 +255,14 @@ describe('findExistingTab', () => {
   })
 
   test('returns null when path misses and handle check throws', async () => {
-    const handle = makeHandle('file.fig', async () => {
+    const stored = makeHandle('file.fig', async () => false)
+    const incoming = makeHandle('file.fig', async () => {
       throw new Error('permission denied')
     })
     const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', handle)
+    tab.store.setDocumentSource('file.fig', 'pen', stored)
 
-    const found = await findExistingTab([tab], handle, '/a/different/file.fig')
+    const found = await findExistingTab([tab], incoming, '/a/different/file.fig')
     expect(found).toBeNull()
   })
 })
@@ -313,5 +347,23 @@ describe('createFileOpenLock', () => {
     expect(tabs).toHaveLength(2)
     // Global serialization means only one open is in flight at a time.
     expect(maxInflight).toBe(1)
+  })
+
+  test('does not return a tab removed during asynchronous identity proof', async () => {
+    const comparison = Promise.withResolvers<boolean>()
+    const stored = makeHandle('stored.fig', async () => false)
+    const incoming = makeHandle('incoming.fig', async () => comparison.promise)
+    const tab = makeTab()
+    tab.store.setDocumentSource('stored.fig', 'pen', stored)
+    const tabs = [tab]
+    const lock = createFileOpenLock(() => tabs)
+    const operation = vi.fn(async (existing: Tab | null) => existing)
+
+    const result = lock.run(incoming, undefined, operation)
+    tabs.splice(0)
+    comparison.resolve(true)
+
+    await expect(result).resolves.toBeNull()
+    expect(operation).toHaveBeenCalledWith(null)
   })
 })

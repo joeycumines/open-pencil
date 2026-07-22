@@ -83,11 +83,6 @@ export function createDocumentIOActions(
     // Identity getters for cross-platform file-open deduplication.
     getSourceHandle: sourceState.getSourceHandle,
     getSourcePath: sourceState.getSourcePath,
-    getSourceFileName: sourceState.getSourceFileName,
-
-    // Also expose save/watch accessors so the identity layer can reuse the
-    // canonical .fig handle/path when it is the active writable source.
-    getFileHandle: sourceState.getFileHandle,
-    getFilePath: sourceState.getFilePath
+    getSourceFileName: sourceState.getSourceFileName
   }
 }

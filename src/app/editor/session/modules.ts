@@ -87,8 +87,6 @@ export function createEditorStoreModules(
     getSourceHandle: documentIO.getSourceHandle,
     getSourcePath: documentIO.getSourcePath,
     getSourceFileName: documentIO.getSourceFileName,
-    getFileHandle: documentIO.getFileHandle,
-    getFilePath: documentIO.getFilePath,
 
     ...documentExport,
     ...mobileClipboard,

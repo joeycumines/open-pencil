@@ -51,6 +51,8 @@ export function createSaveActions({
     const downloadName = getDownloadName()
     if (filePath || fileHandle) {
       await writeFile(await buildFigFile())
+      const fileName = filePath ? downloadNameFromPath(filePath) : fileHandle?.name
+      if (fileName) updateSourceIdentity(fileName, fileHandle ?? undefined, filePath ?? undefined)
     } else if (downloadName) {
       downloadBlob(new Uint8Array(await buildFigFile()), downloadName, 'application/octet-stream')
     } else {
@@ -65,11 +67,11 @@ export function createSaveActions({
       const path = await chooseTauriFigSavePath()
       if (!path) return
       const fileName = downloadNameFromPath(path)
+      await writeFile(data, { kind: 'path', path })
       setFilePath(path)
       setFileHandle(null)
       state.documentName = documentNameFromFigPath(path)
       updateSourceIdentity(fileName, undefined, path)
-      await writeFile(data)
       startWatchingFile()
       return
     }
@@ -77,11 +79,11 @@ export function createSaveActions({
     if (window.showSaveFilePicker) {
       const handle = await chooseBrowserFigSaveHandle()
       if (!handle) return
+      await writeFile(data, { kind: 'handle', handle })
       setFileHandle(handle)
       setFilePath(null)
       state.documentName = documentNameFromFigPath(handle.name)
       updateSourceIdentity(handle.name, handle, undefined)
-      await writeFile(data)
       startWatchingFile()
       return
     }
@@ -90,7 +92,6 @@ export function createSaveActions({
     if (!filename) return
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)
-    updateSourceIdentity(filename, undefined, undefined)
     downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
   }
 

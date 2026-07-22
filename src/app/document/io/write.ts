@@ -4,6 +4,10 @@ import { isTauri } from '@/app/tauri/env'
 
 type WriteDocumentState = EditorState
 
+type DocumentWriteTarget =
+  | { kind: 'path'; path: string }
+  | { kind: 'handle'; handle: FileSystemFileHandle }
+
 type DocumentWriterOptions = {
   state: WriteDocumentState
   getFilePath: () => string | null
@@ -19,10 +23,14 @@ export function createDocumentWriter({
   setSavedVersion,
   setLastWriteTime
 }: DocumentWriterOptions) {
-  return async function writeFile(data: Uint8Array) {
+  return async function writeFile(data: Uint8Array, target?: DocumentWriteTarget) {
     setLastWriteTime(Date.now())
-    const filePath = getFilePath()
-    const fileHandle = getFileHandle()
+    let filePath = getFilePath()
+    let fileHandle = getFileHandle()
+    if (target) {
+      filePath = target.kind === 'path' ? target.path : null
+      fileHandle = target.kind === 'handle' ? target.handle : null
+    }
     if (filePath && isTauri()) {
       const { writeFile: tauriWrite } = await import('@tauri-apps/plugin-fs')
       await tauriWrite(filePath, data)
