@@ -24,6 +24,7 @@ type OpenDOMFileOptions = {
 
 type DOMImportOptions = {
   beforeApply?: () => void
+  beforeCommitSource?: (documentName: string) => void
   cssText?: string
   handle?: FileSystemFileHandle
   path?: string
@@ -80,11 +81,12 @@ export function createDOMOpenActions({
     try {
       state.loading = true
       const html = await file.text()
-      await applyDOMText(html, {
+      const pageName = await applyDOMText(html, {
         beforeApply: options.beforeApply,
         cssText: options.cssText,
         documentName: documentNameFor(file)
       })
+      options.beforeCommitSource?.(pageName)
       setDocumentSource(file.name, 'html', options.handle, options.path)
     } catch (e) {
       console.error('Failed to open DOM/CSS file:', e)

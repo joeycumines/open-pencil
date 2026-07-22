@@ -26,9 +26,21 @@ let activationRevision = 0
 let latestOpenRequestRevision = 0
 
 type OpenAttempt = {
+  ownedState: OpenOwnedState
   outcome: Promise<void>
   resolve: () => void
   reject: (error: unknown) => void
+}
+
+type OpenSourceIdentity = {
+  fileName: string | null
+  handle: FileSystemFileHandle | null
+  path: string | null
+}
+
+type OpenOwnedState = {
+  documentName: string
+  sourceIdentity: OpenSourceIdentity
 }
 
 type OpenFocusTicket = {
@@ -93,7 +105,37 @@ function isPristineTab(store: EditorStore): boolean {
   )
 }
 
-function createOpenAttempt(): OpenAttempt {
+function captureSourceIdentity(store: EditorStore): OpenSourceIdentity {
+  return {
+    fileName: store.getSourceFileName(),
+    handle: store.getSourceHandle(),
+    path: store.getSourcePath()
+  }
+}
+
+function isSourceIdentityCurrent(store: EditorStore, identity: OpenSourceIdentity): boolean {
+  return (
+    store.getSourceFileName() === identity.fileName &&
+    store.getSourceHandle() === identity.handle &&
+    store.getSourcePath() === identity.path
+  )
+}
+
+function captureOpenOwnedState(store: EditorStore): OpenOwnedState {
+  return {
+    documentName: store.state.documentName,
+    sourceIdentity: captureSourceIdentity(store)
+  }
+}
+
+function isOpenOwnedStateCurrent(store: EditorStore, ownedState: OpenOwnedState): boolean {
+  return (
+    store.state.documentName === ownedState.documentName &&
+    isSourceIdentityCurrent(store, ownedState.sourceIdentity)
+  )
+}
+
+function createOpenAttempt(ownedState: OpenOwnedState): OpenAttempt {
   let resolve: () => void = () => undefined
   let reject: (error: unknown) => void = () => undefined
   const outcome = new Promise<void>((resolvePromise, rejectPromise) => {
@@ -101,7 +143,7 @@ function createOpenAttempt(): OpenAttempt {
     reject = rejectPromise
   })
   void outcome.catch(() => undefined)
-  return { outcome, resolve, reject }
+  return { ownedState, outcome, resolve, reject }
 }
 
 function getLiveTab(tab: Tab): Tab | undefined {
@@ -129,7 +171,11 @@ function captureOpenRollbackState(store: EditorStore): OpenRollbackState {
   }
 }
 
-function isOpenRollbackStateCurrent(tab: Tab, rollback: OpenRollbackState): boolean {
+function isOpenRollbackStateCurrent(
+  tab: Tab,
+  rollback: OpenRollbackState,
+  ownedState: OpenOwnedState
+): boolean {
   const live = getLiveTab(tab)
   if (!live) return false
   const store = live.store
@@ -137,16 +183,26 @@ function isOpenRollbackStateCurrent(tab: Tab, rollback: OpenRollbackState): bool
     store.graph === rollback.graph &&
     store.state.sceneVersion === rollback.sceneVersion &&
     !store.undo.canUndo &&
-    !store.undo.canRedo
+    !store.undo.canRedo &&
+    isOpenOwnedStateCurrent(store, ownedState)
   )
 }
 
-function restoreOpenOwnedStateAfterDrift(tab: Tab, rollback: OpenRollbackState) {
+function restoreOpenOwnedStateAfterDrift(
+  tab: Tab,
+  rollback: OpenRollbackState,
+  ownedState: OpenOwnedState
+) {
   const live = getLiveTab(tab)
   if (!live) return
-  live.store.clearSourceIdentity()
-  live.store.state.documentName = rollback.documentName
-  live.store.state.loading = rollback.loading
+  const store = live.store
+  if (isSourceIdentityCurrent(store, ownedState.sourceIdentity)) {
+    store.clearSourceIdentity()
+    if (store.state.documentName === ownedState.documentName) {
+      store.state.documentName = rollback.documentName
+    }
+  }
+  store.state.loading = rollback.loading
 }
 
 function restoreOpenRollbackState(tab: Tab, rollback: OpenRollbackState) {
@@ -284,7 +340,10 @@ export async function openFileInNewTab(
     if (existingTab) {
       if (canActivateForOpen(focusTicket)) switchTab(existingTab.id)
       const attempt = openAttemptsByTabId.get(existingTab.id)
-      return attempt ? { kind: 'join', outcome: attempt.outcome } : { kind: 'existing' }
+      return attempt &&
+        isSourceIdentityCurrent(existingTab.store, attempt.ownedState.sourceIdentity)
+        ? { kind: 'join', outcome: attempt.outcome }
+        : { kind: 'existing' }
     }
 
     // A delayed identity decision must not consume or supersede a newer tab
@@ -302,12 +361,12 @@ export async function openFileInNewTab(
       tab = appendTab()
     }
     const rollback = reused ? captureOpenRollbackState(tab.store) : null
-    const attempt = createOpenAttempt()
-    openAttemptsByTabId.set(tab.id, attempt)
 
     // Claim the source identity immediately so concurrent opens of the same
     // file observe a matching tab. Heavy I/O then happens after the lock.
     tab.store.updateSourceIdentity(file.name, handle, path)
+    const attempt = createOpenAttempt(captureOpenOwnedState(tab.store))
+    openAttemptsByTabId.set(tab.id, attempt)
     return { kind: 'owner', tab, reused, rollback, attempt }
   })
 
@@ -320,16 +379,31 @@ export async function openFileInNewTab(
   const { tab, reused, rollback, attempt } = decision
   const store = tab.store
   let destructiveApplyStarted = false
+  const requireOpenOwnedState = () => {
+    if (!reused || !rollback) return
+    const live = requireLiveTab(tab)
+    if (!isOpenOwnedStateCurrent(live.store, attempt.ownedState)) {
+      throw new Error('Open target changed while loading')
+    }
+  }
   const beforeDestructiveApply = () => {
     if (!reused || !rollback) return
-    if (!isOpenRollbackStateCurrent(tab, rollback)) {
+    if (!isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)) {
       throw new Error('Open target changed while loading')
     }
     destructiveApplyStarted = true
   }
   try {
     if (isDOMImportFile(file)) {
-      await store.openDOMFile(file, { beforeApply: beforeDestructiveApply, handle, path })
+      await store.openDOMFile(file, {
+        beforeApply: beforeDestructiveApply,
+        beforeCommitSource: (documentName) => {
+          attempt.ownedState.documentName = documentName
+          requireOpenOwnedState()
+        },
+        handle,
+        path
+      })
       requireLiveTab(tab)
       attempt.resolve()
       return
@@ -337,6 +411,7 @@ export async function openFileInNewTab(
 
     const documentName = file.name.replace(/\.[^.]+$/i, '')
     store.state.documentName = documentName
+    attempt.ownedState.documentName = documentName
     store.state.loading = true
     await yieldToUI()
     requireLiveTab(tab)
@@ -362,6 +437,7 @@ export async function openFileInNewTab(
     requireLiveTab(tab)
     await store.fitCurrentPageToViewport()
     requireLiveTab(tab)
+    requireOpenOwnedState()
     store.setDocumentSource(file.name, sourceFormat, handle, path)
     store.state.loading = false
     attempt.resolve()
@@ -371,10 +447,13 @@ export async function openFileInNewTab(
     // optimistic identity is removed.
     await fileOpenLock.run(handle, path, async () => {
       if (reused && rollback) {
-        if (destructiveApplyStarted || isOpenRollbackStateCurrent(tab, rollback)) {
+        if (
+          (destructiveApplyStarted && isOpenOwnedStateCurrent(store, attempt.ownedState)) ||
+          isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)
+        ) {
           restoreOpenRollbackState(tab, rollback)
         } else {
-          restoreOpenOwnedStateAfterDrift(tab, rollback)
+          restoreOpenOwnedStateAfterDrift(tab, rollback, attempt.ownedState)
         }
       } else if (getLiveTab(tab)) {
         closeTab(tab.id)

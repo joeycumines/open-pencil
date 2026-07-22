@@ -45,6 +45,36 @@ function teardownGlobals() {
   Reflect.deleteProperty(globalThis, 'cancelAnimationFrame')
 }
 
+function makeSaveHandle(name: string): FileSystemFileHandle {
+  const handle = {
+    kind: 'file',
+    name,
+    createWritable: vi.fn(async () => {
+      return {
+        write: vi.fn(async () => undefined),
+        close: vi.fn(async () => undefined)
+      } as FileSystemWritableFileStream
+    }),
+    getFile: vi.fn(async () => new File([], name, { lastModified: 0 })),
+    isSameEntry: vi.fn(async (other: FileSystemFileHandle) => other === handle)
+  } as FileSystemFileHandle
+  return handle
+}
+
+function startDelayedFigOpen(path: string) {
+  const started = Promise.withResolvers<undefined>()
+  const read = Promise.withResolvers<SceneGraph>()
+  ;(readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    started.resolve(undefined)
+    return read.promise
+  })
+  return {
+    opening: openFileInNewTab(new File([], 'incoming.fig'), undefined, path),
+    read,
+    started: started.promise
+  }
+}
+
 describe('openFileInNewTab', () => {
   beforeEach(() => {
     setupGlobals()
@@ -118,19 +148,8 @@ describe('openFileInNewTab', () => {
     const originalPage = store.graph.getPages()[0]
     if (!originalPage) throw new Error('Expected an initial page')
     const initialTabCount = tabCount()
-    const readStarted = Promise.withResolvers<undefined>()
-    const read = Promise.withResolvers<SceneGraph>()
-    ;(readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      readStarted.resolve(undefined)
-      return read.promise
-    })
-
-    const opening = openFileInNewTab(
-      new File([], 'incoming.fig'),
-      undefined,
-      '/content/incoming.fig'
-    )
-    await readStarted.promise
+    const { opening, read, started } = startDelayedFigOpen('/content/incoming.fig')
+    await started
     store.renamePage(originalPage.id, 'Concurrent work')
     read.resolve(new SceneGraph())
 
@@ -147,14 +166,48 @@ describe('openFileInNewTab', () => {
     expect(store.graph.getNode(originalPage.id)?.name).toBe('Concurrent work')
   })
 
+  test('does not overwrite a same-named Save As identity during a pending FIG read', async () => {
+    const store = getActiveStore()
+    const originalGraph = store.graph
+    const initialTabCount = tabCount()
+    const { opening, read, started } = startDelayedFigOpen('/content/incoming.fig')
+    await started
+    const savedHandle = makeSaveHandle('incoming.fig')
+    window.showSaveFilePicker = vi.fn(async () => savedHandle)
+    await store.saveFigFileAs()
+    const reopeningSaved = openFileInNewTab(new File([], 'incoming.fig'), savedHandle)
+    read.resolve(new SceneGraph())
+
+    await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    await expect(reopeningSaved).resolves.toBeUndefined()
+    expect(readFigFile).toHaveBeenCalledTimes(1)
+    expect(tabCount()).toBe(initialTabCount)
+    expect(store.graph).toBe(originalGraph)
+    expect(store.state.documentName).toBe('incoming')
+    expect(store.getSourceHandle()).toBe(savedHandle)
+    expect(store.getSourcePath()).toBeNull()
+    store.dispose()
+  })
+
+  test('preserves a Save As identity when a pending reused FIG read fails', async () => {
+    const store = getActiveStore()
+    const failure = new Error('incoming read failed')
+    const { opening, read, started } = startDelayedFigOpen('/content/incoming-failure.fig')
+    await started
+    const savedHandle = makeSaveHandle('incoming.fig')
+    window.showSaveFilePicker = vi.fn(async () => savedHandle)
+    await store.saveFigFileAs()
+    read.reject(failure)
+
+    await expect(opening).rejects.toBe(failure)
+    expect(store.state.documentName).toBe('incoming')
+    expect(store.getSourceHandle()).toBe(savedHandle)
+    expect(store.getSourcePath()).toBeNull()
+    store.dispose()
+  })
+
   test('concurrent opens of different files can overlap I/O', async () => {
-    // Verify concurrency through explicit synchronization — no timing
-    // thresholds, no Date.now(), no flakiness. The mock blocks each
-    // readFigFile call on a shared `proceed` promise and signals a
-    // `bothStarted` barrier when the second call enters. If the lock
-    // incorrectly serialized I/O (not just identity resolution), the
-    // second mock would never start before `proceed` resolves and
-    // `bothStarted` would never fire.
+    // Explicit barriers prove both reads start before either can finish.
     let startedCount = 0
     let resolveBothStarted!: () => void
     const bothStarted = new Promise<void>((resolve) => {
@@ -408,6 +461,7 @@ describe('openFileInNewTab', () => {
 
     expect(openDOMFile).toHaveBeenCalledWith(file, {
       beforeApply: expect.any(Function),
+      beforeCommitSource: expect.any(Function),
       handle: undefined,
       path: '/imports/card.html'
     })
