@@ -129,25 +129,27 @@ describe('normalizeFilePath', () => {
     }
   })
 
-  test('strips Windows extended-length prefix on local paths', () => {
+  test('preserves the Windows extended-length namespace on local paths', () => {
     const restore = overridePlatform('win32')
     try {
-      expect(normalizeFilePath('\\\\?\\C:\\Users\\joeyc\\file.fig')).toBe('C:/Users/joeyc/file.fig')
+      expect(normalizeFilePath('\\\\?\\C:\\Users\\joeyc\\file.fig')).toBe(
+        '//?/C:/Users/joeyc/file.fig'
+      )
       expect(normalizeFilePath('\\\\?\\C:\\Users\\JOEYC\\file.fig\\')).toBe(
-        'C:/Users/JOEYC/file.fig'
+        '//?/C:/Users/JOEYC/file.fig'
       )
     } finally {
       restore()
     }
   })
 
-  test('strips Windows extended-length prefix on UNC paths', () => {
+  test('preserves the Windows extended-length namespace on UNC paths', () => {
     const restore = overridePlatform('win32')
     try {
       expect(normalizeFilePath('\\\\?\\UNC\\server\\share\\file.fig')).toBe(
-        '//server/share/file.fig'
+        '//?/UNC/server/share/file.fig'
       )
-      expect(normalizeFilePath('\\\\?\\UNC\\Server\\Share\\dir\\')).toBe('//Server/Share/dir')
+      expect(normalizeFilePath('\\\\?\\UNC\\Server\\Share\\dir\\')).toBe('//?/UNC/Server/Share/dir')
     } finally {
       restore()
     }

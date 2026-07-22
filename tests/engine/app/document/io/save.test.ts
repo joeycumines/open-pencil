@@ -95,6 +95,7 @@ describe('Save As source identity', () => {
     for (const store of stores.splice(0)) store.dispose()
     Reflect.deleteProperty(globalThis, 'window')
     Reflect.deleteProperty(globalThis, 'document')
+    Reflect.deleteProperty(globalThis, 'prompt')
     vi.restoreAllMocks()
   })
 
@@ -151,6 +152,57 @@ describe('Save As source identity', () => {
     await expect(
       findExistingTab([harness.tab], undefined, '/planned/planned.fig')
     ).resolves.toBeNull()
+  })
+
+  test('does not publish a planned path when the runtime has no writable sink', async () => {
+    const harness = createHarness()
+    stores.push(harness.store)
+    harness.options.setFilePath('/planned/planned.fig')
+    harness.options.setDownloadName('planned.fig')
+
+    await createSaveActions(harness.options).saveFigFile()
+
+    expect(harness.updateSourceIdentity).not.toHaveBeenCalled()
+    expect(harness.store.getSourcePath()).toBeNull()
+    expect(harness.store.getSourceFileName()).toBeNull()
+    await expect(
+      findExistingTab([harness.tab], undefined, '/planned/planned.fig')
+    ).resolves.toBeNull()
+  })
+
+  test('replaces an old stable identity after browser fallback Save As', async () => {
+    const oldUrl = 'https://example.test/original.fig'
+    const harness = createHarness()
+    stores.push(harness.store)
+    harness.store.updateSourceIdentity('original.fig', undefined, oldUrl)
+    const anchor = {
+      href: '',
+      download: '',
+      style: { display: '' },
+      click: vi.fn()
+    }
+    Object.assign(document, {
+      createElement: vi.fn(() => anchor),
+      body: {
+        appendChild: vi.fn(),
+        removeChild: vi.fn()
+      }
+    })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:copy')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    globalThis.prompt = vi.fn(() => 'copy.fig')
+
+    await createSaveActions(harness.options).saveFigFileAs()
+
+    expect(anchor.click).toHaveBeenCalledTimes(1)
+    expect(harness.updateSourceIdentity).toHaveBeenCalledWith('copy.fig')
+    expect(harness.store.getSourceHandle()).toBeNull()
+    expect(harness.store.getSourcePath()).toBeNull()
+    expect(harness.store.getSourceFileName()).toBe('copy.fig')
+    await expect(findExistingTab([harness.tab], undefined, oldUrl)).resolves.toBeNull()
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 110)
+    })
   })
 
   test('commits an existing writable identity only after its first successful save', async () => {

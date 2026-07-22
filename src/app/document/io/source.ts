@@ -81,7 +81,9 @@ export function createDocumentSourceActions({
     state,
     getSavedVersion,
     hasWritableSource: () => !!getFileHandle() || !!getFilePath(),
-    saveCurrentDocument: async () => writeFile(await buildFigFile())
+    saveCurrentDocument: async () => {
+      await writeFile(await buildFigFile())
+    }
   })
 
   function setDocumentSource(

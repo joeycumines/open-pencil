@@ -6,7 +6,14 @@ import * as layoutMod from '@open-pencil/core/layout'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { openRemoteFileFromPath } from '@/app/shell/menu/files'
-import { createTab, getActiveStore, openFileInNewTab, tabCount } from '@/app/tabs'
+import {
+  createTab,
+  getActiveStore,
+  getTabsSnapshot,
+  openFileInNewTab,
+  switchTab,
+  tabCount
+} from '@/app/tabs'
 
 function setupGlobals() {
   globalThis.window = {
@@ -291,6 +298,73 @@ describe('openFileInNewTab', () => {
     expect(readFigFile).not.toHaveBeenCalled()
   })
 
+  test('does not activate an existing match after the active tab changes away and back', async () => {
+    const existingStore = getActiveStore()
+    const storedHandle = {
+      name: 'existing.fig',
+      isSameEntry: vi.fn(async () => false)
+    } as FileSystemFileHandle
+    existingStore.updateSourceIdentity('existing.fig', storedHandle)
+
+    const requestTab = createTab()
+    const comparisonStarted = Promise.withResolvers<undefined>()
+    const comparison = Promise.withResolvers<boolean>()
+    const incomingHandle = {
+      name: 'existing.fig',
+      isSameEntry: vi.fn(() => {
+        comparisonStarted.resolve(undefined)
+        return comparison.promise
+      })
+    } as FileSystemFileHandle
+
+    const opening = openFileInNewTab(new File([], 'existing.fig'), incomingHandle)
+    await comparisonStarted.promise
+    createTab()
+    switchTab(requestTab.id)
+    comparison.resolve(true)
+    await opening
+
+    expect(getActiveStore()).toBe(requestTab.store)
+    expect(readFigFile).not.toHaveBeenCalled()
+  })
+
+  test('does not consume a newer pristine tab after a delayed identity miss', async () => {
+    const existingStore = getActiveStore()
+    const storedHandle = {
+      name: 'stored.fig',
+      isSameEntry: vi.fn(async () => false)
+    } as FileSystemFileHandle
+    existingStore.updateSourceIdentity('stored.fig', storedHandle)
+
+    createTab()
+    const comparisonStarted = Promise.withResolvers<undefined>()
+    const comparison = Promise.withResolvers<boolean>()
+    const incomingHandle = {
+      kind: 'file',
+      name: 'incoming.fig',
+      getFile: vi.fn(async () => new File([], 'incoming.fig', { lastModified: 0 })),
+      isSameEntry: vi.fn(() => {
+        comparisonStarted.resolve(undefined)
+        return comparison.promise
+      })
+    } as FileSystemFileHandle
+
+    const opening = openFileInNewTab(new File([], 'incoming.fig'), incomingHandle)
+    await comparisonStarted.promise
+    const newerTab = createTab()
+    comparison.resolve(false)
+    await opening
+
+    expect(getActiveStore()).toBe(newerTab.store)
+    expect(newerTab.store.state.documentName).toBe('Untitled')
+    expect(newerTab.store.getSourcePath()).toBeNull()
+    expect(newerTab.store.getSourceHandle()).toBeNull()
+    const owners = getTabsSnapshot().filter((tab) => tab.store.getSourceHandle() === incomingHandle)
+    expect(owners).toHaveLength(1)
+    expect(owners[0]?.store).not.toBe(newerTab.store)
+    for (const owner of owners) owner.store.dispose()
+  })
+
   test('routes HTML files through DOM import on the claimed tab', async () => {
     const store = getActiveStore()
     const openDOMFile = vi.spyOn(store, 'openDOMFile').mockResolvedValue(undefined)
@@ -377,10 +451,13 @@ describe('openFileInNewTab', () => {
       const store = getActiveStore()
       const originalGraph = store.graph
       const originalPageId = store.state.currentPageId
+      const originalTabCount = tabCount()
       store.state.panX = 17
       store.state.panY = 23
       store.state.zoom = 1.75
-      vi.spyOn(store, 'fitCurrentPageToViewport').mockRejectedValue(new Error('fit failed'))
+      vi.spyOn(store, 'fitCurrentPageToViewport')
+        .mockRejectedValueOnce(new Error('fit failed'))
+        .mockResolvedValueOnce(undefined)
 
       await expect(
         openFileInNewTab(new File([], 'late.fig'), undefined, '/failure/late.fig')
@@ -394,6 +471,12 @@ describe('openFileInNewTab', () => {
       expect(store.getSourcePath()).toBeNull()
       expect(store.getDocumentFilePath()).toBeNull()
       expect(store.state.documentName).toBe('Untitled')
+
+      await openFileInNewTab(new File([], 'late.fig'), undefined, '/failure/late.fig')
+
+      expect(tabCount()).toBe(originalTabCount)
+      expect(getActiveStore()).toBe(store)
+      expect(store.getSourcePath()).toBe('/failure/late.fig')
     })
   })
 })

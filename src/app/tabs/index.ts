@@ -21,11 +21,19 @@ const io = new IORegistry(BUILTIN_IO_FORMATS)
 
 const fileOpenLock = createFileOpenLock(() => tabsRef.value)
 const openAttemptsByTabId = new Map<string, OpenAttempt>()
+const pristineSceneVersionByStore = new WeakMap<EditorStore, number>()
+let activationRevision = 0
+let latestOpenRequestRevision = 0
 
 type OpenAttempt = {
   outcome: Promise<void>
   resolve: () => void
   reject: (error: unknown) => void
+}
+
+type OpenFocusTicket = {
+  activationRevision: number
+  requestRevision: number
 }
 
 type OpenRollbackState = {
@@ -76,7 +84,7 @@ function isPristineTab(store: EditorStore): boolean {
   return (
     store.state.documentName === 'Untitled' &&
     !store.state.loading &&
-    store.state.sceneVersion === 0 &&
+    store.state.sceneVersion === (pristineSceneVersionByStore.get(store) ?? 0) &&
     !store.undo.canUndo &&
     !store.undo.canRedo &&
     !hasSourceIdentity(store) &&
@@ -133,6 +141,7 @@ function restoreOpenRollbackState(tab: Tab, rollback: OpenRollbackState) {
   store.state.panX = rollback.panX
   store.state.panY = rollback.panY
   store.state.zoom = rollback.zoom
+  pristineSceneVersionByStore.set(store, store.state.sceneVersion)
 }
 
 let nextTabId = 1
@@ -176,15 +185,21 @@ export function getTabsSnapshot(): Tab[] {
   return [...tabsRef.value]
 }
 
-export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
+function appendTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
   const s = store ?? createEditorStore(initialGraph)
   const tab: Tab = { id: generateTabId(), store: s }
   tabsRef.value = [...tabsRef.value, tab]
+  return tab
+}
+
+export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
+  const tab = appendTab(store, initialGraph)
   activateTab(tab)
   return tab
 }
 
 function activateTab(tab: Tab) {
+  if (activeTabId.value !== tab.id) activationRevision++
   activeTabId.value = tab.id
   setActiveEditorStore(tab.store)
   triggerRef(tabsRef)
@@ -223,28 +238,47 @@ function isDOMImportFile(file: File): boolean {
   return /\.(html?|xhtml)$/i.test(file.name)
 }
 
+function canActivateForOpen(ticket: OpenFocusTicket): boolean {
+  return (
+    ticket.activationRevision === activationRevision &&
+    ticket.requestRevision === latestOpenRequestRevision
+  )
+}
+
 export async function openFileInNewTab(
   file: File,
   handle?: FileSystemFileHandle,
   path?: string
 ): Promise<void> {
-  const activeTabAtRequest = activeTab.value
+  const focusTicket: OpenFocusTicket = {
+    activationRevision,
+    requestRevision: ++latestOpenRequestRevision
+  }
 
   // The global lock intentionally protects only identity/tab-reuse decisions,
   // not the actual disk/network I/O. This keeps duplicate tabs impossible
   // while still allowing multiple different files to load concurrently.
   const decision = await fileOpenLock.run<OpenDecision>(handle, path, async (existingTab) => {
     if (existingTab) {
-      if (activeTab.value === activeTabAtRequest) switchTab(existingTab.id)
+      if (canActivateForOpen(focusTicket)) switchTab(existingTab.id)
       const attempt = openAttemptsByTabId.get(existingTab.id)
       return attempt ? { kind: 'join', outcome: attempt.outcome } : { kind: 'existing' }
     }
 
-    // Capture the current tab only after acquiring the global open lock so
-    // that the file loads into the tab the user is currently looking at.
-    const current = activeTab.value
+    // A delayed identity decision must not consume or supersede a newer tab
+    // action. Stale opens receive an inactive owner tab instead.
+    const shouldActivate = canActivateForOpen(focusTicket)
+    const current =
+      focusTicket.activationRevision === activationRevision ? activeTab.value : undefined
     const reused = current ? isPristineTab(current.store) : false
-    const tab = reused && current ? current : createTab()
+    let tab: Tab
+    if (reused && current) {
+      tab = current
+    } else if (shouldActivate) {
+      tab = createTab()
+    } else {
+      tab = appendTab()
+    }
     const rollback = reused ? captureOpenRollbackState(tab.store) : null
     const attempt = createOpenAttempt()
     openAttemptsByTabId.set(tab.id, attempt)

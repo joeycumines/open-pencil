@@ -28,6 +28,32 @@ describe('Tauri file actions', () => {
     store.dispose()
   })
 
+  test('requires native proof before matching extended and ordinary Windows paths', async () => {
+    const originalPlatform = process.platform
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    const ordinaryPath = 'C:\\root\\hidden.\\design.fig'
+    const extendedPath = '\\\\?\\C:\\root\\hidden.\\design.fig'
+    const store = createEditorStore()
+
+    try {
+      await mockTauriIPC((cmd, args) => {
+        expect(cmd).toBe('is_same_existing_native_file')
+        expect(args).toEqual({ firstPath: extendedPath, secondPath: ordinaryPath })
+        return false
+      })
+      store.setDocumentSource('design.fig', 'fig', undefined, ordinaryPath)
+      const tab = { id: 'windows-namespace-tab', store }
+
+      await expect(findExistingTab([tab], undefined, extendedPath)).resolves.toBeNull()
+    } finally {
+      store.dispose()
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true
+      })
+    }
+  })
+
   test('chooses a design file through plugin-dialog', async () => {
     await mockTauriIPC((cmd, args) => {
       expect(cmd).toBe('plugin:dialog|open')

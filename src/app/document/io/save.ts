@@ -50,7 +50,8 @@ export function createSaveActions({
     const fileHandle = getFileHandle()
     const downloadName = getDownloadName()
     if (filePath || fileHandle) {
-      await writeFile(await buildFigFile())
+      const wrote = await writeFile(await buildFigFile())
+      if (!wrote) return
       const fileName = filePath ? downloadNameFromPath(filePath) : fileHandle?.name
       if (fileName) updateSourceIdentity(fileName, fileHandle ?? undefined, filePath ?? undefined)
     } else if (downloadName) {
@@ -93,6 +94,7 @@ export function createSaveActions({
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)
     downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
+    updateSourceIdentity(filename)
   }
 
   return { saveFigFile, saveFigFileAs, writeFile }

@@ -33,8 +33,9 @@ function normalizeURL(path: string): string | null {
  *   (UNC) prefix is preserved after slash conversion so `//server/share` is
  *   not collapsed to `/server/share`.
  * - Windows extended-length path prefixes (`\\\\?\\` and `\\\\?\\UNC\\`) are
- *   stripped before slash normalization so canonicalized paths from the OS
- *   match ordinary and File System Access API paths.
+ *   preserved as a distinct namespace. Ordinary and extended spellings can
+ *   have different segment semantics, so only the native identity oracle may
+ *   prove that they refer to the same file.
  * - On POSIX platforms, backslash is a legal filename character and is left
  *   untouched.
  * - Trailing slashes are removed on all platforms.
@@ -52,17 +53,15 @@ export function normalizeFilePath(path: string): string {
 
   if (isWindowsLike()) {
     let body = path
-    let prefixMode: 'none' | 'unc' = 'none'
+    let prefixMode: 'extended' | 'extended-unc' | 'none' | 'unc' = 'none'
 
     if (body.startsWith('\\\\?\\UNC\\')) {
       body = body.slice(8)
-      prefixMode = 'unc'
+      prefixMode = 'extended-unc'
     } else if (body.startsWith('\\\\?\\')) {
       body = body.slice(4)
-    }
-
-    const hasPlainUnc = body.startsWith('\\\\') || body.startsWith('//')
-    if (hasPlainUnc) {
+      prefixMode = 'extended'
+    } else if (body.startsWith('\\\\') || body.startsWith('//')) {
       body = body.slice(2)
       prefixMode = 'unc'
     }
@@ -70,9 +69,9 @@ export function normalizeFilePath(path: string): string {
     normalized = body.split('\\').join('/').replace(/\/+/g, '/')
     normalized = normalized.replace(/\/$/, '')
 
-    if (prefixMode === 'unc') {
-      normalized = `//${normalized}`
-    }
+    if (prefixMode === 'unc') normalized = `//${normalized}`
+    if (prefixMode === 'extended') normalized = `//?/${normalized}`
+    if (prefixMode === 'extended-unc') normalized = `//?/UNC/${normalized}`
   } else {
     normalized = path.replace(/\/+/g, '/').replace(/\/$/, '')
   }
