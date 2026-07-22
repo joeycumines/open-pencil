@@ -1,5 +1,8 @@
 import type { SceneGraph, SceneNode } from './'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from './copy'
+import type { NodeCloneMode } from './copy'
+
+export type { NodeCloneMode } from './copy'
 
 const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'width',
@@ -38,7 +41,8 @@ const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'borderRightWeight',
   'borderBottomWeight',
   'borderLeftWeight',
-  'boundVariables'
+  'boundVariables',
+  'variableModes'
 ]
 
 function setSceneProp<K extends keyof SceneNode>(
@@ -65,6 +69,8 @@ function copyProp(
   } else if (key === 'boundVariables') {
     // Shallow copy the binding map — values are variable IDs (strings), not objects
     setSceneProp(target, key, { ...source.boundVariables })
+  } else if (key === 'variableModes') {
+    setSceneProp(target, key, { ...source.variableModes })
   } else if (key === 'gridPosition') {
     // Shallow copy the grid position object — all fields are primitives
     setSceneProp(target, key, source.gridPosition ? { ...source.gridPosition } : null)
@@ -77,7 +83,8 @@ function copyProp(
 function cloneChildrenWithMapping(
   graph: SceneGraph,
   sourceParentId: string,
-  destParentId: string
+  destParentId: string,
+  mode: NodeCloneMode = 'deep'
 ): void {
   const sourceParent = graph.nodes.get(sourceParentId)
   if (!sourceParent) return
@@ -86,10 +93,10 @@ function cloneChildrenWithMapping(
     const src = graph.nodes.get(childId)
     if (!src) continue
 
-    const clone = graph.createNode(src.type, destParentId, cloneNodeProps(src, childId))
+    const clone = graph.createNode(src.type, destParentId, cloneNodeProps(src, childId, mode))
 
     if (src.childIds.length > 0) {
-      cloneChildrenWithMapping(graph, childId, clone.id)
+      cloneChildrenWithMapping(graph, childId, clone.id, mode)
     }
   }
 }
@@ -107,7 +114,11 @@ function syncChildren(
   const instChildMap = new Map<string, SceneNode>()
   for (const childId of instParent.childIds) {
     const child = graph.nodes.get(childId)
-    if (child?.componentId) instChildMap.set(child.componentId, child)
+    if (!child) continue
+    const sourceComponentId = overrides[`${child.id}:sourceComponentId`]
+    const mappedComponentId =
+      typeof sourceComponentId === 'string' ? sourceComponentId : child.componentId
+    if (mappedComponentId) instChildMap.set(mappedComponentId, child)
   }
 
   for (const compChildId of compParent.childIds) {
@@ -146,7 +157,7 @@ function syncChildren(
       copyProp(instChild, compChild, key)
     }
 
-    if (compChild.childIds.length > 0) {
+    if (compChild.childIds.length > 0 && !(`${instChild.id}:componentId` in overrides)) {
       syncChildren(graph, compChildId, instChild.id, overrides)
     }
   }
@@ -155,8 +166,12 @@ function syncChildren(
   instParent.childIds.sort((a, b) => {
     const nodeA = graph.nodes.get(a)
     const nodeB = graph.nodes.get(b)
-    const idxA = nodeA?.componentId ? compChildOrder.indexOf(nodeA.componentId) : -1
-    const idxB = nodeB?.componentId ? compChildOrder.indexOf(nodeB.componentId) : -1
+    const sourceA = nodeA ? overrides[`${nodeA.id}:sourceComponentId`] : undefined
+    const sourceB = nodeB ? overrides[`${nodeB.id}:sourceComponentId`] : undefined
+    const mappedA = typeof sourceA === 'string' ? sourceA : nodeA?.componentId
+    const mappedB = typeof sourceB === 'string' ? sourceB : nodeB?.componentId
+    const idxA = mappedA ? compChildOrder.indexOf(mappedA) : -1
+    const idxB = mappedB ? compChildOrder.indexOf(mappedB) : -1
     return idxA - idxB
   })
 }
@@ -185,12 +200,13 @@ export function createInstance(
 export function populateInstanceChildren(
   graph: SceneGraph,
   instanceId: string,
-  componentId: string
+  componentId: string,
+  mode: NodeCloneMode = 'deep'
 ): void {
   const instance = graph.nodes.get(instanceId)
   const component = graph.nodes.get(componentId)
   if (!instance || !component || instance.type !== 'INSTANCE') return
-  cloneChildrenWithMapping(graph, componentId, instanceId)
+  cloneChildrenWithMapping(graph, componentId, instanceId, mode)
 }
 
 export function swapInstanceComponent(

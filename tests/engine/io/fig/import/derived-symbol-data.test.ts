@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
+import {
+  buildDsdLayoutUpdates,
+  propagateDsdChanges,
+  type OverrideContext
+} from '@open-pencil/fig/instance-overrides'
 import { SceneGraph } from '@open-pencil/scene-graph'
-
-import type { OverrideContext } from '#core/kiwi/fig/instance-overrides'
-import { buildDsdLayoutUpdates } from '#core/kiwi/fig/instance-overrides/derived-symbol-data/layout'
-import { propagateDsdChanges } from '#core/kiwi/fig/instance-overrides/derived-symbol-data/propagate'
 
 function pageId(graph: SceneGraph): string {
   return graph.getPages()[0].id
@@ -32,6 +33,23 @@ describe('fig import derived symbol data', () => {
 
     expect(clone.figmaDerivedTextGlyphs).toEqual(source.figmaDerivedTextGlyphs)
     expect(clone.figmaDerivedLayout).toEqual(source.figmaDerivedLayout)
+  })
+
+  test('keeps the existing position when derived data only changes size', () => {
+    const graph = new SceneGraph()
+    const component = graph.createNode('COMPONENT', pageId(graph), { x: 100, y: 100 })
+    const target = graph.createNode('INSTANCE', pageId(graph), {
+      x: 8,
+      y: 8,
+      componentId: component.id
+    })
+    const ctx = { graph, blobs: [] } as OverrideContext
+
+    const { updates } = buildDsdLayoutUpdates(ctx, new Map(), { size: { x: 184, y: 36 } }, target)
+
+    expect(updates).toMatchObject({ width: 184, height: 36 })
+    expect(updates.x).toBeUndefined()
+    expect(updates.y).toBeUndefined()
   })
 
   test('routes derived text glyphs through layout patch updates', () => {

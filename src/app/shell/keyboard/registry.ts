@@ -20,6 +20,7 @@ type ShortcutDefinition = {
   id: string
   keys: string | string[]
   run: ShortcutAction
+  shouldPreventDefault?: (event: KeyboardEvent) => boolean
 }
 
 function commandShortcut(
@@ -36,8 +37,36 @@ function commandShortcuts(...commands: EditorCommandId[]): ShortcutDefinition[] 
   })
 }
 
+function opacityBindings(): ShortcutDefinition[] {
+  return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => ({
+    id: `selection-opacity-${digit}`,
+    keys: digit,
+    run: ({ keyEvent, actions }) => {
+      if (keyEvent.metaKey || keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey) return
+      actions.opacityDigit(digit)
+    },
+    shouldPreventDefault: (event) =>
+      !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+  }))
+}
+
+const EDITOR_SHORTCUT_OVERLAY_SELECTOR =
+  '[data-picker-content], [role="dialog"], [role="listbox"], [role="menu"]'
+
+function originatedInOverlay(event: KeyboardEvent) {
+  return event
+    .composedPath()
+    .some((target) => target instanceof Element && target.matches(EDITOR_SHORTCUT_OVERLAY_SELECTOR))
+}
+
+function hasOpenDismissableLayer() {
+  return document.querySelector('[data-dismissable-layer]') !== null
+}
+
 function shouldIgnoreShortcut(event: KeyboardEvent, options: KeyboardShortcutOptions) {
   return (
+    hasOpenDismissableLayer() ||
+    originatedInOverlay(event) ||
     isEditing(event) ||
     options.inputFocused.value ||
     !!options.store.state.editingTextId ||
@@ -135,7 +164,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     { id: 'delete', keys: 'Delete', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete-alt', keys: 'Alt+Delete', run: ({ actions }) => actions.smartDelete(true) },
     { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEnterText() },
-    { id: 'escape', keys: 'Escape', run: ({ actions }) => actions.escapeOrDeselect() }
+    { id: 'escape', keys: 'Escape', run: ({ actions }) => actions.escapeOrDeselect() },
+    ...opacityBindings()
   ]
 
   const bindings: KeyBindingMap = {}
@@ -143,8 +173,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
 
   for (const shortcut of shortcuts) {
     bindShortcut(bindings, shortcut.keys, (event) => {
-      event.preventDefault()
       shortcut.run(runOptions(event))
+      if (shortcut.shouldPreventDefault?.(event) ?? true) event.preventDefault()
     })
   }
 
@@ -158,7 +188,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
           handler(event)
         }
       ])
-    )
+    ),
+    { capture: true }
   )
 
   onScopeDispose(unsubscribe)

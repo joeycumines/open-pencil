@@ -1,7 +1,8 @@
+import { parsePenFile } from '@open-pencil/pen'
+
 import { sceneNodeToJSX, selectionToJSX } from '#core/design-jsx'
 
 import { exportFigFile, parseFigFile } from './formats/fig'
-import { parsePenFile } from './formats/pen'
 import { headlessRenderNodes, renderNodesToImage, type RasterExportFormat } from './formats/raster'
 import { renderNodesToSVG } from './formats/svg'
 import { extractExportGraph, findPageId } from './subgraph'
@@ -160,7 +161,7 @@ export const figFormat: IOFormatAdapter = {
   },
   async readDocument(input) {
     const data = input.data.slice().buffer
-    const graph = await parseFigFile(data)
+    const graph = await parseFigFile(data, { populate: 'first-page' })
     return { graph, sourceFormat: 'fig' }
   },
   async writeDocument(graph, options?: FigWriteOptions, context?: IOContext) {

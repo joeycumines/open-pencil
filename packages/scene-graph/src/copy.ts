@@ -16,10 +16,12 @@ import type {
   Fill,
   GeometryPath,
   GradientStop,
+  LayoutGrid,
   SceneNode,
   Stroke,
   StyleRun
 } from './'
+import { createDefaultSourceMetadata } from './node-defaults'
 import { cloneVectorNetwork } from './vector-network'
 
 // --- Individual copy functions ---
@@ -69,6 +71,20 @@ export function copyStyleRun(r: StyleRun): StyleRun {
 
 // --- Array copy functions ---
 
+const internalCopySources = new WeakMap<object, object>()
+
+/** Record immutable lineage for an internal deep copy without sharing mutable values. */
+export function markCopySource<T extends object>(source: T, copy: T): T {
+  internalCopySources.set(copy, internalCopySources.get(source) ?? source)
+  return copy
+}
+
+/** Compare internal deep copies in O(1) without traversing large paint or text payloads. */
+export function hasSameCopySource(left: object, right: object): boolean {
+  if (left === right) return true
+  return (internalCopySources.get(left) ?? left) === (internalCopySources.get(right) ?? right)
+}
+
 export function copyFills(fills: Fill[]): Fill[] {
   return fills.map(copyFill)
 }
@@ -79,6 +95,10 @@ export function copyStrokes(strokes: Stroke[]): Stroke[] {
 
 export function copyEffects(effects: Effect[]): Effect[] {
   return effects.map(copyEffect)
+}
+
+export function copyLayoutGrids(grids: LayoutGrid[]): LayoutGrid[] {
+  return grids.map((grid) => ({ ...grid, color: grid.color ? { ...grid.color } : undefined }))
 }
 
 export function copyStyleRuns(runs: StyleRun[]): StyleRun[] {
@@ -114,7 +134,8 @@ function copyPropertyDefs(
   return (
     defs?.map((d) => ({
       ...d,
-      variantOptions: d.variantOptions ? [...d.variantOptions] : undefined
+      variantOptions: d.variantOptions ? [...d.variantOptions] : undefined,
+      preferredValues: d.preferredValues ? [...d.preferredValues] : undefined
     })) ?? []
   )
 }
@@ -139,20 +160,40 @@ function copyArcData(a: ArcData): ArcData {
  * would otherwise share by reference. When adding a mutable SceneNode field,
  * add its copy behavior here or document why sharing is intentional.
  */
-export function cloneNodeProps(src: SceneNode, componentId: string | null): Partial<SceneNode> {
+export type NodeCloneMode = 'deep' | 'fig-import'
+
+export function cloneNodeProps(
+  src: SceneNode,
+  componentId: string | null,
+  mode: NodeCloneMode = 'deep'
+): Partial<SceneNode> {
   const { id: _, parentId: _p, childIds: _c, ...rest } = src
+  if (mode === 'fig-import') {
+    return {
+      ...rest,
+      ...(componentId !== null ? { componentId } : {}),
+      source: createDefaultSourceMetadata(),
+      boundVariables: { ...src.boundVariables },
+      variableModes: { ...src.variableModes },
+      overrides: Object.keys(src.overrides).length > 0 ? structuredClone(src.overrides) : {},
+      componentPropertyAssignments: { ...src.componentPropertyAssignments },
+      componentPropertyValues: { ...src.componentPropertyValues }
+    }
+  }
   return {
     ...rest,
     ...(componentId !== null ? { componentId } : {}),
     boundVariables: { ...src.boundVariables },
+    variableModes: { ...src.variableModes },
     overrides: Object.keys(src.overrides).length > 0 ? structuredClone(src.overrides) : {},
-    fills: copyOpt(src.fills, copyFills),
-    strokes: copyOpt(src.strokes, copyStrokes),
-    effects: copyOpt(src.effects, copyEffects),
-    styleRuns: copyOpt(src.styleRuns, copyStyleRuns),
-    // Source metadata preserves opaque raw Figma payloads; use structuredClone instead of
-    // hand-copying partial known shapes and accidentally sharing nested raw Figma data.
-    source: structuredClone(src.source),
+    fills: copyOpt(src.fills, (value) => markCopySource(value, copyFills(value))),
+    strokes: copyOpt(src.strokes, (value) => markCopySource(value, copyStrokes(value))),
+    effects: copyOpt(src.effects, (value) => markCopySource(value, copyEffects(value))),
+    layoutGrids: copyOpt(src.layoutGrids, copyLayoutGrids),
+    styleRuns: copyOpt(src.styleRuns, (value) => markCopySource(value, copyStyleRuns(value))),
+    // Generated instance descendants have no independent Figma provenance. Retaining the source
+    // component's opaque raw payload here duplicates megabytes of metadata per instance.
+    source: componentId === null ? structuredClone(src.source) : createDefaultSourceMetadata(),
     dashPattern: copyOpt(src.dashPattern, (a) => [...a]),
     fontVariations: copyOpt(src.fontVariations, (a) => a.map((v) => ({ ...v }))),
     fontFeatures: copyOpt(src.fontFeatures, (a) => a.map((v) => ({ ...v }))),
@@ -162,6 +203,8 @@ export function cloneNodeProps(src: SceneNode, componentId: string | null): Part
     gridTemplateColumns: copySpread(src.gridTemplateColumns),
     gridTemplateRows: copySpread(src.gridTemplateRows),
     componentPropertyDefinitions: copyPropertyDefs(src.componentPropertyDefinitions),
+    componentPropertyReferences: copySpread(src.componentPropertyReferences),
+    componentPropertyAssignments: { ...src.componentPropertyAssignments },
     symbolLinks: copySpread(src.symbolLinks),
     variantPropSpecs: copySpread(src.variantPropSpecs),
     pluginData: copySpread(src.pluginData),
@@ -172,7 +215,9 @@ export function cloneNodeProps(src: SceneNode, componentId: string | null): Part
     arcData: src.arcData ? copyArcData(src.arcData) : null,
     vectorNetwork: src.vectorNetwork ? cloneVectorNetwork(src.vectorNetwork) : null,
     textPicture: src.textPicture ? new Uint8Array(src.textPicture) : null,
-    figmaDerivedTextGlyphs: copyGlyphs(src.figmaDerivedTextGlyphs),
+    figmaDerivedTextGlyphs: src.figmaDerivedTextGlyphs
+      ? markCopySource(src.figmaDerivedTextGlyphs, copyGlyphs(src.figmaDerivedTextGlyphs) ?? [])
+      : null,
     gridPosition: src.gridPosition ? { ...src.gridPosition } : null
   }
 }

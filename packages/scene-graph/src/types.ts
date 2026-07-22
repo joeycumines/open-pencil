@@ -36,6 +36,7 @@ export interface SourceMetadata {
   format: 'fig' | null
   id: string | null
   orderKey: string | null
+  editedFields: string[]
   fig: FigmaSourcePayload
 }
 
@@ -161,7 +162,30 @@ export interface Fill {
 
 export type StrokeCap = 'NONE' | 'ROUND' | 'SQUARE' | 'ARROW_LINES' | 'ARROW_EQUILATERAL'
 export type StrokeJoin = 'MITER' | 'BEVEL' | 'ROUND'
+export type SharedStyleType = 'FILL' | 'TEXT' | 'EFFECT' | 'GRID'
+export type SharedStyleKind = 'fill' | 'stroke' | 'text' | 'effect' | 'grid'
 export type MaskType = 'ALPHA' | 'VECTOR' | 'LUMINANCE'
+
+export interface LayoutGrid {
+  visible?: boolean
+  color?: Color
+  pattern?: 'COLUMNS' | 'ROWS' | 'GRID'
+  axis?: 'X' | 'Y'
+  type?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH'
+  alignment?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH'
+  numSections?: number
+  count?: number
+  offset?: number
+  sectionSize?: number
+  gutterSize?: number
+}
+
+export interface SharedStyle {
+  id: string
+  nodeId: string
+  name: string
+  type: SharedStyleType
+}
 
 export interface Stroke {
   color: Color
@@ -221,6 +245,7 @@ export interface CharacterStyleOverride {
   fills?: Fill[]
   fontVariations?: FontVariation[]
   fontFeatures?: FontFeature[]
+  textLanguage?: string | null
 }
 
 export interface StyleRun {
@@ -340,6 +365,13 @@ export interface SceneNode {
   fills: Fill[]
   strokes: Stroke[]
   effects: Effect[]
+  layoutGrids: LayoutGrid[]
+  fillStyleId: string | null
+  strokeStyleId: string | null
+  textStyleId: string | null
+  effectStyleId: string | null
+  gridStyleId: string | null
+  sharedStyleType: SharedStyleType | null
   opacity: number
 
   cornerRadius: number
@@ -363,6 +395,7 @@ export interface SceneNode {
   italic: boolean
   textAlignHorizontal: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED'
   textDirection: TextDirection
+  textLanguage: string | null
   textAlignVertical: TextAlignVertical
   textAutoResize: TextAutoResize
   textCase: TextCase
@@ -450,6 +483,8 @@ export interface SceneNode {
   componentId: string | null
   overrides: Record<string, unknown>
   componentPropertyDefinitions: ComponentPropertyDefinition[]
+  componentPropertyReferences: ComponentPropertyReference[]
+  componentPropertyAssignments: Record<string, string>
   componentPropertyValues: Record<string, string>
   componentKey: string | null
   sourceLibraryKey: string | null
@@ -464,6 +499,7 @@ export interface SceneNode {
   variantPropSpecs: VariantPropSpec[]
 
   boundVariables: Record<string, string>
+  variableModes: VariableModeMap
   exportSettings: ExportSetting[]
 
   pluginData: PluginDataEntry[]
@@ -480,16 +516,25 @@ export interface SceneNode {
 
 export type ComponentPropertyType = 'VARIANT' | 'TEXT' | 'BOOLEAN' | 'INSTANCE_SWAP'
 
+export type ComponentPropertyReferenceField = 'VISIBLE' | 'TEXT' | 'INSTANCE_SWAP'
+
+export interface ComponentPropertyReference {
+  propertyId: string
+  field: ComponentPropertyReferenceField
+}
+
 export interface ComponentPropertyDefinition {
   id: string
   name: string
   type: ComponentPropertyType
   defaultValue: string
   variantOptions?: string[]
+  preferredValues?: string[]
 }
 
 export type VariableType = 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN'
 export type VariableValue = Color | number | string | boolean | { aliasId: string }
+export type VariableModeMap = Record<string, string>
 
 export interface Variable {
   id: string

@@ -6,6 +6,8 @@ import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { DROP_HIGHLIGHT_ALPHA, DROP_HIGHLIGHT_STROKE, SECTION_CORNER_RADIUS } from '#core/constants'
+import { transformTextCase } from '#core/text/case'
+import { fontManager } from '#core/text/fonts'
 import { vectorNetworkToCenterlinePath } from '#core/vector'
 
 import { figmaBlendModeToSkia, needsIsolatedBlendLayer } from './blend'
@@ -15,13 +17,14 @@ import { renderMaskedChildIds } from './masks'
 import type { SkiaRenderer, RenderOverlays } from './renderer'
 import { makeSmoothRRectPath, nodeHasRadius, nodeHasSmoothCorners } from './shapes'
 import {
+  configureStrokePaint,
   drawDashedRRectWithSolidCorners,
   drawStyledRRectStroke,
   getStrokeCapEntity,
   getStrokeJoinEntity
 } from './strokes'
-import { drawFigmaDerivedText } from './text-derived'
-import { textNodeToOutlinePath } from './text-outlines'
+import { drawFigmaDerivedText } from './text/derived'
+import { textNodeToOutlinePath } from './text/outlines'
 
 function drawVisibleFills(
   r: SkiaRenderer,
@@ -196,7 +199,15 @@ export function renderNode(
   parentAbsY = 0
 ): void {
   const node = graph.getNode(nodeId)
-  if (!node || !node.visible || node.isMask) return
+  if (
+    !node ||
+    node.internalOnly ||
+    !node.visible ||
+    node.isMask ||
+    fontManager.isNodeBlocked(nodeId)
+  ) {
+    return
+  }
 
   // Hide the node being edited in node-edit mode (overlay draws it live)
   if (overlays.nodeEditState?.nodeId === nodeId) return
@@ -300,9 +311,7 @@ export function renderSection(
   drawVisibleFills(r, node, graph, () => canvas.drawRRect(rrect, r.fillPaint))
 
   forVisibleStrokes(r, node, graph, (stroke, color) => {
-    r.strokePaint.setColor(r.ck.Color4f(color.r, color.g, color.b, color.a))
-    r.strokePaint.setStrokeWidth(stroke.weight)
-    r.strokePaint.setAlphaf(stroke.opacity)
+    configureStrokePaint(r, node, stroke, color)
 
     if (node.independentStrokeWeights) r.drawIndividualSideStrokes(canvas, node, stroke.align)
     else r.drawRRectStrokeWithAlign(canvas, rrect, node, stroke)
@@ -351,10 +360,14 @@ export function renderShape(
 
   if (hasEffects) {
     const cached = r.nodePictureCache.get(node.id)
-    if (cached) {
+    const cachedGeneration = r.nodePictureCacheGenerations.get(node.id)
+    if (cached && cachedGeneration === r.fontGeneration) {
       canvas.drawPicture(cached)
       return
     }
+    if (cached) cached.delete()
+    r.nodePictureCache.delete(node.id)
+    r.nodePictureCacheGenerations.delete(node.id)
 
     const margin = r.effectOverflow(node)
     const bounds = r.ck.LTRBRect(-margin, -margin, node.width + margin, node.height + margin)
@@ -364,6 +377,7 @@ export function renderShape(
     const picture = recorder.finishRecordingAsPicture()
     recorder.delete()
     r.nodePictureCache.set(node.id, picture)
+    r.nodePictureCacheGenerations.set(node.id, r.fontGeneration)
     canvas.drawPicture(picture)
   } else {
     r.renderShapeUncached(canvas, node, graph)
@@ -435,6 +449,7 @@ function drawVectorPathStrokes(
   vectorPaths: Path[],
   stroke: SceneNode['strokes'][0],
   sc: Color,
+  miterLimit: number,
   outlineCacheKey?: string
 ): void {
   const dash = stroke.dashPattern
@@ -444,6 +459,7 @@ function drawVectorPathStrokes(
     r.strokePaint.setStrokeWidth(stroke.weight)
     r.strokePaint.setStrokeCap(getStrokeCapEntity(r, stroke.cap ?? 'NONE'))
     r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join ?? 'MITER'))
+    r.strokePaint.setStrokeMiter(miterLimit)
     r.strokePaint.setShader(null)
     const effect = r.ck.PathEffect.MakeDash(dash, 0)
     r.strokePaint.setPathEffect(effect)
@@ -454,7 +470,7 @@ function drawVectorPathStrokes(
   }
   const strokeOpts = {
     width: stroke.weight,
-    miter_limit: 4,
+    miter_limit: miterLimit,
     cap: getStrokeCapEntity(r, stroke.cap ?? 'NONE'),
     join: getStrokeJoinEntity(r, stroke.join ?? 'MITER')
   }
@@ -483,16 +499,7 @@ function drawRegularStroke(
   stroke: SceneNode['strokes'][0],
   sc: Color
 ): void {
-  r.strokePaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
-  r.strokePaint.setStrokeWidth(stroke.weight)
-  r.strokePaint.setAlphaf(stroke.opacity)
-
-  if (stroke.cap) {
-    r.strokePaint.setStrokeCap(getStrokeCapEntity(r, stroke.cap))
-  }
-  if (stroke.join) {
-    r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join))
-  }
+  configureStrokePaint(r, node, stroke, sc)
   if (stroke.dashPattern && stroke.dashPattern.length > 0) {
     r.strokePaint.setPathEffect(r.ck.PathEffect.MakeDash(stroke.dashPattern, 0))
   } else {
@@ -525,13 +532,14 @@ function drawNodeStroke(
     node.type === 'VECTOR' &&
     !node.fills.some((fill) => fill.visible)
   if (shouldStrokeVectorCenterline) {
-    const outlineKey = `${node.id}|${stroke.weight}|${stroke.cap ?? 'NONE'}|${stroke.join ?? 'MITER'}`
-    drawVectorPathStrokes(r, canvas, vectorStroke, stroke, sc, outlineKey)
+    const outlineKey = `${node.id}|${stroke.weight}|${stroke.cap ?? node.strokeCap}|${stroke.join ?? node.strokeJoin}|${node.strokeMiterLimit}`
+    drawVectorPathStrokes(r, canvas, vectorStroke, stroke, sc, node.strokeMiterLimit, outlineKey)
     return
   }
   if (!sg) {
-    if (vectorPaths) drawVectorPathStrokes(r, canvas, vectorPaths, stroke, sc)
-    else drawRegularStroke(r, canvas, node, rect, hasRadius, stroke, sc)
+    if (vectorPaths) {
+      drawVectorPathStrokes(r, canvas, vectorPaths, stroke, sc, node.strokeMiterLimit)
+    } else drawRegularStroke(r, canvas, node, rect, hasRadius, stroke, sc)
     return
   }
   if (stroke.align !== 'INSIDE') {
@@ -581,7 +589,7 @@ export function renderShapeUncached(
       node.vectorNetwork
     ) {
       const centerline = vectorNetworkToCenterlinePath(r.ck, node.vectorNetwork)
-      drawVectorPathStrokes(r, canvas, [centerline], stroke, color)
+      drawVectorPathStrokes(r, canvas, [centerline], stroke, color, node.strokeMiterLimit)
       centerline.delete()
       return
     }
@@ -598,30 +606,39 @@ function shouldRenderTextAsOutline(fill?: Fill): boolean {
   return fill !== undefined && fill.type !== 'SOLID'
 }
 
-function drawOutlinedText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): boolean {
-  const path = textNodeToOutlinePath(r, node)
-  if (!path) return false
-  canvas.drawPath(path, r.fillPaint)
-  path.delete()
-  return true
+export function textVerticalOffset(node: SceneNode, contentHeight: number): number {
+  const available = Math.max(0, node.height - contentHeight)
+  if (node.textAlignVertical === 'CENTER') return available / 2
+  if (node.textAlignVertical === 'BOTTOM') return available
+  return 0
 }
 
-const CJK_TEXT_PATTERN = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]/u
-
-function shouldRenderCJKAsOutline(node: SceneNode): boolean {
-  return CJK_TEXT_PATTERN.test(node.text)
-}
-
-function drawGradientText(
+function drawOutlinedText(
   r: SkiaRenderer,
   canvas: Canvas,
   node: SceneNode,
   paragraphY: number
 ): boolean {
+  const outlineNode =
+    node.textCase === 'ORIGINAL'
+      ? node
+      : { ...node, text: transformTextCase(node.text, node.textCase), styleRuns: [] }
+  const path = textNodeToOutlinePath(r, outlineNode)
+  if (!path) return false
+  canvas.save()
+  canvas.translate(0, paragraphY)
+  canvas.drawPath(path, r.fillPaint)
+  canvas.restore()
+  path.delete()
+  return true
+}
+
+function drawGradientText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): boolean {
   if (!r.fontsLoaded || !r.fontProvider) return false
 
   const paragraph = r.buildParagraph(node, r.ck.Color4f(0, 0, 0, 1))
   try {
+    const paragraphY = textVerticalOffset(node, paragraph.getHeight())
     r.effectLayerPaint.setImageFilter(null)
     r.effectLayerPaint.setColorFilter(null)
     r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
@@ -653,42 +670,57 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
     canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, false)
   }
 
-  const paragraphY = 0
-  if (node.textPicture) {
-    const pic = r.ck.MakePicture(node.textPicture)
-    if (pic) {
-      canvas.drawPicture(pic)
-      pic.delete()
+  const fontReadiness = r.nodeFontReadiness(node)
+  if (fontReadiness !== 'ready') {
+    if (fontReadiness === 'exhausted') {
+      if (node.textPicture && r.isTextPictureCurrent(node)) {
+        const pic = r.ck.MakePicture(node.textPicture)
+        if (pic) {
+          canvas.drawPicture(pic)
+          pic.delete()
+          canvas.restore()
+          return
+        }
+      }
+      if (drawFigmaDerivedText(r, canvas, node)) {
+        canvas.restore()
+        return
+      }
+    }
+    canvas.restore()
+    return
+  }
+  if (shouldRenderTextAsOutline(fill)) {
+    let paragraphY = 0
+    if (node.textAlignVertical !== 'TOP') {
+      const paragraph = r.buildParagraph(node, r.ck.Color4f(0, 0, 0, 1))
+      paragraphY = textVerticalOffset(node, paragraph.getHeight())
+      paragraph.delete()
+    }
+    if (drawOutlinedText(r, canvas, node, paragraphY)) {
       canvas.restore()
       return
     }
   }
-  if (drawFigmaDerivedText(r, canvas, node)) {
-    canvas.restore()
-    return
-  }
-
-  if (!r.isNodeFontLoaded(node)) {
-    canvas.restore()
-    return
-  }
-  if (
-    (shouldRenderTextAsOutline(fill) || shouldRenderCJKAsOutline(node)) &&
-    drawOutlinedText(r, canvas, node)
-  ) {
-    canvas.restore()
-    return
-  }
-  if (isGradientFill(fill) && drawGradientText(r, canvas, node, paragraphY)) {
+  if (isGradientFill(fill) && drawGradientText(r, canvas, node)) {
     canvas.restore()
     return
   }
   if (r.fontsLoaded && r.fontProvider) {
     const paragraph = r.buildParagraph(node, r.fillPaint.getColor())
+    const paragraphY = textVerticalOffset(node, paragraph.getHeight())
     canvas.drawParagraph(paragraph, 0, paragraphY)
     paragraph.delete()
   } else if (r.textFont) {
-    canvas.drawText(text, 0, node.fontSize || r.DEFAULT_FONT_SIZE, r.fillPaint, r.textFont)
+    const fontSize = node.fontSize || r.DEFAULT_FONT_SIZE
+    const paragraphY = textVerticalOffset(node, fontSize)
+    canvas.drawText(
+      transformTextCase(text, node.textCase),
+      0,
+      paragraphY + fontSize,
+      r.fillPaint,
+      r.textFont
+    )
   }
 
   canvas.restore()

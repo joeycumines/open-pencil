@@ -60,7 +60,8 @@ export function getSelectedNode(page: Page) {
       fontSize: n.fontSize,
       fontFamily: n.fontFamily,
       fontWeight: n.fontWeight,
-      italic: n.italic
+      italic: n.italic,
+      textAutoResize: n.textAutoResize
     }
   })
 }
@@ -101,6 +102,10 @@ export function getNodeById(page: Page, id: string) {
       height: n.height,
       rotation: n.rotation,
       layoutMode: n.layoutMode,
+      primaryAxisSizing: n.primaryAxisSizing,
+      counterAxisSizing: n.counterAxisSizing,
+      layoutGrow: n.layoutGrow,
+      layoutAlignSelf: n.layoutAlignSelf,
       primaryAxisAlign: n.primaryAxisAlign,
       counterAxisAlign: n.counterAxisAlign,
       itemSpacing: n.itemSpacing,
