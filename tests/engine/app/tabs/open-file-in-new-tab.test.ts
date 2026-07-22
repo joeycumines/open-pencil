@@ -15,51 +15,7 @@ import {
   tabCount
 } from '@/app/tabs'
 
-function setupGlobals() {
-  globalThis.window = {
-    innerWidth: 1024,
-    innerHeight: 768,
-    requestAnimationFrame: (cb: FrameRequestCallback) => {
-      cb(0)
-      return 0
-    },
-    cancelAnimationFrame: vi.fn(),
-    openPencil: {},
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    location: { href: 'http://127.0.0.1:41731/' } as Location
-  } as Window & typeof globalThis
-
-  globalThis.document = {
-    fonts: { add: vi.fn(), ready: Promise.resolve() }
-  } as Document
-
-  globalThis.requestAnimationFrame = globalThis.window.requestAnimationFrame
-  globalThis.cancelAnimationFrame = globalThis.window.cancelAnimationFrame
-}
-
-function teardownGlobals() {
-  Reflect.deleteProperty(globalThis, 'window')
-  Reflect.deleteProperty(globalThis, 'document')
-  Reflect.deleteProperty(globalThis, 'requestAnimationFrame')
-  Reflect.deleteProperty(globalThis, 'cancelAnimationFrame')
-}
-
-function makeSaveHandle(name: string): FileSystemFileHandle {
-  const handle = {
-    kind: 'file',
-    name,
-    createWritable: vi.fn(async () => {
-      return {
-        write: vi.fn(async () => undefined),
-        close: vi.fn(async () => undefined)
-      } as FileSystemWritableFileStream
-    }),
-    getFile: vi.fn(async () => new File([], name, { lastModified: 0 })),
-    isSameEntry: vi.fn(async (other: FileSystemFileHandle) => other === handle)
-  } as FileSystemFileHandle
-  return handle
-}
+import { makeSaveHandle, setupTabsTestGlobals, teardownTabsTestGlobals } from './helpers'
 
 function startDelayedFigOpen(path: string) {
   const started = Promise.withResolvers<undefined>()
@@ -77,7 +33,7 @@ function startDelayedFigOpen(path: string) {
 
 describe('openFileInNewTab', () => {
   beforeEach(() => {
-    setupGlobals()
+    setupTabsTestGlobals()
     vi.clearAllMocks()
     vi.spyOn(layoutMod, 'computeAllLayouts').mockReturnValue(undefined)
     vi.spyOn(figMod, 'readFigFile').mockResolvedValue(new SceneGraph())
@@ -85,7 +41,7 @@ describe('openFileInNewTab', () => {
   })
 
   afterEach(() => {
-    teardownGlobals()
+    teardownTabsTestGlobals()
     vi.restoreAllMocks()
   })
 
@@ -462,6 +418,7 @@ describe('openFileInNewTab', () => {
     expect(openDOMFile).toHaveBeenCalledWith(file, {
       beforeApply: expect.any(Function),
       beforeCommitSource: expect.any(Function),
+      beforeSetDocumentName: expect.any(Function),
       handle: undefined,
       path: '/imports/card.html'
     })

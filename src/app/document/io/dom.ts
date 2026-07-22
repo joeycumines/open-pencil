@@ -24,7 +24,8 @@ type OpenDOMFileOptions = {
 
 type DOMImportOptions = {
   beforeApply?: () => void
-  beforeCommitSource?: (documentName: string) => void
+  beforeCommitSource?: () => void
+  beforeSetDocumentName?: () => void
   cssText?: string
   handle?: FileSystemFileHandle
   path?: string
@@ -37,6 +38,7 @@ type DOMTextImportOptions = {
 
 type ApplyDOMTextOptions = DOMTextImportOptions & {
   beforeApply?: () => void
+  beforeSetDocumentName?: () => void
 }
 
 function documentNameFor(file: File): string {
@@ -56,6 +58,7 @@ export function createDOMOpenActions({
     await yieldToUI()
     options.beforeApply?.()
     await applyImportedDocument(editor, graph)
+    options.beforeSetDocumentName?.()
     state.documentName = pageName
     await fitCurrentPageToViewport()
     editor.requestRender()
@@ -81,12 +84,13 @@ export function createDOMOpenActions({
     try {
       state.loading = true
       const html = await file.text()
-      const pageName = await applyDOMText(html, {
+      await applyDOMText(html, {
         beforeApply: options.beforeApply,
+        beforeSetDocumentName: options.beforeSetDocumentName,
         cssText: options.cssText,
         documentName: documentNameFor(file)
       })
-      options.beforeCommitSource?.(pageName)
+      options.beforeCommitSource?.()
       setDocumentSource(file.name, 'html', options.handle, options.path)
     } catch (e) {
       console.error('Failed to open DOM/CSS file:', e)

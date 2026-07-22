@@ -365,6 +365,7 @@ export async function openFileInNewTab(
     // Claim the source identity immediately so concurrent opens of the same
     // file observe a matching tab. Heavy I/O then happens after the lock.
     tab.store.updateSourceIdentity(file.name, handle, path)
+    tab.store.state.documentName = file.name.replace(/\.[^.]+$/i, '')
     const attempt = createOpenAttempt(captureOpenOwnedState(tab.store))
     openAttemptsByTabId.set(tab.id, attempt)
     return { kind: 'owner', tab, reused, rollback, attempt }
@@ -380,13 +381,13 @@ export async function openFileInNewTab(
   const store = tab.store
   let destructiveApplyStarted = false
   const requireOpenOwnedState = () => {
-    if (!reused || !rollback) return
     const live = requireLiveTab(tab)
     if (!isOpenOwnedStateCurrent(live.store, attempt.ownedState)) {
       throw new Error('Open target changed while loading')
     }
   }
   const beforeDestructiveApply = () => {
+    requireOpenOwnedState()
     if (!reused || !rollback) return
     if (!isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)) {
       throw new Error('Open target changed while loading')
@@ -397,10 +398,8 @@ export async function openFileInNewTab(
     if (isDOMImportFile(file)) {
       await store.openDOMFile(file, {
         beforeApply: beforeDestructiveApply,
-        beforeCommitSource: (documentName) => {
-          attempt.ownedState.documentName = documentName
-          requireOpenOwnedState()
-        },
+        beforeCommitSource: requireOpenOwnedState,
+        beforeSetDocumentName: requireOpenOwnedState,
         handle,
         path
       })
@@ -409,9 +408,6 @@ export async function openFileInNewTab(
       return
     }
 
-    const documentName = file.name.replace(/\.[^.]+$/i, '')
-    store.state.documentName = documentName
-    attempt.ownedState.documentName = documentName
     store.state.loading = true
     await yieldToUI()
     requireLiveTab(tab)
@@ -455,8 +451,17 @@ export async function openFileInNewTab(
         } else {
           restoreOpenOwnedStateAfterDrift(tab, rollback, attempt.ownedState)
         }
-      } else if (getLiveTab(tab)) {
-        closeTab(tab.id)
+      } else {
+        const live = getLiveTab(tab)
+        if (!live) return
+        if (isOpenOwnedStateCurrent(live.store, attempt.ownedState)) {
+          closeTab(tab.id)
+        } else {
+          if (isSourceIdentityCurrent(live.store, attempt.ownedState.sourceIdentity)) {
+            live.store.clearSourceIdentity()
+          }
+          live.store.state.loading = false
+        }
       }
     })
     attempt.reject(error)
