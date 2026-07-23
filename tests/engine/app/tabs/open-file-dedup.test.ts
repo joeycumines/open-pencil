@@ -391,4 +391,56 @@ describe('createFileOpenLock', () => {
     await expect(result).resolves.toBe(tab)
     expect(operation).toHaveBeenCalledWith(tab)
   })
+
+  test('rescans when a validated miss becomes a match before the locked decision', async () => {
+    const stored = makeHandle('stored.fig', async () => false)
+    const incoming = makeHandle('incoming.fig', async () => false)
+    const tab = makeTab()
+    tab.store.setDocumentSource('stored.fig', 'pen', stored)
+    const tabs = [tab]
+    const lock = createFileOpenLock(() => tabs)
+    const operation = vi.fn(async (existing: Tab | null) => existing)
+    const finalRevisionRead = Promise.withResolvers<undefined>()
+    const getRevision = tab.store.getSourceIdentityRevision.bind(tab.store)
+    let revisionReads = 0
+    vi.spyOn(tab.store, 'getSourceIdentityRevision').mockImplementation(() => {
+      const revision = getRevision()
+      revisionReads++
+      if (revisionReads === 2) finalRevisionRead.resolve(undefined)
+      return revision
+    })
+
+    const result = lock.run(incoming, undefined, operation)
+    await finalRevisionRead.promise
+    tab.store.updateSourceIdentity('incoming.fig', incoming)
+
+    await expect(result).resolves.toBe(tab)
+    expect(operation).toHaveBeenCalledWith(tab)
+  })
+
+  test('rescans when a validated match changes before the locked decision', async () => {
+    const incoming = makeHandle('incoming.fig', async (other) => other === incoming)
+    const replacement = makeHandle('replacement.fig', async () => false)
+    const tab = makeTab()
+    tab.store.setDocumentSource('incoming.fig', 'pen', incoming)
+    const tabs = [tab]
+    const lock = createFileOpenLock(() => tabs)
+    const operation = vi.fn(async (existing: Tab | null) => existing)
+    const finalRevisionRead = Promise.withResolvers<undefined>()
+    const getRevision = tab.store.getSourceIdentityRevision.bind(tab.store)
+    let revisionReads = 0
+    vi.spyOn(tab.store, 'getSourceIdentityRevision').mockImplementation(() => {
+      const revision = getRevision()
+      revisionReads++
+      if (revisionReads === 2) finalRevisionRead.resolve(undefined)
+      return revision
+    })
+
+    const result = lock.run(incoming, undefined, operation)
+    await finalRevisionRead.promise
+    tab.store.updateSourceIdentity('replacement.fig', replacement)
+
+    await expect(result).resolves.toBeNull()
+    expect(operation).toHaveBeenCalledWith(null)
+  })
 })

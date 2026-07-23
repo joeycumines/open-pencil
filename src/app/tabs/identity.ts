@@ -148,7 +148,7 @@ async function findLiveExistingTab(
   getTabs: () => readonly Tab[],
   handle: FileSystemFileHandle | undefined,
   path: string | undefined
-): Promise<Tab | null> {
+): Promise<{ existingTab: Tab | null; isCurrent: () => boolean }> {
   for (;;) {
     const snapshot = getTabs().map((tab) => ({
       handle: tab.store.getSourceHandle(),
@@ -156,6 +156,22 @@ async function findLiveExistingTab(
       revision: tab.store.getSourceIdentityRevision(),
       tab
     }))
+    const snapshotIsCurrent = () => {
+      const liveTabs = getTabs()
+      return (
+        liveTabs.length === snapshot.length &&
+        snapshot.every((candidate) => {
+          const live = liveTabs.find(
+            (tab) => tab.id === candidate.tab.id && tab.store === candidate.tab.store
+          )
+          return (
+            live?.store.getSourceIdentityRevision() === candidate.revision &&
+            live.store.getSourceHandle() === candidate.handle &&
+            live.store.getSourcePath() === candidate.path
+          )
+        })
+      )
+    }
 
     for (const candidate of snapshot) {
       if (!(await identitiesMatch(handle, path, candidate.handle, candidate.path))) continue
@@ -169,25 +185,12 @@ async function findLiveExistingTab(
         live.store.getSourceHandle() === candidate.handle &&
         live.store.getSourcePath() === candidate.path
       ) {
-        return live
+        return { existingTab: live, isCurrent: snapshotIsCurrent }
       }
       break
     }
 
-    const liveTabs = getTabs()
-    const snapshotIsCurrent =
-      liveTabs.length === snapshot.length &&
-      snapshot.every((candidate) => {
-        const live = liveTabs.find(
-          (tab) => tab.id === candidate.tab.id && tab.store === candidate.tab.store
-        )
-        return (
-          live?.store.getSourceIdentityRevision() === candidate.revision &&
-          live.store.getSourceHandle() === candidate.handle &&
-          live.store.getSourcePath() === candidate.path
-        )
-      })
-    if (snapshotIsCurrent) return null
+    if (snapshotIsCurrent()) return { existingTab: null, isCurrent: snapshotIsCurrent }
   }
 }
 
@@ -236,8 +239,10 @@ export function createFileOpenLock(getTabs: () => readonly Tab[]) {
         if (previous) {
           await previous.done
         }
-        const existingTab = await findLiveExistingTab(getTabs, handle, path)
-        return operation(existingTab)
+        for (;;) {
+          const decision = await findLiveExistingTab(getTabs, handle, path)
+          if (decision.isCurrent()) return operation(decision.existingTab)
+        }
       }
 
       return execute().finally(() => {
