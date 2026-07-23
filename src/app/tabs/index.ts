@@ -39,6 +39,7 @@ type OpenSourceIdentity = {
 }
 
 type OpenOwnedState = {
+  documentFilePath: string | null
   documentName: string
   sourceIdentity: OpenSourceIdentity
   sourceIdentityRevision: number
@@ -132,6 +133,7 @@ function isSourceIdentityCurrent(store: EditorStore, identity: OpenSourceIdentit
 
 function captureOpenOwnedState(store: EditorStore): OpenOwnedState {
   return {
+    documentFilePath: store.getDocumentFilePath(),
     documentName: store.state.documentName,
     sourceIdentity: captureSourceIdentity(store),
     sourceIdentityRevision: store.getSourceIdentityRevision()
@@ -140,6 +142,7 @@ function captureOpenOwnedState(store: EditorStore): OpenOwnedState {
 
 function isOpenOwnedStateCurrent(store: EditorStore, ownedState: OpenOwnedState): boolean {
   return (
+    store.getDocumentFilePath() === ownedState.documentFilePath &&
     store.state.documentName === ownedState.documentName &&
     store.getSourceIdentityRevision() === ownedState.sourceIdentityRevision &&
     isSourceIdentityCurrent(store, ownedState.sourceIdentity)
@@ -226,7 +229,10 @@ function restoreOpenOwnedStateAfterDrift(
     isSourceIdentityCurrent(store, ownedState.sourceIdentity)
   ) {
     store.clearSourceIdentity()
-    if (store.state.documentName === ownedState.documentName) {
+    if (
+      store.getDocumentFilePath() === ownedState.documentFilePath &&
+      store.state.documentName === ownedState.documentName
+    ) {
       store.state.documentName = rollback.documentName
     }
   }

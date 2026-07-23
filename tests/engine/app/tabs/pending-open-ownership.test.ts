@@ -43,6 +43,32 @@ describe('pending open ownership', () => {
     vi.restoreAllMocks()
   })
 
+  test('preserves a planned writable target acquired during a pending reused open', async () => {
+    const store = getActiveStore()
+    const originalGraph = store.graph
+    const started = Promise.withResolvers<undefined>()
+    const read = Promise.withResolvers<SceneGraph>()
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      started.resolve(undefined)
+      return read.promise
+    })
+
+    const opening = openFileInNewTab(
+      new File([], 'incoming.fig'),
+      undefined,
+      '/content/incoming.fig'
+    )
+    await started.promise
+    store.setPlannedFilePath('/planned/incoming.fig')
+    read.resolve(new SceneGraph())
+
+    await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    expect(store.graph).toBe(originalGraph)
+    expect(store.getDocumentFilePath()).toBe('/planned/incoming.fig')
+    expect(store.getSourcePath()).toBeNull()
+    expect(store.state.documentName).toBe('incoming')
+  })
+
   test('does not overwrite Save As identity on a fresh owner when its FIG read succeeds', async () => {
     const initialTabCount = tabCount()
     const { opening, read, started } = startFreshDelayedFigOpen()
