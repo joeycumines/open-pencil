@@ -26,6 +26,7 @@ let activationRevision = 0
 let latestOpenRequestRevision = 0
 
 type OpenAttempt = {
+  mutableState: OpenMutableState
   ownedState: OpenOwnedState
   outcome: Promise<void>
   resolve: () => void
@@ -155,7 +156,10 @@ function isOpenOwnedStateCurrent(store: EditorStore, ownedState: OpenOwnedState)
   )
 }
 
-function createOpenAttempt(ownedState: OpenOwnedState): OpenAttempt {
+function createOpenAttempt(
+  ownedState: OpenOwnedState,
+  mutableState: OpenMutableState
+): OpenAttempt {
   let resolve: () => void = () => undefined
   let reject: (error: unknown) => void = () => undefined
   const outcome = new Promise<void>((resolvePromise, rejectPromise) => {
@@ -163,7 +167,7 @@ function createOpenAttempt(ownedState: OpenOwnedState): OpenAttempt {
     reject = rejectPromise
   })
   void outcome.catch(() => undefined)
-  return { ownedState, outcome, resolve, reject }
+  return { mutableState, ownedState, outcome, resolve, reject }
 }
 
 function getLiveTab(tab: Tab): Tab | undefined {
@@ -383,7 +387,8 @@ export async function openFileInNewTab(
       if (attempt && isOpenSourceIdentityCurrent(existingTab.store, attempt.ownedState)) {
         if (
           canActivateForOpen(focusTicket) &&
-          isOpenOwnedStateCurrent(existingTab.store, attempt.ownedState)
+          isOpenOwnedStateCurrent(existingTab.store, attempt.ownedState) &&
+          isOpenMutableStateCurrent(existingTab.store, attempt.mutableState)
         ) {
           switchTab(existingTab.id)
         }
@@ -413,7 +418,7 @@ export async function openFileInNewTab(
     // file observe a matching tab. Heavy I/O then happens after the lock.
     tab.store.updateSourceIdentity(file.name, handle, path)
     tab.store.state.documentName = file.name.replace(/\.[^.]+$/i, '')
-    const attempt = createOpenAttempt(captureOpenOwnedState(tab.store))
+    const attempt = createOpenAttempt(captureOpenOwnedState(tab.store), rollback)
     openAttemptsByTabId.set(tab.id, attempt)
     return { kind: 'owner', tab, reused, rollback, attempt }
   })
@@ -444,7 +449,9 @@ export async function openFileInNewTab(
   }
   const captureInstalledState = () => {
     requireOpenOwnedState()
-    installedState = captureOpenMutableState(requireLiveTab(tab).store)
+    const state = captureOpenMutableState(requireLiveTab(tab).store)
+    installedState = state
+    attempt.mutableState = state
   }
   const requireInstalledState = () => {
     requireOpenOwnedState()
@@ -456,7 +463,9 @@ export async function openFileInNewTab(
   const captureAppliedState = () => {
     requireOpenOwnedState()
     const live = requireLiveTab(tab)
-    appliedState = captureOpenMutableState(live.store)
+    const state = captureOpenMutableState(live.store)
+    appliedState = state
+    attempt.mutableState = state
   }
   const requireAppliedState = () => {
     requireOpenOwnedState()

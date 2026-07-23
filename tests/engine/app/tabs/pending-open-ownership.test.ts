@@ -80,6 +80,53 @@ describe('pending open ownership', () => {
     expect(store.state.documentName).toBe('incoming')
   })
 
+  test('does not reactivate a reused owner after mutable drift', async () => {
+    const owner = getActiveStore()
+    const page = owner.graph.getPages()[0]
+    if (!page) throw new Error('Expected a reused owner page')
+    const started = Promise.withResolvers<undefined>()
+    const read = Promise.withResolvers<SceneGraph>()
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      started.resolve(undefined)
+      return read.promise
+    })
+
+    const opening = openFileInNewTab(
+      new File([], 'incoming.fig'),
+      undefined,
+      '/content/incoming.fig'
+    )
+    await started.promise
+    owner.renamePage(page.id, 'Concurrent owner work')
+    const newerStore = createTab().store
+    const duplicateJoinChecked = Promise.withResolvers<undefined>()
+    const getSourcePath = owner.getSourcePath.bind(owner)
+    let sourcePathReads = 0
+    vi.spyOn(owner, 'getSourcePath').mockImplementation(() => {
+      sourcePathReads++
+      if (sourcePathReads === 4) duplicateJoinChecked.resolve(undefined)
+      return getSourcePath()
+    })
+    const duplicateOutcome = openFileInNewTab(
+      new File([], 'incoming.fig'),
+      undefined,
+      '/content/incoming.fig'
+    ).then(
+      () => undefined,
+      (error: unknown) => error
+    )
+    await duplicateJoinChecked.promise
+    read.resolve(new SceneGraph())
+
+    await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    expect(await duplicateOutcome).toEqual(new Error('Open target changed while loading'))
+    expect(owner.graph.getNode(page.id)?.name).toBe('Concurrent owner work')
+    expect(owner.getSourcePath()).toBeNull()
+    expect(owner.getSourceFileName()).toBeNull()
+    expect(owner.state.documentName).toBe('Untitled')
+    expect(getActiveStore()).toBe(newerStore)
+  })
+
   test('does not overwrite Save As identity on a fresh owner when its FIG read succeeds', async () => {
     const initialTabCount = tabCount()
     const { opening, read, started } = startFreshDelayedFigOpen()
