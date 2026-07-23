@@ -60,9 +60,20 @@ describe('pending open ownership', () => {
     )
     await started.promise
     store.setPlannedFilePath('/planned/incoming.fig')
+    const newerStore = createTab().store
+    const duplicateOutcome = openFileInNewTab(
+      new File([], 'incoming.fig'),
+      undefined,
+      '/content/incoming.fig'
+    ).then(
+      () => undefined,
+      (error: unknown) => error
+    )
     read.resolve(new SceneGraph())
 
     await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    expect(getActiveStore()).toBe(newerStore)
+    expect(await duplicateOutcome).toEqual(new Error('Open target changed while loading'))
     expect(store.graph).toBe(originalGraph)
     expect(store.getDocumentFilePath()).toBe('/planned/incoming.fig')
     expect(store.getSourcePath()).toBeNull()

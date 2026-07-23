@@ -131,6 +131,13 @@ function isSourceIdentityCurrent(store: EditorStore, identity: OpenSourceIdentit
   )
 }
 
+function isOpenSourceIdentityCurrent(store: EditorStore, ownedState: OpenOwnedState): boolean {
+  return (
+    store.getSourceIdentityRevision() === ownedState.sourceIdentityRevision &&
+    isSourceIdentityCurrent(store, ownedState.sourceIdentity)
+  )
+}
+
 function captureOpenOwnedState(store: EditorStore): OpenOwnedState {
   return {
     documentFilePath: store.getDocumentFilePath(),
@@ -144,8 +151,7 @@ function isOpenOwnedStateCurrent(store: EditorStore, ownedState: OpenOwnedState)
   return (
     store.getDocumentFilePath() === ownedState.documentFilePath &&
     store.state.documentName === ownedState.documentName &&
-    store.getSourceIdentityRevision() === ownedState.sourceIdentityRevision &&
-    isSourceIdentityCurrent(store, ownedState.sourceIdentity)
+    isOpenSourceIdentityCurrent(store, ownedState)
   )
 }
 
@@ -224,10 +230,7 @@ function restoreOpenOwnedStateAfterDrift(
   const live = getLiveTab(tab)
   if (!live) return
   const store = live.store
-  if (
-    store.getSourceIdentityRevision() === ownedState.sourceIdentityRevision &&
-    isSourceIdentityCurrent(store, ownedState.sourceIdentity)
-  ) {
+  if (isOpenSourceIdentityCurrent(store, ownedState)) {
     store.clearSourceIdentity()
     if (
       store.getDocumentFilePath() === ownedState.documentFilePath &&
@@ -376,11 +379,18 @@ export async function openFileInNewTab(
   // while still allowing multiple different files to load concurrently.
   const decision = await fileOpenLock.run<OpenDecision>(handle, path, async (existingTab) => {
     if (existingTab) {
-      if (canActivateForOpen(focusTicket)) switchTab(existingTab.id)
       const attempt = openAttemptsByTabId.get(existingTab.id)
-      return attempt && isOpenOwnedStateCurrent(existingTab.store, attempt.ownedState)
-        ? { kind: 'join', outcome: attempt.outcome }
-        : { kind: 'existing' }
+      if (attempt && isOpenSourceIdentityCurrent(existingTab.store, attempt.ownedState)) {
+        if (
+          canActivateForOpen(focusTicket) &&
+          isOpenOwnedStateCurrent(existingTab.store, attempt.ownedState)
+        ) {
+          switchTab(existingTab.id)
+        }
+        return { kind: 'join', outcome: attempt.outcome }
+      }
+      if (canActivateForOpen(focusTicket)) switchTab(existingTab.id)
+      return { kind: 'existing' }
     }
 
     // A delayed identity decision must not consume or supersede a newer tab
