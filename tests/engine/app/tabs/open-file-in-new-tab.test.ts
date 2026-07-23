@@ -63,6 +63,28 @@ describe('openFileInNewTab', () => {
     expect(originalStore.getSourcePath()).toBeNull()
   })
 
+  test('does not reuse a tab with a planned writable target', async () => {
+    const originalStore = getActiveStore()
+    const originalGraph = originalStore.graph
+    const initialTabCount = tabCount()
+    originalStore.setPlannedFilePath('/tmp/Untitled.fig')
+
+    expect(originalStore.state.documentName).toBe('Untitled')
+    expect(originalStore.getSourcePath()).toBeNull()
+    expect(originalStore.getDocumentFilePath()).toBe('/tmp/Untitled.fig')
+
+    await openFileInNewTab(
+      new File([], 'planned-target-other.fig'),
+      undefined,
+      '/content/planned-target-other.fig'
+    )
+
+    expect(tabCount()).toBe(initialTabCount + 1)
+    expect(originalStore.graph).toBe(originalGraph)
+    expect(originalStore.getDocumentFilePath()).toBe('/tmp/Untitled.fig')
+    expect(originalStore.getSourcePath()).toBeNull()
+  })
+
   test('does not reuse an undo-empty tab whose graph contains user content', async () => {
     const originalStore = getActiveStore()
     const pageId = originalStore.graph.getPages()[0]?.id

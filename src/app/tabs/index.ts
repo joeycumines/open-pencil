@@ -109,6 +109,7 @@ function isPristineTab(store: EditorStore): boolean {
     !store.undo.canUndo &&
     !store.undo.canRedo &&
     !hasSourceIdentity(store) &&
+    !store.getDocumentFilePath() &&
     !hasDocumentContent(store)
   )
 }
