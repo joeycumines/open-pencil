@@ -52,11 +52,12 @@ export async function handleOpenFile(_target: AutomationTarget, args: unknown): 
   if (isTauri()) {
     await openFileFromPath(path)
   } else {
-    const response = await fetch(path)
+    const resourceUrl = new URL(path, window.location.href)
+    const response = await fetch(resourceUrl)
     if (!response.ok) throw new Error(`Failed to fetch file: ${response.statusText}`)
     const name = path.split(/[\\/]/).pop() ?? 'file.fig'
     const file = new File([await response.blob()], name)
-    await openFileInNewTab(file, undefined, path)
+    await openFileInNewTab(file, undefined, resourceUrl.href)
   }
   const target = resolveAutomationTarget(getActiveStore(), undefined)
   return responseWithTarget({ ok: true, result: { opened: true } }, target)

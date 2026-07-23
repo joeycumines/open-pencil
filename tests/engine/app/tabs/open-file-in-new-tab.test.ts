@@ -5,6 +5,8 @@ import * as figMod from '@open-pencil/core/io/formats/fig'
 import * as layoutMod from '@open-pencil/core/layout'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
+import { handleOpenFile } from '@/app/automation/bridge/file-handlers'
+import { resolveAutomationTarget } from '@/app/automation/bridge/target'
 import { openRemoteFileFromPath } from '@/app/shell/menu/files'
 import {
   createTab,
@@ -278,6 +280,33 @@ describe('openFileInNewTab', () => {
         'http://127.0.0.1:41731/tests/fixtures/gold-preview.fig?copy=1'
       )
       expect(getActiveStore().getSourceFileName()).toBe('gold-preview.fig')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('deduplicates browser automation paths against canonical browser opens', async () => {
+    const originalFetch = globalThis.fetch
+    const initialTabCount = tabCount()
+    const path = '/tests/fixtures/browser-automation-identity.fig'
+    const canonicalPath = 'http://127.0.0.1:41731/tests/fixtures/browser-automation-identity.fig'
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input), window.location.href)
+      return {
+        ok: true,
+        statusText: '',
+        url: url.href,
+        blob: async () => new Blob([])
+      } as Response
+    })
+
+    try {
+      await openRemoteFileFromPath(path)
+      await handleOpenFile(resolveAutomationTarget(getActiveStore(), undefined), { path })
+
+      expect(readFigFile).toHaveBeenCalledTimes(1)
+      expect(tabCount()).toBe(initialTabCount)
+      expect(getActiveStore().getSourcePath()).toBe(canonicalPath)
     } finally {
       globalThis.fetch = originalFetch
     }
