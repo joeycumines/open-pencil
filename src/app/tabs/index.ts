@@ -41,6 +41,7 @@ type OpenSourceIdentity = {
 type OpenOwnedState = {
   documentName: string
   sourceIdentity: OpenSourceIdentity
+  sourceIdentityRevision: number
 }
 
 type OpenFocusTicket = {
@@ -48,8 +49,14 @@ type OpenFocusTicket = {
   requestRevision: number
 }
 
-type OpenRollbackState = {
+type OpenMutableState = {
   graph: SceneGraph
+  sceneVersion: number
+  undo: boolean
+  redo: boolean
+}
+
+type OpenRollbackState = OpenMutableState & {
   currentPageId: string
   enteredContainerId: string | null
   documentName: string
@@ -57,7 +64,6 @@ type OpenRollbackState = {
   pageColor: EditorStore['state']['pageColor']
   panX: number
   panY: number
-  sceneVersion: number
   zoom: number
 }
 
@@ -68,7 +74,7 @@ type OpenDecision =
       kind: 'owner'
       tab: Tab
       reused: boolean
-      rollback: OpenRollbackState | null
+      rollback: OpenRollbackState
       attempt: OpenAttempt
     }
 
@@ -124,13 +130,15 @@ function isSourceIdentityCurrent(store: EditorStore, identity: OpenSourceIdentit
 function captureOpenOwnedState(store: EditorStore): OpenOwnedState {
   return {
     documentName: store.state.documentName,
-    sourceIdentity: captureSourceIdentity(store)
+    sourceIdentity: captureSourceIdentity(store),
+    sourceIdentityRevision: store.getSourceIdentityRevision()
   }
 }
 
 function isOpenOwnedStateCurrent(store: EditorStore, ownedState: OpenOwnedState): boolean {
   return (
     store.state.documentName === ownedState.documentName &&
+    store.getSourceIdentityRevision() === ownedState.sourceIdentityRevision &&
     isSourceIdentityCurrent(store, ownedState.sourceIdentity)
   )
 }
@@ -159,6 +167,9 @@ function requireLiveTab(tab: Tab): Tab {
 function captureOpenRollbackState(store: EditorStore): OpenRollbackState {
   return {
     graph: store.graph,
+    sceneVersion: store.state.sceneVersion,
+    undo: store.undo.canUndo,
+    redo: store.undo.canRedo,
     currentPageId: store.state.currentPageId,
     enteredContainerId: store.state.enteredContainerId,
     documentName: store.state.documentName,
@@ -166,9 +177,26 @@ function captureOpenRollbackState(store: EditorStore): OpenRollbackState {
     pageColor: structuredClone(store.state.pageColor),
     panX: store.state.panX,
     panY: store.state.panY,
-    sceneVersion: store.state.sceneVersion,
     zoom: store.state.zoom
   }
+}
+
+function captureOpenMutableState(store: EditorStore): OpenMutableState {
+  return {
+    graph: store.graph,
+    sceneVersion: store.state.sceneVersion,
+    undo: store.undo.canUndo,
+    redo: store.undo.canRedo
+  }
+}
+
+function isOpenMutableStateCurrent(store: EditorStore, state: OpenMutableState): boolean {
+  return (
+    store.graph === state.graph &&
+    store.state.sceneVersion === state.sceneVersion &&
+    store.undo.canUndo === state.undo &&
+    store.undo.canRedo === state.redo
+  )
 }
 
 function isOpenRollbackStateCurrent(
@@ -179,13 +207,7 @@ function isOpenRollbackStateCurrent(
   const live = getLiveTab(tab)
   if (!live) return false
   const store = live.store
-  return (
-    store.graph === rollback.graph &&
-    store.state.sceneVersion === rollback.sceneVersion &&
-    !store.undo.canUndo &&
-    !store.undo.canRedo &&
-    isOpenOwnedStateCurrent(store, ownedState)
-  )
+  return isOpenMutableStateCurrent(store, rollback) && isOpenOwnedStateCurrent(store, ownedState)
 }
 
 function restoreOpenOwnedStateAfterDrift(
@@ -196,7 +218,10 @@ function restoreOpenOwnedStateAfterDrift(
   const live = getLiveTab(tab)
   if (!live) return
   const store = live.store
-  if (isSourceIdentityCurrent(store, ownedState.sourceIdentity)) {
+  if (
+    store.getSourceIdentityRevision() === ownedState.sourceIdentityRevision &&
+    isSourceIdentityCurrent(store, ownedState.sourceIdentity)
+  ) {
     store.clearSourceIdentity()
     if (store.state.documentName === ownedState.documentName) {
       store.state.documentName = rollback.documentName
@@ -340,8 +365,7 @@ export async function openFileInNewTab(
     if (existingTab) {
       if (canActivateForOpen(focusTicket)) switchTab(existingTab.id)
       const attempt = openAttemptsByTabId.get(existingTab.id)
-      return attempt &&
-        isSourceIdentityCurrent(existingTab.store, attempt.ownedState.sourceIdentity)
+      return attempt && isOpenOwnedStateCurrent(existingTab.store, attempt.ownedState)
         ? { kind: 'join', outcome: attempt.outcome }
         : { kind: 'existing' }
     }
@@ -360,7 +384,7 @@ export async function openFileInNewTab(
     } else {
       tab = appendTab()
     }
-    const rollback = reused ? captureOpenRollbackState(tab.store) : null
+    const rollback = captureOpenRollbackState(tab.store)
 
     // Claim the source identity immediately so concurrent opens of the same
     // file observe a matching tab. Heavy I/O then happens after the lock.
@@ -380,6 +404,7 @@ export async function openFileInNewTab(
   const { tab, reused, rollback, attempt } = decision
   const store = tab.store
   let destructiveApplyStarted = false
+  let appliedState: OpenMutableState | null = null
   const requireOpenOwnedState = () => {
     const live = requireLiveTab(tab)
     if (!isOpenOwnedStateCurrent(live.store, attempt.ownedState)) {
@@ -388,18 +413,37 @@ export async function openFileInNewTab(
   }
   const beforeDestructiveApply = () => {
     requireOpenOwnedState()
-    if (!reused || !rollback) return
     if (!isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)) {
       throw new Error('Open target changed while loading')
     }
     destructiveApplyStarted = true
   }
+  const captureAppliedState = () => {
+    requireOpenOwnedState()
+    appliedState = captureOpenMutableState(requireLiveTab(tab).store)
+  }
+  const requireAppliedState = () => {
+    requireOpenOwnedState()
+    const live = requireLiveTab(tab)
+    if (!appliedState || !isOpenMutableStateCurrent(live.store, appliedState)) {
+      throw new Error('Open target changed while loading')
+    }
+  }
+  const canDiscardDestructiveState = () => {
+    const live = getLiveTab(tab)
+    return (
+      !!live &&
+      destructiveApplyStarted &&
+      isOpenOwnedStateCurrent(live.store, attempt.ownedState) &&
+      (!appliedState || isOpenMutableStateCurrent(live.store, appliedState))
+    )
+  }
   try {
     if (isDOMImportFile(file)) {
       await store.openDOMFile(file, {
         beforeApply: beforeDestructiveApply,
-        beforeCommitSource: requireOpenOwnedState,
-        beforeSetDocumentName: requireOpenOwnedState,
+        beforeCommitSource: requireAppliedState,
+        beforeSetDocumentName: captureAppliedState,
         handle,
         path
       })
@@ -431,9 +475,10 @@ export async function openFileInNewTab(
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     requireLiveTab(tab)
+    captureAppliedState()
     await store.fitCurrentPageToViewport()
     requireLiveTab(tab)
-    requireOpenOwnedState()
+    requireAppliedState()
     store.setDocumentSource(file.name, sourceFormat, handle, path)
     store.state.loading = false
     attempt.resolve()
@@ -442,9 +487,9 @@ export async function openFileInNewTab(
     // Those duplicates must observe and join this owner's outcome before its
     // optimistic identity is removed.
     await fileOpenLock.run(handle, path, async () => {
-      if (reused && rollback) {
+      if (reused) {
         if (
-          (destructiveApplyStarted && isOpenOwnedStateCurrent(store, attempt.ownedState)) ||
+          canDiscardDestructiveState() ||
           isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)
         ) {
           restoreOpenRollbackState(tab, rollback)
@@ -454,13 +499,13 @@ export async function openFileInNewTab(
       } else {
         const live = getLiveTab(tab)
         if (!live) return
-        if (isOpenOwnedStateCurrent(live.store, attempt.ownedState)) {
+        if (
+          canDiscardDestructiveState() ||
+          isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)
+        ) {
           closeTab(tab.id)
         } else {
-          if (isSourceIdentityCurrent(live.store, attempt.ownedState.sourceIdentity)) {
-            live.store.clearSourceIdentity()
-          }
-          live.store.state.loading = false
+          restoreOpenOwnedStateAfterDrift(tab, rollback, attempt.ownedState)
         }
       }
     })

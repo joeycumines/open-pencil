@@ -368,4 +368,27 @@ describe('createFileOpenLock', () => {
     await expect(result).resolves.toBeNull()
     expect(operation).toHaveBeenCalledWith(null)
   })
+
+  test('rescans when a candidate publishes the incoming identity during comparison', async () => {
+    const comparisonStarted = Promise.withResolvers<undefined>()
+    const comparison = Promise.withResolvers<boolean>()
+    const stored = makeHandle('stored.fig', async () => false)
+    const incoming = makeHandle('incoming.fig', async () => {
+      comparisonStarted.resolve(undefined)
+      return comparison.promise
+    })
+    const tab = makeTab()
+    tab.store.setDocumentSource('stored.fig', 'pen', stored)
+    const tabs = [tab]
+    const lock = createFileOpenLock(() => tabs)
+    const operation = vi.fn(async (existing: Tab | null) => existing)
+
+    const result = lock.run(incoming, undefined, operation)
+    await comparisonStarted.promise
+    tab.store.setDocumentSource('incoming.fig', 'pen', incoming)
+    comparison.resolve(false)
+
+    await expect(result).resolves.toBe(tab)
+    expect(operation).toHaveBeenCalledWith(tab)
+  })
 })

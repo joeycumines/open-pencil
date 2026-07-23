@@ -149,18 +149,46 @@ async function findLiveExistingTab(
   handle: FileSystemFileHandle | undefined,
   path: string | undefined
 ): Promise<Tab | null> {
-  for (const candidate of getTabs()) {
-    const storedHandle = candidate.store.getSourceHandle()
-    const storedPath = candidate.store.getSourcePath()
-    if (!(await identitiesMatch(handle, path, storedHandle, storedPath))) continue
+  for (;;) {
+    const snapshot = getTabs().map((tab) => ({
+      handle: tab.store.getSourceHandle(),
+      path: tab.store.getSourcePath(),
+      revision: tab.store.getSourceIdentityRevision(),
+      tab
+    }))
 
-    const live = getTabs().find((tab) => tab.id === candidate.id && tab.store === candidate.store)
-    if (!live) continue
-    const currentHandle = live.store.getSourceHandle()
-    const currentPath = live.store.getSourcePath()
-    if (currentHandle === storedHandle && currentPath === storedPath) return live
+    for (const candidate of snapshot) {
+      if (!(await identitiesMatch(handle, path, candidate.handle, candidate.path))) continue
+
+      const live = getTabs().find(
+        (tab) => tab.id === candidate.tab.id && tab.store === candidate.tab.store
+      )
+      if (
+        live &&
+        live.store.getSourceIdentityRevision() === candidate.revision &&
+        live.store.getSourceHandle() === candidate.handle &&
+        live.store.getSourcePath() === candidate.path
+      ) {
+        return live
+      }
+      break
+    }
+
+    const liveTabs = getTabs()
+    const snapshotIsCurrent =
+      liveTabs.length === snapshot.length &&
+      snapshot.every((candidate) => {
+        const live = liveTabs.find(
+          (tab) => tab.id === candidate.tab.id && tab.store === candidate.tab.store
+        )
+        return (
+          live?.store.getSourceIdentityRevision() === candidate.revision &&
+          live.store.getSourceHandle() === candidate.handle &&
+          live.store.getSourcePath() === candidate.path
+        )
+      })
+    if (snapshotIsCurrent) return null
   }
-  return null
 }
 
 type LockEntry = {

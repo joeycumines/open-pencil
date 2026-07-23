@@ -12,6 +12,7 @@ export function createDocumentSourceState() {
   let sourceHandle: FileSystemFileHandle | null = null
   let sourcePath: string | null = null
   let sourceFileName: string | null = null
+  let sourceIdentityRevision = 0
 
   return {
     getFileHandle: () => fileHandle,
@@ -37,14 +38,18 @@ export function createDocumentSourceState() {
     getSourceHandle: () => sourceHandle,
     setSourceHandle: (handle: FileSystemFileHandle | null) => {
       sourceHandle = handle
+      sourceIdentityRevision++
     },
     getSourcePath: () => sourcePath,
     setSourcePath: (path: string | null) => {
       sourcePath = path
+      sourceIdentityRevision++
     },
     getSourceFileName: () => sourceFileName,
     setSourceFileName: (name: string | null) => {
       sourceFileName = name
-    }
+      sourceIdentityRevision++
+    },
+    getSourceIdentityRevision: () => sourceIdentityRevision
   }
 }

@@ -83,6 +83,7 @@ export function createDocumentIOActions(
     // Identity getters for cross-platform file-open deduplication.
     getSourceHandle: sourceState.getSourceHandle,
     getSourcePath: sourceState.getSourcePath,
-    getSourceFileName: sourceState.getSourceFileName
+    getSourceFileName: sourceState.getSourceFileName,
+    getSourceIdentityRevision: sourceState.getSourceIdentityRevision
   }
 }
