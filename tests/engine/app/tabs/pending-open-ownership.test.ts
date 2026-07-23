@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'bun:test'
 
+import { createEditor } from '@open-pencil/core/editor'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import * as figMod from '@open-pencil/core/io/formats/fig'
 import * as layoutMod from '@open-pencil/core/layout'
+import * as domCssBrowser from '@open-pencil/dom-css/browser'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
+import { createDOMOpenActions } from '@/app/document/io/dom'
 import { createTab, getActiveStore, getTabsSnapshot, openFileInNewTab, tabCount } from '@/app/tabs'
 
 import { makeSaveHandle, setupTabsTestGlobals, teardownTabsTestGlobals } from './helpers'
@@ -120,6 +123,77 @@ describe('pending open ownership', () => {
     expect(owner.state.documentName).toBe('Untitled')
   })
 
+  test('preserves an imported page edit made while FIG page setup is pending', async () => {
+    const store = getActiveStore()
+    const imported = new SceneGraph()
+    const importedPage = imported.getPages()[0]
+    if (!importedPage) throw new Error('Expected an imported page')
+    const pageSetupStarted = Promise.withResolvers<undefined>()
+    const proceed = Promise.withResolvers<undefined>()
+    const switchPage = store.switchPage
+    vi.spyOn(store, 'switchPage').mockImplementation(async (...args) => {
+      pageSetupStarted.resolve(undefined)
+      await proceed.promise
+      await switchPage(...args)
+    })
+    const failure = new Error('FIG fit failed after page setup')
+    vi.spyOn(store, 'fitCurrentPageToViewport').mockRejectedValue(failure)
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockResolvedValue(imported)
+
+    const opening = openFileInNewTab(
+      new File([], 'pending-page.fig'),
+      undefined,
+      '/pending-page.fig'
+    )
+    await pageSetupStarted.promise
+    expect(store.graph).toBe(imported)
+    store.renamePage(importedPage.id, 'Concurrent imported work')
+    proceed.resolve(undefined)
+
+    await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    expect(store.graph).toBe(imported)
+    expect(store.graph.getNode(importedPage.id)?.name).toBe('Concurrent imported work')
+    expect(store.getSourcePath()).toBeNull()
+    expect(store.getSourceFileName()).toBeNull()
+  })
+
+  test('preserves a node edit made while FIG page setup is pending', async () => {
+    const store = getActiveStore()
+    const imported = new SceneGraph()
+    const importedPage = imported.getPages()[0]
+    if (!importedPage) throw new Error('Expected an imported page')
+    const rectangle = imported.createNode('RECTANGLE', importedPage.id, {
+      width: 10,
+      height: 10
+    })
+    const pageSetupStarted = Promise.withResolvers<undefined>()
+    const proceed = Promise.withResolvers<undefined>()
+    const switchPage = store.switchPage
+    vi.spyOn(store, 'switchPage').mockImplementation(async (...args) => {
+      pageSetupStarted.resolve(undefined)
+      await proceed.promise
+      await switchPage(...args)
+    })
+    const failure = new Error('FIG fit failed after node edit')
+    vi.spyOn(store, 'fitCurrentPageToViewport').mockRejectedValue(failure)
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockResolvedValue(imported)
+
+    const opening = openFileInNewTab(
+      new File([], 'pending-color.fig'),
+      undefined,
+      '/pending-color.fig'
+    )
+    await pageSetupStarted.promise
+    store.updateNode(rectangle.id, { opacity: 0.5 })
+    proceed.resolve(undefined)
+
+    await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    expect(store.graph).toBe(imported)
+    expect(store.graph.getNode(rectangle.id)?.opacity).toBe(0.5)
+    expect(store.getSourcePath()).toBeNull()
+    expect(store.getSourceFileName()).toBeNull()
+  })
+
   test('does not close a fresh owner saved to its exact preclaimed handle', async () => {
     const originalStore = getActiveStore()
     originalStore.setDocumentSource('existing.fig', 'fig', undefined, '/existing.fig')
@@ -148,6 +222,50 @@ describe('pending open ownership', () => {
     expect(savedStore.getSourceHandle()).toBe(savedHandle)
     expect(savedStore.getSourcePath()).toBeNull()
     expect(savedStore.state.documentName).toBe('incoming')
+  })
+
+  test('activates a newer duplicate retry after failed-owner rollback', async () => {
+    const originalStore = getActiveStore()
+    const originalHandle = makeSaveHandle('original.fig')
+    originalStore.setDocumentSource('original.fig', 'fig', originalHandle)
+    const incomingHandle = makeSaveHandle('incoming.fig')
+    const rollbackComparisonStarted = Promise.withResolvers<undefined>()
+    const releaseRollbackComparison = Promise.withResolvers<boolean>()
+    let holdRollbackComparison = false
+    let rollbackComparisonHeld = false
+    incomingHandle.isSameEntry = vi.fn((other) => {
+      if (holdRollbackComparison && !rollbackComparisonHeld && other === originalHandle) {
+        rollbackComparisonHeld = true
+        rollbackComparisonStarted.resolve(undefined)
+        return releaseRollbackComparison.promise
+      }
+      return Promise.resolve(false)
+    })
+    const firstReadStarted = Promise.withResolvers<undefined>()
+    const firstRead = Promise.withResolvers<SceneGraph>()
+    ;(readFigFile as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => {
+        firstReadStarted.resolve(undefined)
+        return firstRead.promise
+      })
+      .mockResolvedValueOnce(new SceneGraph())
+    const failure = new Error('first incoming read failed')
+
+    const first = openFileInNewTab(new File([], 'incoming.fig'), incomingHandle)
+    await firstReadStarted.promise
+    holdRollbackComparison = true
+    firstRead.reject(failure)
+    await rollbackComparisonStarted.promise
+    const retry = openFileInNewTab(new File([], 'incoming.fig'), incomingHandle)
+    releaseRollbackComparison.resolve(false)
+
+    await expect(first).rejects.toBe(failure)
+    await expect(retry).resolves.toBeUndefined()
+    const incomingTabs = getTabsSnapshot().filter(
+      (tab) => tab.store.getSourceHandle() === incomingHandle
+    )
+    expect(incomingTabs).toHaveLength(1)
+    expect(getActiveStore()).toBe(incomingTabs[0]?.store)
   })
 
   test('preserves Save As name and identity during post-apply DOM work', async () => {
@@ -211,40 +329,115 @@ describe('pending open ownership', () => {
     expect(store.getSourceFileName()).toBeNull()
   })
 
-  test('preserves a page edit made after DOM apply when later work fails', async () => {
+  test('opens through the real DOM pipeline while page setup remains owned', async () => {
     const store = getActiveStore()
+    const imported = new SceneGraph()
+    vi.spyOn(domCssBrowser, 'browserHTMLToSceneGraph').mockResolvedValue(imported)
+
+    await expect(
+      openFileInNewTab(
+        new File(['<main>Hello</main>'], 'card.html', { type: 'text/html' }),
+        undefined,
+        '/card.html'
+      )
+    ).resolves.toBeUndefined()
+
+    expect(store.graph).toBe(imported)
+    expect(store.getSourcePath()).toBe('/card.html')
+    expect(store.getSourceFileName()).toBe('card.html')
+  })
+
+  test('keeps unguarded DOM import rendering after viewport fitting', async () => {
+    const editor = createEditor()
+    const order: string[] = []
+    const requestRender = vi.spyOn(editor, 'requestRender').mockImplementation(() => {
+      order.push('render')
+    })
+    const { importDOMText } = createDOMOpenActions({
+      editor,
+      state: editor.state,
+      setDocumentSource: vi.fn(),
+      fitCurrentPageToViewport: vi.fn(async () => {
+        order.push('fit')
+      })
+    })
+    vi.spyOn(domCssBrowser, 'browserHTMLToSceneGraph').mockResolvedValue(new SceneGraph())
+
+    await importDOMText('<main>Hello</main>')
+
+    expect(requestRender).toHaveBeenCalled()
+    expect(order.slice(-2)).toEqual(['fit', 'render'])
+  })
+
+  test('preserves a node edit through real DOM page setup', async () => {
     const imported = new SceneGraph()
     const importedPage = imported.getPages()[0]
     if (!importedPage) throw new Error('Expected an imported page')
-    const failure = new Error('DOM post-apply work failed')
-    const applied = Promise.withResolvers<undefined>()
-    const proceed = Promise.withResolvers<undefined>()
-    vi.spyOn(store, 'openDOMFile').mockImplementation(async (_file, options) => {
-      const guarded = options as typeof options & {
-        beforeSetDocumentName?: () => void
-      }
-      guarded.beforeApply?.()
-      store.replaceGraph(imported)
-      guarded.beforeSetDocumentName?.()
-      store.state.documentName = 'card'
-      applied.resolve(undefined)
-      await proceed.promise
-      throw failure
+    const rectangle = imported.createNode('RECTANGLE', importedPage.id, {
+      width: 10,
+      height: 10
     })
+    imported.createNode('TEXT', importedPage.id, {
+      text: 'Deferred',
+      fontFamily: 'Deferred DOM Font',
+      width: 80,
+      height: 20
+    })
+    const fontLoadStarted = Promise.withResolvers<undefined>()
+    const fontLoad = Promise.withResolvers<ArrayBuffer | null>()
+    const editor = createEditor({
+      loadFont: async () => {
+        fontLoadStarted.resolve(undefined)
+        return fontLoad.promise
+      }
+    })
+    const setDocumentSource = vi.fn()
+    const { openDOMFile } = createDOMOpenActions({
+      editor,
+      state: editor.state,
+      setDocumentSource,
+      fitCurrentPageToViewport: vi.fn(async () => undefined)
+    })
+    let installedGraph: SceneGraph | null = null
+    let installedSceneVersion = -1
+    let installedUndo = false
+    let installedRedo = false
+    const captureInstalledState = () => {
+      installedGraph = editor.graph
+      installedSceneVersion = editor.state.sceneVersion
+      installedUndo = editor.undo.canUndo
+      installedRedo = editor.undo.canRedo
+    }
+    const requireInstalledState = () => {
+      if (
+        editor.graph !== installedGraph ||
+        editor.state.sceneVersion !== installedSceneVersion ||
+        editor.undo.canUndo !== installedUndo ||
+        editor.undo.canRedo !== installedRedo
+      ) {
+        throw new Error('Open target changed while loading')
+      }
+    }
+    vi.spyOn(domCssBrowser, 'browserHTMLToSceneGraph').mockResolvedValue(imported)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-    const opening = openFileInNewTab(
+    const opening = openDOMFile(
       new File(['<main>Hello</main>'], 'card.html', { type: 'text/html' }),
-      undefined,
-      '/card.html'
+      {
+        afterGraphReplace: captureInstalledState,
+        beforePageSetupFinalize: requireInstalledState,
+        path: '/card.html'
+      }
     )
-    await applied.promise
-    store.renamePage(importedPage.id, 'Concurrent imported work')
-    proceed.resolve(undefined)
+    await fontLoadStarted.promise
+    expect(editor.graph).toBe(imported)
+    editor.updateNode(rectangle.id, { opacity: 0.5 })
+    fontLoad.resolve(new ArrayBuffer(8))
 
-    await expect(opening).rejects.toBe(failure)
-    expect(store.graph).toBe(imported)
-    expect(store.graph.getNode(importedPage.id)?.name).toBe('Concurrent imported work')
-    expect(store.getSourcePath()).toBeNull()
-    expect(store.getSourceFileName()).toBeNull()
+    await expect(opening).rejects.toEqual(new Error('Open target changed while loading'))
+    expect(editor.graph).toBe(imported)
+    expect(editor.graph.getNode(rectangle.id)?.opacity).toBe(0.5)
+    expect(editor.state.documentName).toBe('Untitled')
+    expect(setDocumentSource).not.toHaveBeenCalled()
   })
 })

@@ -56,6 +56,8 @@ type OpenMutableState = {
   redo: boolean
 }
 
+type ActivationSource = 'interaction' | 'open-rollback'
+
 type OpenRollbackState = OpenMutableState & {
   currentPageId: string
   enteredContainerId: string | null
@@ -301,8 +303,8 @@ export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
   return tab
 }
 
-function activateTab(tab: Tab) {
-  if (activeTabId.value !== tab.id) activationRevision++
+function activateTab(tab: Tab, source: ActivationSource = 'interaction') {
+  if (activeTabId.value !== tab.id && source === 'interaction') activationRevision++
   activeTabId.value = tab.id
   setActiveEditorStore(tab.store)
   triggerRef(tabsRef)
@@ -315,7 +317,7 @@ export function switchTab(tabId: string) {
   activateTab(tab)
 }
 
-export function closeTab(tabId: string) {
+function closeTabWithSource(tabId: string, source: ActivationSource) {
   const idx = tabsRef.value.findIndex((t) => t.id === tabId)
   if (idx === -1) return
 
@@ -324,17 +326,21 @@ export function closeTab(tabId: string) {
   tabsRef.value = tabsRef.value.filter((t) => t.id !== tabId)
 
   if (tabsRef.value.length === 0) {
-    createTab()
+    activateTab(appendTab(), source)
     closingTab.store.dispose()
     return
   }
 
   if (wasActive) {
     const newIdx = Math.min(idx, tabsRef.value.length - 1)
-    activateTab(tabsRef.value[newIdx])
+    activateTab(tabsRef.value[newIdx], source)
   }
 
   closingTab.store.dispose()
+}
+
+export function closeTab(tabId: string) {
+  closeTabWithSource(tabId, 'interaction')
 }
 
 function isDOMImportFile(file: File): boolean {
@@ -404,6 +410,7 @@ export async function openFileInNewTab(
   const { tab, reused, rollback, attempt } = decision
   const store = tab.store
   let destructiveApplyStarted = false
+  let installedState: OpenMutableState | null = null
   let appliedState: OpenMutableState | null = null
   const requireOpenOwnedState = () => {
     const live = requireLiveTab(tab)
@@ -418,9 +425,21 @@ export async function openFileInNewTab(
     }
     destructiveApplyStarted = true
   }
+  const captureInstalledState = () => {
+    requireOpenOwnedState()
+    installedState = captureOpenMutableState(requireLiveTab(tab).store)
+  }
+  const requireInstalledState = () => {
+    requireOpenOwnedState()
+    const live = requireLiveTab(tab)
+    if (!installedState || !isOpenMutableStateCurrent(live.store, installedState)) {
+      throw new Error('Open target changed while loading')
+    }
+  }
   const captureAppliedState = () => {
     requireOpenOwnedState()
-    appliedState = captureOpenMutableState(requireLiveTab(tab).store)
+    const live = requireLiveTab(tab)
+    appliedState = captureOpenMutableState(live.store)
   }
   const requireAppliedState = () => {
     requireOpenOwnedState()
@@ -435,14 +454,18 @@ export async function openFileInNewTab(
       !!live &&
       destructiveApplyStarted &&
       isOpenOwnedStateCurrent(live.store, attempt.ownedState) &&
-      (!appliedState || isOpenMutableStateCurrent(live.store, appliedState))
+      (appliedState
+        ? isOpenMutableStateCurrent(live.store, appliedState)
+        : !installedState || isOpenMutableStateCurrent(live.store, installedState))
     )
   }
   try {
     if (isDOMImportFile(file)) {
       await store.openDOMFile(file, {
+        afterGraphReplace: captureInstalledState,
         beforeApply: beforeDestructiveApply,
         beforeCommitSource: requireAppliedState,
+        beforePageSetupFinalize: requireInstalledState,
         beforeSetDocumentName: captureAppliedState,
         handle,
         path
@@ -472,8 +495,9 @@ export async function openFileInNewTab(
     store.replaceGraph(imported)
     store.undo.clear()
     store.clearSelection()
+    captureInstalledState()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
-    await store.switchPage(pageId)
+    await store.switchPage(pageId, requireInstalledState)
     requireLiveTab(tab)
     captureAppliedState()
     await store.fitCurrentPageToViewport()
@@ -503,7 +527,7 @@ export async function openFileInNewTab(
           canDiscardDestructiveState() ||
           isOpenRollbackStateCurrent(tab, rollback, attempt.ownedState)
         ) {
-          closeTab(tab.id)
+          closeTabWithSource(tab.id, 'open-rollback')
         } else {
           restoreOpenOwnedStateAfterDrift(tab, rollback, attempt.ownedState)
         }

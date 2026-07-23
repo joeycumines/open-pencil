@@ -23,8 +23,10 @@ type OpenDOMFileOptions = {
 }
 
 type DOMImportOptions = {
+  afterGraphReplace?: () => void
   beforeApply?: () => void
   beforeCommitSource?: () => void
+  beforePageSetupFinalize?: () => void
   beforeSetDocumentName?: () => void
   cssText?: string
   handle?: FileSystemFileHandle
@@ -37,7 +39,9 @@ type DOMTextImportOptions = {
 }
 
 type ApplyDOMTextOptions = DOMTextImportOptions & {
+  afterGraphReplace?: () => void
   beforeApply?: () => void
+  beforePageSetupFinalize?: () => void
   beforeSetDocumentName?: () => void
 }
 
@@ -57,11 +61,18 @@ export function createDOMOpenActions({
     const graph = await browserHTMLToSceneGraph(html, { cssText: options.cssText, pageName })
     await yieldToUI()
     options.beforeApply?.()
-    await applyImportedDocument(editor, graph)
+    await applyImportedDocument(
+      editor,
+      graph,
+      options.afterGraphReplace,
+      options.beforePageSetupFinalize
+    )
+    const guardedOpen = options.beforePageSetupFinalize !== undefined
+    if (guardedOpen) editor.requestRender()
     options.beforeSetDocumentName?.()
     state.documentName = pageName
     await fitCurrentPageToViewport()
-    editor.requestRender()
+    if (!guardedOpen) editor.requestRender()
     return pageName
   }
 
@@ -85,7 +96,9 @@ export function createDOMOpenActions({
       state.loading = true
       const html = await file.text()
       await applyDOMText(html, {
+        afterGraphReplace: options.afterGraphReplace,
         beforeApply: options.beforeApply,
+        beforePageSetupFinalize: options.beforePageSetupFinalize,
         beforeSetDocumentName: options.beforeSetDocumentName,
         cssText: options.cssText,
         documentName: documentNameFor(file)

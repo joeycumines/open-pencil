@@ -12,7 +12,7 @@ import type { EditorContext } from './types'
 export function createPageActions(ctx: EditorContext) {
   const pageViewportStore = createPageViewportStore(ctx)
 
-  async function switchPage(pageId: string) {
+  async function switchPage(pageId: string, beforeFinalize?: () => void) {
     const page = ctx.graph.getNode(pageId)
     if (page?.type !== 'CANVAS') return
 
@@ -45,6 +45,7 @@ export function createPageActions(ctx: EditorContext) {
       const fallbacksReady = requiredFallbacks.every(
         (script) => (fallbacks[script]?.length ?? 0) > 0
       )
+      beforeFinalize?.()
       if (facesReady && fallbacksReady) {
         for (const node of requirements.nodes) if (node.type === 'TEXT') node.textPicture = null
       }

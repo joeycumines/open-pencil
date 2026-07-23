@@ -416,8 +416,10 @@ describe('openFileInNewTab', () => {
     await openFileInNewTab(file, undefined, '/imports/card.html')
 
     expect(openDOMFile).toHaveBeenCalledWith(file, {
+      afterGraphReplace: expect.any(Function),
       beforeApply: expect.any(Function),
       beforeCommitSource: expect.any(Function),
+      beforePageSetupFinalize: expect.any(Function),
       beforeSetDocumentName: expect.any(Function),
       handle: undefined,
       path: '/imports/card.html'
