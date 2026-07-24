@@ -167,6 +167,67 @@ describe('pending open ownership', () => {
     expect(savedStore.getSourcePath()).toBeNull()
   })
 
+  test('does not publish Save As identity after concurrent Open replaces a pristine tab', async () => {
+    const store = getActiveStore()
+    const initialTabCount = tabCount()
+    const closeStarted = Promise.withResolvers<undefined>()
+    const releaseClose = Promise.withResolvers<undefined>()
+    let savedBytes: Uint8Array | null = null
+    const savedHandle = {
+      kind: 'file',
+      name: 'saved.fig',
+      createWritable: vi.fn(async () => {
+        return {
+          write: vi.fn(async (data: FileSystemWriteChunkType) => {
+            if (!(data instanceof Uint8Array)) throw new Error('Expected FIG bytes')
+            savedBytes = data.slice()
+          }),
+          close: vi.fn(async () => {
+            closeStarted.resolve(undefined)
+            await releaseClose.promise
+          })
+        } as FileSystemWritableFileStream
+      }),
+      getFile: vi.fn(async () => new File([], 'saved.fig', { lastModified: 0 })),
+      isSameEntry: vi.fn(async (other: FileSystemFileHandle) => other === savedHandle)
+    } as FileSystemFileHandle
+    window.showSaveFilePicker = vi.fn(async () => savedHandle)
+
+    const saving = store.saveFigFileAs()
+    await closeStarted.promise
+    if (!savedBytes) throw new Error('Expected Save As to write FIG bytes')
+
+    const incoming = new SceneGraph()
+    const incomingPage = incoming.getPages()[0]
+    if (!incomingPage) throw new Error('Expected incoming page')
+    incoming.updateNode(incomingPage.id, { name: 'Incoming graph' })
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(incoming)
+
+    await openFileInNewTab(new File([], 'incoming.fig'), undefined, '/incoming.fig')
+    expect(store.graph).toBe(incoming)
+
+    releaseClose.resolve(undefined)
+    await saving
+
+    expect(store.getSourceHandle()).toBeNull()
+    expect(store.getSourcePath()).toBe('/incoming.fig')
+    expect(store.getDocumentFilePath()).toBe('/incoming.fig')
+    expect(store.state.documentName).toBe('incoming')
+
+    const saved = new SceneGraph()
+    const savedPage = saved.getPages()[0]
+    if (!savedPage) throw new Error('Expected saved page')
+    saved.updateNode(savedPage.id, { name: 'Saved graph' })
+    ;(readFigFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(saved)
+    const readCount = (readFigFile as ReturnType<typeof vi.fn>).mock.calls.length
+
+    await openFileInNewTab(new File([savedBytes], 'saved.fig'), savedHandle)
+
+    expect(readFigFile).toHaveBeenCalledTimes(readCount + 1)
+    expect(getActiveStore().graph).toBe(saved)
+    expect(tabCount()).toBe(initialTabCount + 1)
+  })
+
   test('preserves a fresh owner page edit when its FIG read succeeds', async () => {
     const initialTabCount = tabCount()
     const { opening, read, started } = startFreshDelayedFigOpen('fresh-edit.fig', '/fresh-edit.fig')

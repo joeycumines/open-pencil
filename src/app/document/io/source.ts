@@ -28,6 +28,7 @@ type DocumentSourceOptions = {
   setFilePath: (path: string | null) => void
   getDownloadName: () => string | null
   setDownloadName: (name: string | null) => void
+  getSourceIdentityRevision: () => number
   getSavedVersion: () => number
   setSavedVersion: (version: number) => void
   setLastWriteTime: (time: number) => void
@@ -48,6 +49,7 @@ export function createDocumentSourceActions({
   setFilePath,
   getDownloadName,
   setDownloadName,
+  getSourceIdentityRevision,
   getSavedVersion,
   setSavedVersion,
   setLastWriteTime,
@@ -69,6 +71,7 @@ export function createDocumentSourceActions({
     setFileHandle,
     getDownloadName,
     setDownloadName,
+    getSourceIdentityRevision,
     setSavedVersion,
     setLastWriteTime,
     updateSourceIdentity,

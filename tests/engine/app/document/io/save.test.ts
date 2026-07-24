@@ -53,6 +53,7 @@ function createHarness(initialHandle: FileSystemFileHandle | null = null) {
     setDownloadName: (name) => {
       downloadName = name
     },
+    getSourceIdentityRevision: store.getSourceIdentityRevision,
     setSavedVersion: vi.fn(),
     setLastWriteTime: vi.fn(),
     startWatchingFile: vi.fn(),

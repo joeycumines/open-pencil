@@ -17,6 +17,7 @@ type SaveActionsOptions = {
   setFileHandle: (handle: FileSystemFileHandle | null) => void
   getDownloadName: () => string | null
   setDownloadName: (name: string | null) => void
+  getSourceIdentityRevision: () => number
   setSavedVersion: (version: number) => void
   setLastWriteTime: (time: number) => void
   startWatchingFile: () => void
@@ -32,6 +33,7 @@ export function createSaveActions({
   setFileHandle,
   getDownloadName,
   setDownloadName,
+  getSourceIdentityRevision,
   setSavedVersion,
   setLastWriteTime,
   startWatchingFile,
@@ -62,13 +64,16 @@ export function createSaveActions({
   }
 
   async function saveFigFileAs() {
+    const sourceIdentityRevision = getSourceIdentityRevision()
     const data = await buildFigFile()
+    const sourceIdentityIsCurrent = () => getSourceIdentityRevision() === sourceIdentityRevision
 
     if (IS_TAURI) {
       const path = await chooseTauriFigSavePath()
       if (!path) return
       const fileName = downloadNameFromPath(path)
       await writeFile(data, { kind: 'path', path })
+      if (!sourceIdentityIsCurrent()) return
       setFilePath(path)
       setFileHandle(null)
       state.documentName = documentNameFromFigPath(path)
@@ -81,6 +86,7 @@ export function createSaveActions({
       const handle = await chooseBrowserFigSaveHandle()
       if (!handle) return
       await writeFile(data, { kind: 'handle', handle })
+      if (!sourceIdentityIsCurrent()) return
       setFileHandle(handle)
       setFilePath(null)
       state.documentName = documentNameFromFigPath(handle.name)
@@ -91,9 +97,10 @@ export function createSaveActions({
 
     const filename = prompt('Save as:', getDownloadName() ?? 'Untitled.fig')
     if (!filename) return
+    downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
+    if (!sourceIdentityIsCurrent()) return
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)
-    downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
     updateSourceIdentity(filename)
   }
 
