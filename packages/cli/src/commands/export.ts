@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path'
 
 import { defineCommand } from 'citty'
 
+import { decodeBase64 } from '@open-pencil/core/bytes'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import type { RasterExportFormat } from '@open-pencil/core/io'
 import {
@@ -14,11 +15,11 @@ import {
 import { isAppMode, requireFile, rpc } from '#cli/app-client'
 import { appTargetOptions, appTargetRpcArgs } from '#cli/app-target'
 import { ok, printError } from '#cli/format'
-import { loadDocument } from '#cli/headless'
+import { loadDocument, populateDocumentPage, populateWholeDocument } from '#cli/headless'
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
 const RASTER_FORMATS = ['PNG', 'JPG', 'WEBP']
-const ALL_FORMATS = new Set([...RASTER_FORMATS, 'SVG', 'PDF', 'JSX', 'FIG', 'HTML'])
+const ALL_FORMATS = new Set([...RASTER_FORMATS, 'SVG', 'PDF', 'PPTX', 'JSX', 'FIG', 'HTML'])
 const JSX_STYLES = new Set(['openpencil', 'tailwind'])
 const HTML_STYLES = new Set(['inline', 'tailwind'])
 const HTML_MODES = new Set(['fragment', 'standalone'])
@@ -77,12 +78,12 @@ async function exportViaApp(format: string, args: ExportArgs) {
       printError('Nothing to export.')
       process.exit(1)
     }
-    const data = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0))
+    const data = decodeBase64(result.base64)
     await writeAndLog(resolve(args.output ?? 'export.pdf'), data)
     return
   }
 
-  if (format === 'JSX' || format === 'HTML' || format === 'FIG') {
+  if (format === 'JSX' || format === 'HTML' || format === 'FIG' || format === 'PPTX') {
     printError(`${format} export is only available in file mode right now.`)
     process.exit(1)
   }
@@ -93,7 +94,7 @@ async function exportViaApp(format: string, args: ExportArgs) {
     scale: Number(args.scale),
     format: format.toLowerCase()
   })
-  const data = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0))
+  const data = decodeBase64(result.base64)
   const ext = format.toLowerCase() === 'jpg' ? 'jpg' : format.toLowerCase()
   await writeAndLog(resolve(args.output ?? `export.${ext}`), data)
 }
@@ -102,7 +103,8 @@ function exportFileName(defaultName: string, extension: string, scale?: number):
   return scale ? `${defaultName}@${scale}x.${extension}` : `${defaultName}.${extension}`
 }
 
-function targetLabel(pageName?: string, nodeId?: string): string {
+function targetLabel(pageName?: string, nodeId?: string, wholeDocument = false): string {
+  if (wholeDocument) return 'whole document'
   if (nodeId) return `node ${nodeId}`
   return pageName ? `page "${pageName}"` : 'first page'
 }
@@ -152,6 +154,34 @@ async function exportHTMLFromFile(
   console.log(ok(`Target: ${targetLabel(args.page, args.node)}`))
 }
 
+function prepareGraphForExport(
+  graph: Awaited<ReturnType<typeof loadDocument>>,
+  pageId: string,
+  format: string,
+  args: ExportArgs
+): boolean {
+  const wholeDocument = (format === 'FIG' || format === 'PPTX') && !args.page && !args.node
+  if (wholeDocument || args.node) populateWholeDocument(graph)
+  else populateDocumentPage(graph, pageId)
+  return wholeDocument
+}
+
+async function executeFileExport(
+  formatId: string,
+  graph: Awaited<ReturnType<typeof loadDocument>>,
+  target: FileExportTarget,
+  options:
+    | { format?: string; scale?: number; quality?: number; renderThumbnail?: boolean }
+    | undefined,
+  wholeDocument: boolean
+) {
+  if (wholeDocument) {
+    if (formatId === 'fig') return io.writeDocument(formatId, graph, options)
+    return io.exportContent(formatId, { graph, target: { scope: 'document' } }, options)
+  }
+  return io.exportContent(formatId, { graph, target }, options)
+}
+
 async function exportFromFile(format: string, args: ExportArgs) {
   const file = requireFile(args.file)
   const graph = await loadDocument(file)
@@ -174,6 +204,8 @@ async function exportFromFile(format: string, args: ExportArgs) {
     printError('--page and --node cannot be used together.')
     process.exit(1)
   }
+
+  const wholeDocument = prepareGraphForExport(graph, page.id, format, args)
 
   const target = args.node
     ? { scope: 'node' as const, nodeId: args.node }
@@ -205,7 +237,7 @@ async function exportFromFile(format: string, args: ExportArgs) {
     }
   }
 
-  const result = await io.exportContent(formatId, { graph, target }, options)
+  const result = await executeFileExport(formatId, graph, target, options, wholeDocument)
   const output = resolve(
     args.output ??
       exportFileName(
@@ -215,11 +247,11 @@ async function exportFromFile(format: string, args: ExportArgs) {
       )
   )
   await writeAndLog(output, result.data as string | Uint8Array)
-  console.log(ok(`Target: ${targetLabel(args.page, args.node)}`))
+  console.log(ok(`Target: ${targetLabel(args.page, args.node, wholeDocument)}`))
 }
 
 export default defineCommand({
-  meta: { description: 'Export a document to PNG, JPG, WEBP, SVG, PDF, JSX, HTML, or .fig' },
+  meta: { description: 'Export a document to PNG, JPG, WEBP, SVG, PDF, PPTX, JSX, HTML, or .fig' },
   args: {
     file: {
       type: 'positional',
@@ -235,7 +267,7 @@ export default defineCommand({
     format: {
       type: 'string',
       alias: 'f',
-      description: 'Export format: png, jpg, webp, svg, pdf, jsx, html, fig (default: png)',
+      description: 'Export format: png, jpg, webp, svg, pdf, pptx, jsx, html, fig (default: png)',
       default: 'png'
     },
     scale: { type: 'string', alias: 's', description: 'Export scale (default: 1)', default: '1' },
@@ -247,7 +279,7 @@ export default defineCommand({
     },
     page: {
       type: 'string',
-      description: 'Export a specific page by name (default: first page)',
+      description: 'Export a specific page by name (FIG defaults to the whole document)',
       required: false
     },
     node: {
@@ -289,7 +321,7 @@ export default defineCommand({
     const format = args.format.toUpperCase() as RasterExportFormat | 'SVG' | 'JSX' | 'FIG' | 'HTML'
     if (!ALL_FORMATS.has(format)) {
       printError(
-        `Invalid format "${args.format}". Use png, jpg, webp, svg, pdf, jsx, html, or fig.`
+        `Invalid format "${args.format}". Use png, jpg, webp, svg, pdf, pptx, jsx, html, or fig.`
       )
       process.exit(1)
     }

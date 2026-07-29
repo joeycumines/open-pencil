@@ -1,446 +1,200 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'bun:test'
 
-import { createEditorStore } from '@/app/editor/session'
-import type { Tab } from '@/app/tabs'
-import { createFileOpenLock, findExistingTab, normalizeFilePath } from '@/app/tabs/identity'
+import * as figModule from '@open-pencil/core/io/formats/fig'
+import * as layoutModule from '@open-pencil/core/layout'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
-let tabCounter = 0
+import { resolveBrowserFileURL } from '@/app/document/io/browser'
+import type { DocumentSourceIdentity } from '@/app/document/io/types'
+import { createTab, getActiveStore, openFileInNewTab, tabCount } from '@/app/tabs'
+import { fileIdentitiesMatch, findTabByFileIdentity } from '@/app/tabs/open/identity'
 
 function setupGlobals() {
   globalThis.window = {
     innerWidth: 1024,
     innerHeight: 768,
-    requestAnimationFrame: (cb: FrameRequestCallback) => {
-      cb(0)
+    requestAnimationFrame: (callback: FrameRequestCallback) => {
+      callback(0)
       return 0
     },
     cancelAnimationFrame: vi.fn(),
     openPencil: {},
+    location: { href: 'http://localhost/' } as Location,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn()
   } as Window & typeof globalThis
-
   globalThis.document = {
     fonts: { add: vi.fn(), ready: Promise.resolve() }
   } as Document
-}
-
-function teardownGlobals() {
-  Reflect.deleteProperty(globalThis, 'window')
-  Reflect.deleteProperty(globalThis, 'document')
-}
-
-function makeTab(): Tab {
-  return { id: `tab-${++tabCounter}`, store: createEditorStore() }
+  globalThis.requestAnimationFrame = window.requestAnimationFrame
+  globalThis.cancelAnimationFrame = window.cancelAnimationFrame
 }
 
 function makeHandle(
   name: string,
   isSameEntry: (other: FileSystemFileHandle) => Promise<boolean>
 ): FileSystemFileHandle {
-  return { name, isSameEntry } as FileSystemFileHandle
+  return { kind: 'file', name, isSameEntry } as FileSystemFileHandle
 }
 
-function overridePlatform(platform: string): () => void {
-  const original = process.platform
-  Object.defineProperty(process, 'platform', { value: platform, configurable: true })
-  return () => {
-    Object.defineProperty(process, 'platform', { value: original, configurable: true })
-  }
-}
+describe('file identity', () => {
+  test('matches equivalent handles without using file names as identity', async () => {
+    const stored = makeHandle('design.fig', async (other) => other.name === 'alias.fig')
+    const alias = makeHandle('alias.fig', async () => false)
+    const sameName = makeHandle('design.fig', async () => false)
 
-describe('normalizeFilePath', () => {
-  test('collapses forward slashes and removes trailing slash on Linux', () => {
-    const restore = overridePlatform('linux')
-    try {
-      expect(normalizeFilePath('/Users/joeyc//file.fig/')).toBe('/Users/joeyc/file.fig')
-      expect(normalizeFilePath('/Users/joeyc/file.fig')).toBe('/Users/joeyc/file.fig')
-    } finally {
-      restore()
-    }
+    await expect(
+      fileIdentitiesMatch({ handle: stored, path: null }, { handle: alias, path: null })
+    ).resolves.toBe(true)
+    await expect(
+      fileIdentitiesMatch({ handle: stored, path: null }, { handle: sameName, path: null })
+    ).resolves.toBe(false)
   })
 
-  test('preserves backslashes on POSIX platforms', () => {
-    const restore = overridePlatform('linux')
-    try {
-      expect(normalizeFilePath('/Users/joeyc/my\\file.fig')).toBe('/Users/joeyc/my\\file.fig')
-    } finally {
-      restore()
-    }
-  })
-
-  test('converts backslashes to slashes on Windows', () => {
-    const restore = overridePlatform('win32')
-    try {
-      expect(normalizeFilePath('C:\\Users\\joeyc\\file.fig')).toBe('C:/Users/joeyc/file.fig')
-    } finally {
-      restore()
-    }
-  })
-
-  test('preserves UNC prefix on Windows', () => {
-    const restore = overridePlatform('win32')
-    try {
-      expect(normalizeFilePath('\\\\server\\share\\file.fig')).toBe('//server/share/file.fig')
-      expect(normalizeFilePath('\\\\server\\share\\dir\\')).toBe('//server/share/dir')
-    } finally {
-      restore()
-    }
-  })
-
-  test('preserves case when lexical paths cannot prove filesystem semantics', () => {
-    let restore = overridePlatform('darwin')
-    try {
-      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/Users/JoeyC/File.fig')
-    } finally {
-      restore()
-    }
-    restore = overridePlatform('win32')
-    try {
-      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/Users/JoeyC/File.fig')
-    } finally {
-      restore()
-    }
-  })
-
-  test('normalizes URL hosts and fragments without folding path case', () => {
-    const restore = overridePlatform('win32')
-    try {
-      expect(normalizeFilePath('https://EXAMPLE.test/Design.fig#first')).toBe(
-        'https://example.test/Design.fig'
-      )
-      expect(normalizeFilePath('https://example.test/Design.fig#second')).toBe(
-        'https://example.test/Design.fig'
-      )
-      expect(normalizeFilePath('https://example.test/design.fig')).not.toBe(
-        normalizeFilePath('https://example.test/Design.fig')
-      )
-    } finally {
-      restore()
-    }
-  })
-
-  test('keeps case on Linux', () => {
-    const restore = overridePlatform('linux')
-    try {
-      expect(normalizeFilePath('/Users/JoeyC/File.fig')).toBe('/Users/JoeyC/File.fig')
-    } finally {
-      restore()
-    }
-  })
-
-  test('preserves the Windows extended-length namespace on local paths', () => {
-    const restore = overridePlatform('win32')
-    try {
-      expect(normalizeFilePath('\\\\?\\C:\\Users\\joeyc\\file.fig')).toBe(
-        '//?/C:/Users/joeyc/file.fig'
-      )
-      expect(normalizeFilePath('\\\\?\\C:\\Users\\JOEYC\\file.fig\\')).toBe(
-        '//?/C:/Users/JOEYC/file.fig'
-      )
-    } finally {
-      restore()
-    }
-  })
-
-  test('preserves the Windows extended-length namespace on UNC paths', () => {
-    const restore = overridePlatform('win32')
-    try {
-      expect(normalizeFilePath('\\\\?\\UNC\\server\\share\\file.fig')).toBe(
-        '//?/UNC/server/share/file.fig'
-      )
-      expect(normalizeFilePath('\\\\?\\UNC\\Server\\Share\\dir\\')).toBe('//?/UNC/Server/Share/dir')
-    } finally {
-      restore()
-    }
-  })
-})
-
-describe('findExistingTab', () => {
-  beforeEach(setupGlobals)
-  afterEach(teardownGlobals)
-
-  test('matches by normalized path on POSIX', async () => {
-    const restore = overridePlatform('linux')
-    try {
-      const tab = makeTab()
-      tab.store.setDocumentSource('file.fig', 'pen', undefined, '/Users/joeyc/file.fig')
-
-      const found = await findExistingTab([tab], undefined, '/Users//joeyc/file.fig')
-      expect(found?.id).toBe(tab.id)
-
-      const notFound = await findExistingTab([tab], undefined, '/other/file.fig')
-      expect(notFound).toBeNull()
-    } finally {
-      restore()
-    }
-  })
-
-  test('matches by normalized Windows path', async () => {
-    const restore = overridePlatform('win32')
-    try {
-      const tab = makeTab()
-      tab.store.setDocumentSource('file.fig', 'pen', undefined, 'C:/Users/joeyc/file.fig')
-
-      const found = await findExistingTab([tab], undefined, 'C:\\\\Users\\\\joeyc\\\\file.fig')
-      expect(found?.id).toBe(tab.id)
-    } finally {
-      restore()
-    }
-  })
-
-  test('matches by FileSystemFileHandle.isSameEntry', async () => {
-    const known = makeHandle('file.fig', async () => true)
-    const other = makeHandle('other.fig', async () => false)
-
-    const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', known)
-
-    const found = await findExistingTab([tab], known)
-    expect(found?.id).toBe(tab.id)
-
-    const notFound = await findExistingTab([tab], other)
-    expect(notFound).toBeNull()
-  })
-
-  test('uses exact handle identity without consulting a failing host comparison', async () => {
-    const exact = {
-      kind: 'file',
-      name: 'exact.fig',
-      isSameEntry: vi.fn(() => {
-        throw new Error('host comparison should not run')
-      })
-    } as FileSystemFileHandle
-    const tab = makeTab()
-    tab.store.setDocumentSource('exact.fig', 'pen', exact)
-
-    await expect(findExistingTab([tab], exact)).resolves.toBe(tab)
-    expect(exact.isSameEntry).not.toHaveBeenCalled()
-  })
-
-  test('treats a rejected isSameEntry as "not the same file"', async () => {
-    const stored = makeHandle('file.fig', async () => false)
-    const incoming = makeHandle('file.fig', async () => {
-      throw new Error('permission denied')
-    })
-    const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', stored)
-
-    const found = await findExistingTab([tab], incoming)
-    expect(found).toBeNull()
-  })
-
-  test('does not deduplicate by file name alone', async () => {
-    const tab = makeTab()
-    tab.store.setDocumentSource('design.fig', 'pen')
-
-    const found = await findExistingTab([tab], undefined, undefined)
-    expect(found).toBeNull()
-  })
-
-  test('prefers path identity over a mismatched handle when both are available', async () => {
-    const handle = makeHandle('file.fig', async () => false)
-    const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', handle, '/a/file.fig')
-
-    const byBoth = await findExistingTab([tab], handle, '/a/file.fig')
-    expect(byBoth?.id).toBe(tab.id)
-  })
-
-  test('falls back to handle identity when the path does not match', async () => {
-    const handle = makeHandle('file.fig', async () => true)
-    const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', handle)
-
-    const found = await findExistingTab([tab], handle, '/a/different/file.fig')
-    expect(found?.id).toBe(tab.id)
-  })
-
-  test('returns null when path misses and handle check throws', async () => {
-    const stored = makeHandle('file.fig', async () => false)
-    const incoming = makeHandle('file.fig', async () => {
-      throw new Error('permission denied')
-    })
-    const tab = makeTab()
-    tab.store.setDocumentSource('file.fig', 'pen', stored)
-
-    const found = await findExistingTab([tab], incoming, '/a/different/file.fig')
-    expect(found).toBeNull()
-  })
-})
-
-describe('createFileOpenLock', () => {
-  beforeEach(setupGlobals)
-  afterEach(teardownGlobals)
-
-  test('serializes duplicate opens so the second switches to the first-created tab', async () => {
-    const tabs: Tab[] = []
-    const lock = createFileOpenLock(() => tabs)
-
-    const operation = vi.fn(async (existingTab: Tab | null) => {
-      if (existingTab) return 'switch'
-      // Simulate async load and then register the tab.
-      await Promise.resolve()
-      const tab = makeTab()
-      tab.store.setDocumentSource('design.fig', 'pen', undefined, '/a/design.fig')
-      tabs.push(tab)
-      return 'opened'
-    })
-
-    const [first, second] = await Promise.all([
-      lock.run(undefined, '/a/design.fig', operation),
-      lock.run(undefined, '/a/design.fig', operation)
-    ])
-
-    expect(first).toBe('opened')
-    expect(second).toBe('switch')
-    expect(tabs).toHaveLength(1)
-    expect(operation).toHaveBeenCalledTimes(2)
-  })
-
-  test('lets a second open retry when the first attempt fails', async () => {
-    const tabs: Tab[] = []
-    const lock = createFileOpenLock(() => tabs)
-
-    let attempts = 0
-    const operation = vi.fn(async () => {
-      attempts++
-      await Promise.resolve()
-      throw new Error(`attempt ${attempts} failed`)
-    })
-
-    await expect(lock.run(undefined, '/a/design.fig', operation)).rejects.toThrow(
-      'attempt 1 failed'
-    )
-    await expect(lock.run(undefined, '/a/design.fig', operation)).rejects.toThrow(
-      'attempt 2 failed'
-    )
-
-    expect(attempts).toBe(2)
-    expect(operation).toHaveBeenCalledTimes(2)
-  })
-
-  test('serializes concurrent opens for different keys', async () => {
-    const tabs: Tab[] = []
-    const lock = createFileOpenLock(() => tabs)
-
-    let inflight = 0
-    let maxInflight = 0
-
-    const operation = async (existingTab: Tab | null, key: string) => {
-      if (existingTab) return 'switch'
-      inflight++
-      maxInflight = Math.max(maxInflight, inflight)
-      await Promise.resolve()
-      const tab = makeTab()
-      tab.store.setDocumentSource(`${key}.fig`, 'pen', undefined, `/a/${key}.fig`)
-      tabs.push(tab)
-      inflight--
-      return 'opened'
-    }
-
-    const [first, second] = await Promise.all([
-      lock.run(undefined, '/a/one.fig', (existing) => operation(existing, 'one')),
-      lock.run(undefined, '/a/two.fig', (existing) => operation(existing, 'two'))
-    ])
-
-    expect(first).toBe('opened')
-    expect(second).toBe('opened')
-    expect(tabs).toHaveLength(2)
-    // Global serialization means only one open is in flight at a time.
-    expect(maxInflight).toBe(1)
-  })
-
-  test('does not return a tab removed during asynchronous identity proof', async () => {
+  test('ignores an asynchronous handle match after the tab source changes', async () => {
     const comparison = Promise.withResolvers<boolean>()
-    const stored = makeHandle('stored.fig', async () => false)
-    const incoming = makeHandle('incoming.fig', async () => comparison.promise)
-    const tab = makeTab()
-    tab.store.setDocumentSource('stored.fig', 'pen', stored)
-    const tabs = [tab]
-    const lock = createFileOpenLock(() => tabs)
-    const operation = vi.fn(async (existing: Tab | null) => existing)
-
-    const result = lock.run(incoming, undefined, operation)
-    tabs.splice(0)
-    comparison.resolve(true)
-
-    await expect(result).resolves.toBeNull()
-    expect(operation).toHaveBeenCalledWith(null)
-  })
-
-  test('rescans when a candidate publishes the incoming identity during comparison', async () => {
-    const comparisonStarted = Promise.withResolvers<undefined>()
-    const comparison = Promise.withResolvers<boolean>()
-    const stored = makeHandle('stored.fig', async () => false)
-    const incoming = makeHandle('incoming.fig', async () => {
-      comparisonStarted.resolve(undefined)
+    const started = Promise.withResolvers<undefined>()
+    const storedHandle = makeHandle('stored.fig', async () => {
+      started.resolve(undefined)
       return comparison.promise
     })
-    const tab = makeTab()
-    tab.store.setDocumentSource('stored.fig', 'pen', stored)
-    const tabs = [tab]
-    const lock = createFileOpenLock(() => tabs)
-    const operation = vi.fn(async (existing: Tab | null) => existing)
+    const incomingHandle = makeHandle('incoming.fig', async () => false)
+    let storedIdentity: DocumentSourceIdentity = { handle: storedHandle, path: null }
+    const tab = { store: { getSourceIdentity: () => storedIdentity } }
 
-    const result = lock.run(incoming, undefined, operation)
-    await comparisonStarted.promise
-    tab.store.setDocumentSource('incoming.fig', 'pen', incoming)
-    comparison.resolve(false)
+    const finding = findTabByFileIdentity([tab], {
+      handle: incomingHandle,
+      path: null
+    })
+    await started.promise
+    storedIdentity = { handle: storedHandle, path: '/other.fig' }
+    comparison.resolve(true)
 
-    await expect(result).resolves.toBe(tab)
-    expect(operation).toHaveBeenCalledWith(tab)
+    await expect(finding).resolves.toBeNull()
   })
 
-  test('rescans when a validated miss becomes a match before the locked decision', async () => {
-    const stored = makeHandle('stored.fig', async () => false)
-    const incoming = makeHandle('incoming.fig', async () => false)
-    const tab = makeTab()
-    tab.store.setDocumentSource('stored.fig', 'pen', stored)
-    const tabs = [tab]
-    const lock = createFileOpenLock(() => tabs)
-    const operation = vi.fn(async (existing: Tab | null) => existing)
-    const finalRevisionRead = Promise.withResolvers<undefined>()
-    const getRevision = tab.store.getSourceIdentityRevision.bind(tab.store)
-    let revisionReads = 0
-    vi.spyOn(tab.store, 'getSourceIdentityRevision').mockImplementation(() => {
-      const revision = getRevision()
-      revisionReads++
-      if (revisionReads === 2) finalRevisionRead.resolve(undefined)
-      return revision
-    })
+  test('finds a tab by path and ignores tabs without stable identity', async () => {
+    const matchedIdentity = { handle: null, path: '/tmp/design.fig' }
+    const matched = {
+      store: { getSourceIdentity: () => matchedIdentity }
+    }
+    const unidentifiedIdentity = { handle: null, path: null }
+    const unidentified = {
+      store: { getSourceIdentity: () => unidentifiedIdentity }
+    }
 
-    const result = lock.run(incoming, undefined, operation)
-    await finalRevisionRead.promise
-    tab.store.updateSourceIdentity('incoming.fig', incoming)
+    await expect(
+      findTabByFileIdentity([unidentified, matched], {
+        handle: null,
+        path: '/tmp/design.fig'
+      })
+    ).resolves.toBe(matched)
+    await expect(
+      findTabByFileIdentity([unidentified], { handle: null, path: null })
+    ).resolves.toBeNull()
+  })
+})
 
-    await expect(result).resolves.toBe(tab)
-    expect(operation).toHaveBeenCalledWith(tab)
+describe('openFileInNewTab deduplication', () => {
+  beforeEach(() => {
+    setupGlobals()
+    vi.spyOn(layoutModule, 'computeAllLayouts').mockReturnValue(undefined)
+    vi.spyOn(figModule, 'readFigFile').mockResolvedValue(new SceneGraph())
+    createTab()
   })
 
-  test('rescans when a validated match changes before the locked decision', async () => {
-    const incoming = makeHandle('incoming.fig', async (other) => other === incoming)
-    const replacement = makeHandle('replacement.fig', async () => false)
-    const tab = makeTab()
-    tab.store.setDocumentSource('incoming.fig', 'pen', incoming)
-    const tabs = [tab]
-    const lock = createFileOpenLock(() => tabs)
-    const operation = vi.fn(async (existing: Tab | null) => existing)
-    const finalRevisionRead = Promise.withResolvers<undefined>()
-    const getRevision = tab.store.getSourceIdentityRevision.bind(tab.store)
-    let revisionReads = 0
-    vi.spyOn(tab.store, 'getSourceIdentityRevision').mockImplementation(() => {
-      const revision = getRevision()
-      revisionReads++
-      if (revisionReads === 2) finalRevisionRead.resolve(undefined)
-      return revision
+  afterEach(() => {
+    vi.restoreAllMocks()
+    Reflect.deleteProperty(globalThis, 'window')
+    Reflect.deleteProperty(globalThis, 'document')
+    Reflect.deleteProperty(globalThis, 'requestAnimationFrame')
+    Reflect.deleteProperty(globalThis, 'cancelAnimationFrame')
+  })
+
+  test('canonicalizes browser URLs before using them as file identity', () => {
+    expect(resolveBrowserFileURL('/design.fig#selection').href).toBe('http://localhost/design.fig')
+  })
+
+  test('activates the existing tab when the same path is opened again', async () => {
+    const initialCount = tabCount()
+    const file = new File([], 'design.fig')
+
+    await openFileInNewTab(file, undefined, '/tmp/design.fig')
+    const openedStore = getActiveStore()
+    await openFileInNewTab(file, undefined, '/tmp/design.fig')
+
+    expect(tabCount()).toBe(initialCount)
+    expect(getActiveStore()).toBe(openedStore)
+    expect(figModule.readFigFile).toHaveBeenCalledTimes(1)
+  })
+
+  test('shares one load between concurrent opens of the same path', async () => {
+    const started = Promise.withResolvers<undefined>()
+    const read = Promise.withResolvers<SceneGraph>()
+    ;(figModule.readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      started.resolve(undefined)
+      return read.promise
     })
+    const initialCount = tabCount()
+    const file = new File([], 'concurrent.fig')
 
-    const result = lock.run(incoming, undefined, operation)
-    await finalRevisionRead.promise
-    tab.store.updateSourceIdentity('replacement.fig', replacement)
+    const first = openFileInNewTab(file, undefined, '/tmp/concurrent.fig')
+    await started.promise
+    const second = openFileInNewTab(file, undefined, '/tmp/concurrent.fig')
+    await Promise.resolve()
 
-    await expect(result).resolves.toBeNull()
-    expect(operation).toHaveBeenCalledWith(null)
+    expect(figModule.readFigFile).toHaveBeenCalledTimes(1)
+    read.resolve(new SceneGraph())
+    await Promise.all([first, second])
+    expect(tabCount()).toBe(initialCount)
+  })
+
+  test('allows different files to load concurrently', async () => {
+    const reads = [Promise.withResolvers<SceneGraph>(), Promise.withResolvers<SceneGraph>()]
+    const bothStarted = Promise.withResolvers<undefined>()
+    let readIndex = 0
+    ;(figModule.readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      const read = reads[readIndex++]
+      if (readIndex === 2) bothStarted.resolve(undefined)
+      return read?.promise ?? Promise.resolve(new SceneGraph())
+    })
+    const initialCount = tabCount()
+
+    const first = openFileInNewTab(new File([], 'first.fig'), undefined, '/tmp/first.fig')
+    const second = openFileInNewTab(new File([], 'second.fig'), undefined, '/tmp/second.fig')
+    await bothStarted.promise
+
+    expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
+    reads[0].resolve(new SceneGraph())
+    reads[1].resolve(new SceneGraph())
+    await Promise.all([first, second])
+    expect(tabCount()).toBe(initialCount + 1)
+  })
+
+  test('removes a failed pending open so the file can be retried', async () => {
+    ;(figModule.readFigFile as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('read failed'))
+      .mockResolvedValueOnce(new SceneGraph())
+
+    await expect(
+      openFileInNewTab(new File([], 'retry.fig'), undefined, '/tmp/retry.fig')
+    ).rejects.toThrow('read failed')
+    await expect(
+      openFileInNewTab(new File([], 'retry.fig'), undefined, '/tmp/retry.fig')
+    ).resolves.toBeUndefined()
+
+    expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
+    expect(getActiveStore().getSourceIdentity().path).toBe('/tmp/retry.fig')
+  })
+
+  test('keeps same-named files distinct without a path or handle', async () => {
+    const initialCount = tabCount()
+    const file = new File([], 'same-name.fig')
+
+    await openFileInNewTab(file)
+    await openFileInNewTab(file)
+
+    expect(tabCount()).toBe(initialCount + 1)
+    expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
   })
 })

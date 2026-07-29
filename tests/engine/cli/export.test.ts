@@ -3,6 +3,8 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { unzipSync } from 'fflate'
+
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 
 import { runOpenPencilCLI } from '#tests/helpers/cli'
@@ -16,7 +18,12 @@ async function createFigFixture() {
   const dir = await mkdtemp(join(tmpdir(), 'open-pencil-export-cli-'))
   const figPath = join(dir, 'card.fig')
   const graph = makeSceneGraph('Export Page')
-  const rect = createRect(graph, firstPageId(graph), {
+  const firstFrame = graph.createNode('FRAME', firstPageId(graph), {
+    name: 'First slide',
+    width: 1280,
+    height: 720
+  })
+  const rect = createRect(graph, firstFrame.id, {
     name: 'Export Card',
     x: 0,
     y: 0,
@@ -31,10 +38,97 @@ async function createFigFixture() {
   rect.paddingBottom = 16
   rect.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 } }]
 
+  const secondPage = graph.addPage('Second Page')
+  const secondFrame = graph.createNode('FRAME', secondPage.id, {
+    name: 'Second slide',
+    width: 1280,
+    height: 720
+  })
+  createRect(graph, secondFrame.id, {
+    name: 'Second Card',
+    x: 0,
+    y: 0,
+    width: 120,
+    height: 60
+  })
+
   const result = await io.writeDocument('fig', graph)
   await Bun.write(figPath, result.data as Uint8Array)
   return { dir, figPath }
 }
+
+test('FIG export preserves the whole document by default', async () => {
+  const { dir, figPath } = await createFigFixture()
+  const output = join(dir, 'whole.fig')
+
+  const { stdout, stderr, exitCode } = await runOpenPencilCLI([
+    'export',
+    figPath,
+    '--format',
+    'fig',
+    '--output',
+    output
+  ])
+
+  expect(stderr).toBe('')
+  expect(exitCode).toBe(0)
+  expect(stdout).toContain('Target: whole document')
+
+  const { graph } = await io.readDocument({
+    name: output,
+    data: new Uint8Array(await Bun.file(output).arrayBuffer())
+  })
+  expect(graph.getPages()).toHaveLength(3)
+  expect(graph.getPages().map((page) => page.name)).toContain('Second Page')
+})
+
+test('PPTX export includes slides from every page by default', async () => {
+  const { dir, figPath } = await createFigFixture()
+  const output = join(dir, 'whole.pptx')
+
+  const { stdout, stderr, exitCode } = await runOpenPencilCLI([
+    'export',
+    figPath,
+    '--format',
+    'pptx',
+    '--output',
+    output
+  ])
+
+  expect(stderr).toBe('')
+  expect(exitCode).toBe(0)
+  expect(stdout).toContain('Target: whole document')
+
+  const files = unzipSync(new Uint8Array(await Bun.file(output).arrayBuffer()))
+  expect(files['ppt/slides/slide1.xml']).toBeDefined()
+  expect(files['ppt/slides/slide2.xml']).toBeDefined()
+  expect(files['ppt/slides/slide3.xml']).toBeUndefined()
+})
+
+test('FIG export requires an explicit page for a partial archive', async () => {
+  const { dir, figPath } = await createFigFixture()
+  const output = join(dir, 'page.fig')
+
+  const { stderr, exitCode } = await runOpenPencilCLI([
+    'export',
+    figPath,
+    '--format',
+    'fig',
+    '--page',
+    'Second Page',
+    '--output',
+    output
+  ])
+
+  expect(stderr).toBe('')
+  expect(exitCode).toBe(0)
+
+  const { graph } = await io.readDocument({
+    name: output,
+    data: new Uint8Array(await Bun.file(output).arrayBuffer())
+  })
+  expect(graph.getPages().map((page) => page.name)).toEqual(['Second Page'])
+})
 
 test('export CLI writes HTML with inline styles by default', async () => {
   const { dir, figPath } = await createFigFixture()

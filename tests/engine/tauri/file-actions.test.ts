@@ -2,9 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { saveExportedFile } from '@/app/document/export/files'
 import { watchTauriFile } from '@/app/document/io/watch-targets'
-import { createEditorStore } from '@/app/editor/session'
 import { chooseTauriOpenPath, readTauriDesignFile } from '@/app/shell/menu/files'
-import { findExistingTab } from '@/app/tabs/identity'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'
 
@@ -14,72 +12,6 @@ afterEach(async () => {
 })
 
 describe('Tauri file actions', () => {
-  test('uses native existing-file identity for different path representations', async () => {
-    await mockTauriIPC((cmd, args) => {
-      expect(cmd).toBe('is_same_existing_native_file')
-      expect(args).toEqual({ firstPath: '/aliases/design.fig', secondPath: '/real/design.fig' })
-      return true
-    })
-    const store = createEditorStore()
-    store.setDocumentSource('design.fig', 'fig', undefined, '/real/design.fig')
-    const tab = { id: 'native-path-tab', store }
-
-    await expect(findExistingTab([tab], undefined, '/aliases/design.fig')).resolves.toBe(tab)
-    store.dispose()
-  })
-
-  test('requires native proof before matching extended and ordinary Windows paths', async () => {
-    const originalPlatform = process.platform
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-    const ordinaryPath = 'C:\\root\\hidden.\\design.fig'
-    const extendedPath = '\\\\?\\C:\\root\\hidden.\\design.fig'
-    const store = createEditorStore()
-
-    try {
-      await mockTauriIPC((cmd, args) => {
-        expect(cmd).toBe('is_same_existing_native_file')
-        expect(args).toEqual({ firstPath: extendedPath, secondPath: ordinaryPath })
-        return false
-      })
-      store.setDocumentSource('design.fig', 'fig', undefined, ordinaryPath)
-      const tab = { id: 'windows-namespace-tab', store }
-
-      await expect(findExistingTab([tab], undefined, extendedPath)).resolves.toBeNull()
-    } finally {
-      store.dispose()
-      Object.defineProperty(process, 'platform', {
-        value: originalPlatform,
-        configurable: true
-      })
-    }
-  })
-
-  test('requires native proof for Windows drive paths with encoded dot segments', async () => {
-    const originalPlatform = process.platform
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-    const ordinaryPath = 'C://root/design.fig'
-    const encodedDotPath = 'C://root/%2e/design.fig'
-    const store = createEditorStore()
-
-    try {
-      await mockTauriIPC((cmd, args) => {
-        expect(cmd).toBe('is_same_existing_native_file')
-        expect(args).toEqual({ firstPath: encodedDotPath, secondPath: ordinaryPath })
-        return false
-      })
-      store.setDocumentSource('design.fig', 'fig', undefined, ordinaryPath)
-      const tab = { id: 'windows-drive-path-tab', store }
-
-      await expect(findExistingTab([tab], undefined, encodedDotPath)).resolves.toBeNull()
-    } finally {
-      store.dispose()
-      Object.defineProperty(process, 'platform', {
-        value: originalPlatform,
-        configurable: true
-      })
-    }
-  })
-
   test('chooses a design file through plugin-dialog', async () => {
     await mockTauriIPC((cmd, args) => {
       expect(cmd).toBe('plugin:dialog|open')

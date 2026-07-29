@@ -68,22 +68,17 @@ export function createDocumentIOActions(
     setViewportSize,
     fitCurrentPageToViewport,
     getDocumentFilePath: sourceState.getFilePath,
+    getSourceIdentity: sourceState.getSourceIdentity,
+    getStorageBinding: sourceState.getStorageBinding,
     setDocumentSource: sourceActions.setDocumentSource,
+    setStorageDocumentSource: sourceActions.setStorageDocumentSource,
     setPlannedFilePath: sourceActions.setPlannedFilePath,
-    updateSourceIdentity: sourceActions.updateSourceIdentity,
-    clearSourceIdentity: sourceActions.clearSourceIdentity,
     startWatchingCurrentFile: sourceActions.startWatchingCurrentFile,
     disposeDocumentIO: sourceActions.disposeDocumentIO,
     openFigFile,
     openDOMFile,
     importDOMText,
     saveFigFile: sourceActions.saveFigFile,
-    saveFigFileAs: sourceActions.saveFigFileAs,
-
-    // Identity getters for cross-platform file-open deduplication.
-    getSourceHandle: sourceState.getSourceHandle,
-    getSourcePath: sourceState.getSourcePath,
-    getSourceFileName: sourceState.getSourceFileName,
-    getSourceIdentityRevision: sourceState.getSourceIdentityRevision
+    saveFigFileAs: sourceActions.saveFigFileAs
   }
 }
