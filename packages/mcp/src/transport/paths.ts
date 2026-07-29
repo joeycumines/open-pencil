@@ -66,7 +66,19 @@ async function getPlatformDir(): Promise<string> {
   }
 
   await mkdir(dir, { recursive: true, mode: 0o700 })
-  if (!isWindows) await chmod(dir, 0o700)
+  if (!isWindows) {
+    try {
+      await chmod(dir, 0o700)
+    } catch (err) {
+      // The directory may already exist and be owned by another process
+      // (e.g. ~/Library/Application Support/OpenPencil on macOS).
+      // Silently accept that we cannot tighten permissions — the mkdir
+      // above already set mode for newly-created directories.
+      if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== 'EPERM') {
+        throw err
+      }
+    }
+  }
   return dir
 }
 
