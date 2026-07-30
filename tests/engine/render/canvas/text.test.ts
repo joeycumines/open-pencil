@@ -19,6 +19,20 @@ import { fontFaceDemand, fontResolver, missingGlyphCharacters } from '#core/text
 import { expectDefined } from '#tests/helpers/assert'
 import { repoPath } from '#tests/helpers/paths'
 
+/** True if the LFS fixture font file is a real binary (not a Git LFS pointer stub). */
+function fixtureFontAvailable(relativePath: string): boolean {
+  try {
+    const file = Bun.file(repoPath(relativePath))
+    // Real font files are >10KB; LFS pointer stubs are ~130 bytes
+    return file.size > 1024
+  } catch {
+    return false
+  }
+}
+
+const hasCJKFixture = fixtureFontAvailable('tests/fixtures/fonts/NotoSansSC-Regular.ttf')
+const hasArabicFixture = fixtureFontAvailable('tests/fixtures/fonts/NotoNaskhArabic-Regular.ttf')
+
 function createMockCanvas() {
   return {
     drawParagraph: mock(() => undefined),
@@ -330,7 +344,7 @@ describe('renderText headless visual', () => {
     }
   })
 
-  test('does not require fallback families when the primary font covers CJK glyphs', async () => {
+  test.skipIf(!hasCJKFixture)('does not require fallback families when the primary font covers CJK glyphs', async () => {
     const notoPath = repoPath('tests/fixtures/fonts/NotoSansSC-Regular.ttf')
     const notoData = await Bun.file(notoPath).arrayBuffer()
     fontManager.markLoaded('Noto Sans SC', 'Regular', notoData)
@@ -350,7 +364,7 @@ describe('renderText headless visual', () => {
     }
   })
 
-  test('renders CJK text via fallback font through paragraph shaper', async () => {
+  test.skipIf(!hasCJKFixture)('renders CJK text via fallback font through paragraph shaper', async () => {
     const ck = await initCanvasKit()
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
@@ -493,7 +507,7 @@ describe('renderText headless visual', () => {
     expect(blueTextPixels).toBeGreaterThan(40)
   })
 
-  test('renders Arabic text via fallback font through paragraph shaper', async () => {
+  test.skipIf(!hasArabicFixture)('renders Arabic text via fallback font through paragraph shaper', async () => {
     const ck = await initCanvasKit()
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
