@@ -14,6 +14,19 @@ import { deduplicateNodeChangePluginData } from '#core/kiwi'
 
 import { expectDefined } from '#tests/helpers/assert'
 
+/** True if the LFS fixture file is a real binary (not a Git LFS pointer stub). */
+function fixtureAvailable(relativePath: string): boolean {
+  try {
+    const file = Bun.file(relativePath)
+    // Real files are >10KB; LFS pointer stubs are ~130 bytes
+    return file.size > 1024
+  } catch {
+    return false
+  }
+}
+
+const hasMaterial3Fig = fixtureAvailable('./tests/fixtures/material3.fig')
+
 function doc(): NodeChange {
   return {
     guid: { sessionID: 0, localID: 0 },
@@ -118,24 +131,27 @@ describe('plugin data', () => {
     expect(parsedProxy?.getSharedPluginDataKeys('tokens')).toEqual(['accent'])
   })
 
-  test('preserves plugin relaunch data from imported fig files', async () => {
-    await initCodec()
-    const bytes = new Uint8Array(await Bun.file('./tests/fixtures/material3.fig').arrayBuffer())
-    const graph = await parseFigFile(
-      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    )
-    const nodeWithRelaunch = [...graph.getAllNodes()].find(
-      (node) => node.pluginRelaunchData.length > 0
-    )
+  test.skipIf(!hasMaterial3Fig)(
+    'preserves plugin relaunch data from imported fig files',
+    async () => {
+      await initCodec()
+      const bytes = new Uint8Array(await Bun.file('./tests/fixtures/material3.fig').arrayBuffer())
+      const graph = await parseFigFile(
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      )
+      const nodeWithRelaunch = [...graph.getAllNodes()].find(
+        (node) => node.pluginRelaunchData.length > 0
+      )
 
-    expect(nodeWithRelaunch).toBeDefined()
-    expect(nodeWithRelaunch?.pluginRelaunchData[0]).toMatchObject({
-      pluginId: expect.any(String),
-      command: expect.any(String),
-      message: expect.any(String),
-      isDeleted: expect.any(Boolean)
-    })
-  })
+      expect(nodeWithRelaunch).toBeDefined()
+      expect(nodeWithRelaunch?.pluginRelaunchData[0]).toMatchObject({
+        pluginId: expect.any(String),
+        command: expect.any(String),
+        message: expect.any(String),
+        isDeleted: expect.any(Boolean)
+      })
+    }
+  )
 })
 
 /**
