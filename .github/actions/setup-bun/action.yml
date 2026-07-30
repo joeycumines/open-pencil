@@ -32,7 +32,7 @@ runs:
           rm -f .lfsconfig
           git config --local --unset lfs.url 2>/dev/null || true
           git lfs install --force
-          git lfs pull
+          git lfs pull || :
           git checkout HEAD -- .lfsconfig 2>/dev/null || true
         fi
 
