@@ -1,6 +1,6 @@
 import { expect, expectInViewport, test, useEditorSetup } from '#tests/e2e/fixtures'
 import { expectDefined } from '#tests/helpers/assert'
-import { propertySection } from '#tests/helpers/properties'
+import { propertyItems, propertySection } from '#tests/helpers/properties'
 
 const editor = useEditorSetup()
 
@@ -9,11 +9,11 @@ function designPanel() {
 }
 
 function fillSection() {
-  return editor.page.getByTestId('fill-section')
+  return propertySection(editor.page, 'Fill')
 }
 
 function strokeSection() {
-  return editor.page.getByTestId('stroke-section')
+  return propertySection(editor.page, 'Stroke')
 }
 
 function positionSection() {
@@ -21,7 +21,7 @@ function positionSection() {
 }
 
 function effectsSection() {
-  return editor.page.getByTestId('effects-section')
+  return propertySection(editor.page, 'Effects')
 }
 
 function getNode(id: string) {
@@ -85,13 +85,23 @@ test('position section shows X, Y, rotation inputs', async () => {
 test('fill section appears with default fill', async () => {
   await expect(fillSection()).toBeVisible()
 
-  const fillItems = fillSection().getByTestId('fill-item')
+  const fillItems = propertyItems(editor.page, 'fills')
   await expect(fillItems.first()).toBeVisible()
 })
 
-test('fill item shows color swatch', async () => {
+test('fill item shows color swatch and full hex value', async () => {
   const swatch = fillSection().getByTestId('fill-picker-swatch').first()
   await expect(swatch).toBeVisible()
+
+  const fillItem = propertyItems(editor.page, 'fills').first()
+  await expect(fillItem.getByRole('button', { name: 'Remove fill' })).toBeVisible()
+  const hex = fillItem.locator('[data-property="color-hex"]')
+  const metrics = await hex.evaluate((element) => ({
+    fits: element.scrollWidth <= element.clientWidth,
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth
+  }))
+  expect(metrics.fits, JSON.stringify(metrics)).toBe(true)
 })
 
 test('clicking color area changes fill color', async () => {
@@ -123,12 +133,15 @@ test('clicking color area changes fill color', async () => {
 })
 
 test('adding a stroke creates stroke section item', async () => {
-  const addBtn = strokeSection().getByTestId('stroke-section-add')
+  const addBtn = strokeSection().getByRole('button', { name: 'Add stroke' })
   await addBtn.click()
   await editor.canvas.waitForRender()
 
-  const strokeItems = strokeSection().getByTestId('stroke-item')
+  const strokeItems = propertyItems(editor.page, 'strokes')
   await expect(strokeItems.first()).toBeVisible()
+  await expect(strokeItems.first().getByRole('button', { name: 'Remove stroke' })).toBeVisible()
+  const hex = strokeItems.first().locator('[data-property="color-hex"]')
+  expect(await hex.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
 
   const id = await getSelectedId()
   const node = await getNode(expectDefined(id, 'selected id'))
@@ -136,11 +149,11 @@ test('adding a stroke creates stroke section item', async () => {
 })
 
 test('adding an effect creates effect item', async () => {
-  const addBtn = effectsSection().getByTestId('effects-section-add')
+  const addBtn = effectsSection().getByRole('button', { name: 'Add effect' })
   await addBtn.click()
   await editor.canvas.waitForRender()
 
-  const effectItems = effectsSection().getByTestId('effect-item')
+  const effectItems = propertyItems(editor.page, 'effects')
   await expect(effectItems.first()).toBeVisible()
 
   const id = await getSelectedId()
@@ -148,12 +161,36 @@ test('adding an effect creates effect item', async () => {
   expect(expectDefined(node, 'node node').effects.length).toBe(1)
 })
 
+test('effect settings expand semantically and row remove stays visible', async () => {
+  const effectItem = propertyItems(editor.page, 'effects').first()
+  const expand = effectItem.locator('[data-property="effect-expand"]')
+  await expect(expand).toHaveAttribute('aria-expanded', 'false')
+  await expand.click()
+  await expect(expand).toHaveAttribute('aria-expanded', 'true')
+  await expect(editor.page.locator('[data-slot="effect-settings"]')).toBeVisible()
+
+  const remove = effectItem.getByRole('button', { name: 'Remove effect' })
+  await expect(remove).toHaveCSS('opacity', '1')
+  await editor.page.getByRole('tab', { name: 'Design' }).focus()
+  await editor.page.mouse.move(0, 0)
+  await expect(remove).toHaveCSS('opacity', '1')
+})
+
+test('paint effect and export rows share compact visual anatomy', async () => {
+  const exportSection = propertySection(editor.page, 'Export')
+  await exportSection.getByRole('button', { name: 'Add export' }).click()
+  await editor.canvas.waitForRender()
+  await editor.page.mouse.move(0, 0)
+
+  await expect(designPanel()).toHaveScreenshot('design-panel-paint-effects-export.png')
+})
+
 test('adding a second fill shows two fill items', async () => {
-  const addBtn = fillSection().getByTestId('fill-section-add')
+  const addBtn = fillSection().getByRole('button', { name: 'Add fill' })
   await addBtn.click()
   await editor.canvas.waitForRender()
 
-  const fillItems = fillSection().getByTestId('fill-item')
+  const fillItems = propertyItems(editor.page, 'fills')
   expect(await fillItems.count()).toBe(2)
 
   const id = await getSelectedId()
@@ -219,15 +256,16 @@ test('mask action toggles mask section and mask type control', async () => {
   const maskAction = editor.page.getByTestId('selection-toggle-mask')
   await expect(maskAction).toBeVisible()
 
-  await expect(editor.page.getByTestId('mask-section')).toHaveCount(0)
+  await expect(propertySection(editor.page, 'Mask')).toHaveCount(0)
   await maskAction.click()
   await editor.canvas.waitForRender()
 
   let node = await getNode(expectDefined(id, 'selected id'))
   expect(expectDefined(node, 'node').isMask).toBe(true)
-  await expect(editor.page.getByTestId('mask-section')).toBeVisible()
+  const maskSection = propertySection(editor.page, 'Mask')
+  await expect(maskSection).toBeVisible()
 
-  const maskTypeSelect = editor.page.getByTestId('mask-type-select')
+  const maskTypeSelect = maskSection.getByRole('combobox', { name: 'Mask type' })
   await maskTypeSelect.click()
   await editor.page.getByRole('option', { name: 'Luminance' }).click()
   await editor.canvas.waitForRender()
@@ -239,7 +277,7 @@ test('mask action toggles mask section and mask type control', async () => {
   await editor.canvas.waitForRender()
   node = await getNode(expectDefined(id, 'selected id'))
   expect(expectDefined(node, 'node').isMask).toBe(false)
-  await expect(editor.page.getByTestId('mask-section')).toHaveCount(0)
+  await expect(propertySection(editor.page, 'Mask')).toHaveCount(0)
 })
 
 test('visibility toggle in appearance section works', async () => {
@@ -269,7 +307,9 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
   const id = await getSelectedId()
   expect(id).toBeTruthy()
 
-  const fillButton = editor.page.getByTestId('fill-visibility-0')
+  const fillButton = propertyItems(editor.page, 'fills')
+    .first()
+    .getByRole('button', { name: 'Toggle visibility' })
   await expect(fillButton).toBeVisible()
 
   const initial = await getNode(expectDefined(id, 'selected id'))
@@ -277,7 +317,7 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
 
   await fillButton.click()
   await editor.canvas.waitForRender()
-  await expect(fillButton).toHaveAttribute('data-visible', 'false')
+  await expect(fillButton).toHaveAttribute('aria-pressed', 'false')
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').fills[0]
       ?.visible
@@ -285,7 +325,7 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
 
   await fillButton.click()
   await editor.canvas.waitForRender()
-  await expect(fillButton).toHaveAttribute('data-visible', 'true')
+  await expect(fillButton).toHaveAttribute('aria-pressed', 'true')
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').fills[0]
       ?.visible
@@ -302,11 +342,13 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
       ?.visible
   ).toBe(true)
 
-  const strokeAddButton = strokeSection().getByTestId('stroke-section-add')
+  const strokeAddButton = strokeSection().getByRole('button', { name: 'Add stroke' })
   await strokeAddButton.click()
   await editor.canvas.waitForRender()
 
-  const strokeButton = editor.page.getByTestId('stroke-visibility-0')
+  const strokeButton = propertyItems(editor.page, 'strokes')
+    .first()
+    .getByRole('button', { name: 'Toggle visibility' })
   await expect(strokeButton).toBeVisible()
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').strokes[0]
@@ -315,7 +357,7 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
 
   await strokeButton.click()
   await editor.canvas.waitForRender()
-  await expect(strokeButton).toHaveAttribute('data-visible', 'false')
+  await expect(strokeButton).toHaveAttribute('aria-pressed', 'false')
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').strokes[0]
       ?.visible
@@ -323,7 +365,7 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
 
   await strokeButton.click()
   await editor.canvas.waitForRender()
-  await expect(strokeButton).toHaveAttribute('data-visible', 'true')
+  await expect(strokeButton).toHaveAttribute('aria-pressed', 'true')
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').strokes[0]
       ?.visible
@@ -340,11 +382,13 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
       ?.visible
   ).toBe(true)
 
-  const effectAddButton = effectsSection().getByTestId('effects-section-add')
+  const effectAddButton = effectsSection().getByRole('button', { name: 'Add effect' })
   await effectAddButton.click()
   await editor.canvas.waitForRender()
 
-  const effectButton = editor.page.getByTestId('effect-visibility-0')
+  const effectButton = propertyItems(editor.page, 'effects')
+    .first()
+    .getByRole('button', { name: 'Toggle visibility' })
   await expect(effectButton).toBeVisible()
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').effects[0]
@@ -353,7 +397,7 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
 
   await effectButton.click()
   await editor.canvas.waitForRender()
-  await expect(effectButton).toHaveAttribute('data-visible', 'false')
+  await expect(effectButton).toHaveAttribute('aria-pressed', 'false')
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').effects[0]
       ?.visible
@@ -361,7 +405,7 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
 
   await effectButton.click()
   await editor.canvas.waitForRender()
-  await expect(effectButton).toHaveAttribute('data-visible', 'true')
+  await expect(effectButton).toHaveAttribute('aria-pressed', 'true')
   expect(
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').effects[0]
       ?.visible

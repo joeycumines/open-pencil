@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
-import { providerRequiresCustomModelID, resolveLanguageModelID } from '@/app/ai/chat/model'
+import { AI_PROVIDERS } from '@open-pencil/core/constants'
+
+import { resolveLanguageModelID } from '@/app/ai/chat/model'
 import { normalizeOpenRouterModel } from '@/app/ai/chat/provider-models'
+import { modelProviderAdapter } from '@/app/ai/providers/registry'
 
 describe('resolveLanguageModelID', () => {
   test('uses the selected OpenRouter model when no custom model is configured', () => {
@@ -25,22 +28,14 @@ describe('resolveLanguageModelID', () => {
   })
 })
 
-describe('providerRequiresCustomModelID', () => {
-  test('lets OpenRouter use the selected model when the custom model field is empty', () => {
-    expect(providerRequiresCustomModelID('openrouter', { supportsCustomModel: true })).toBe(false)
-  })
-
-  test('requires custom model IDs for compatible providers without curated model lists', () => {
-    expect(providerRequiresCustomModelID('openai-compatible', { supportsCustomModel: true })).toBe(
-      true
+describe('model provider registry', () => {
+  test('registers every direct provider without handling ACP agents as models', () => {
+    for (const provider of AI_PROVIDERS) {
+      expect(modelProviderAdapter(provider.id).create).toBeFunction()
+    }
+    expect(() => modelProviderAdapter('acp:claude-code')).toThrow(
+      'ACP providers do not use direct API models'
     )
-    expect(
-      providerRequiresCustomModelID('anthropic-compatible', { supportsCustomModel: true })
-    ).toBe(true)
-  })
-
-  test('does not require a custom model for fixed-model providers', () => {
-    expect(providerRequiresCustomModelID('anthropic', {})).toBe(false)
   })
 })
 

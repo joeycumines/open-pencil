@@ -66,11 +66,14 @@ export function useSelectionCapabilities() {
     canGoToMainComponent: computed(() => selection.isInstance.value),
     canCreateInstance: computed(() => selectedNode.value?.type === 'COMPONENT'),
     canMoveToPage: useSceneComputed(() => hasSelection.value && editor.graph.getPages().length > 1),
+    canSetOpacity: computed(() => hasSelection.value),
     canSelectAll: useSceneComputed(
       () => editor.graph.getChildren(editor.state.currentPageId).length > 0
     ),
-    canUndo: useSceneComputed(() => editor.undo.canUndo),
-    canRedo: useSceneComputed(() => editor.undo.canRedo),
+    // In vector edit mode, undo/redo route to the session-local history —
+    // keep the commands enabled so the shortcut reaches them.
+    canUndo: useSceneComputed(() => editor.state.nodeEditState != null || editor.undo.canUndo),
+    canRedo: useSceneComputed(() => editor.state.nodeEditState != null || editor.undo.canRedo),
     canZoomToSelection: computed(() => hasSelection.value)
   }
 }

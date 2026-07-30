@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { useEventListener } from '@vueuse/core'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useEventListener, useTimeoutFn } from '@vueuse/core'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import { useTooltipUI } from '@/components/ui/tooltip'
 
 const TOOLTIP_OPEN_DELAY_MS = 400
 const TOOLTIP_SIDE_OFFSET = 4
 const TOOLTIP_VIEWPORT_PADDING = 8
+const TOOLTIP_CLAIM_EVENT = 'open-pencil:tooltip-claim'
 
 type TooltipSide = 'top' | 'bottom' | 'left' | 'right'
 
@@ -26,7 +27,6 @@ const triggerRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
 const open = ref(false)
 const position = ref({ x: 0, y: 0 })
-let openTimer: ReturnType<typeof setTimeout> | undefined
 
 const canOpen = computed(() => Boolean(label) && !disabled)
 const contentStyle = computed(() => ({
@@ -34,11 +34,14 @@ const contentStyle = computed(() => ({
   top: `${position.value.y}px`
 }))
 
-function clearOpenTimer() {
-  if (!openTimer) return
-  clearTimeout(openTimer)
-  openTimer = undefined
-}
+const { start: startOpenTimer, stop: stopOpenTimer } = useTimeoutFn(
+  () => {
+    open.value = true
+    void nextTick(refreshPosition)
+  },
+  TOOLTIP_OPEN_DELAY_MS,
+  { immediate: false }
+)
 
 function anchorElement() {
   const root = triggerRef.value
@@ -91,16 +94,23 @@ function refreshPosition() {
 
 function show() {
   if (!canOpen.value) return
-  clearOpenTimer()
-  openTimer = setTimeout(() => {
-    open.value = true
-    void nextTick(refreshPosition)
-  }, TOOLTIP_OPEN_DELAY_MS)
+  document.dispatchEvent(
+    new CustomEvent(TOOLTIP_CLAIM_EVENT, {
+      detail: triggerRef.value
+    })
+  )
+  stopOpenTimer()
+  startOpenTimer()
 }
 
 function hide() {
-  clearOpenTimer()
+  stopOpenTimer()
   open.value = false
+}
+
+function isNestedTooltipEvent(event: PointerEvent | FocusEvent) {
+  const target = event.target
+  return target instanceof Element && target.closest('[data-tooltip-trigger]') !== triggerRef.value
 }
 
 function containsRelatedTarget(event: PointerEvent | FocusEvent) {
@@ -109,6 +119,10 @@ function containsRelatedTarget(event: PointerEvent | FocusEvent) {
 }
 
 function onPointerOver(event: PointerEvent) {
+  if (isNestedTooltipEvent(event)) {
+    hide()
+    return
+  }
   if (containsRelatedTarget(event)) return
   show()
 }
@@ -119,6 +133,10 @@ function onPointerOut(event: PointerEvent) {
 }
 
 function onFocusIn(event: FocusEvent) {
+  if (isNestedTooltipEvent(event)) {
+    hide()
+    return
+  }
   if (containsRelatedTarget(event)) return
   show()
 }
@@ -132,21 +150,26 @@ function onPointerDown() {
   hide()
 }
 
+function onTooltipClaim(event: Event) {
+  if (!(event instanceof CustomEvent) || event.detail === triggerRef.value) return
+  hide()
+}
+
 useEventListener(window, 'resize', refreshPosition)
 useEventListener(window, 'scroll', refreshPosition, { capture: true, passive: true })
 useEventListener(document, 'pointerdown', hide, { capture: true })
 useEventListener(document, 'click', hide, { capture: true })
+useEventListener(document, TOOLTIP_CLAIM_EVENT, onTooltipClaim)
 
 watch(canOpen, (value) => {
   if (!value) hide()
 })
-
-onBeforeUnmount(hide)
 </script>
 
 <template>
   <span
     ref="triggerRef"
+    data-tooltip-trigger
     class="contents"
     @focusin="onFocusIn"
     @focusout="onFocusOut"

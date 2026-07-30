@@ -62,6 +62,7 @@ test('draw shape and right-click selects it', async () => {
 
   expect(await getSelectedCount()).toBe(1)
   await expect(contextMenu()).toBeVisible()
+  await editor.page.keyboard.press('Escape')
 })
 
 test('context menu shows expected items', async () => {
@@ -228,13 +229,15 @@ test('outline stroke is disabled for fill-only shapes', async () => {
 })
 
 test('Copy/Paste as submenu exists', async () => {
-  await rightClickShape(130, 130)
+  await editor.canvas.clearCanvas()
+  await editor.canvas.drawRect(200, 200, 120, 80)
+  await editor.canvas.waitForRender()
+  await rightClickShape(250, 230)
 
   const submenuTrigger = contextItem('context-copy-paste-as')
   await expect(submenuTrigger).toBeVisible()
 
-  await submenuTrigger.hover()
-  await editor.page.waitForTimeout(300)
+  await submenuTrigger.click({ force: true })
 
   await expect(contextItem('context-copy-as-svg')).toBeVisible()
   await expect(contextItem('context-copy-as-jsx')).toBeVisible()

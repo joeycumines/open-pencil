@@ -2,7 +2,10 @@ import { isEqual } from 'es-toolkit/predicate'
 
 import type { SceneGraph, SceneNode } from './'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from './copy'
+import type { NodeCloneMode } from './copy'
 import { invalidatesFigmaDerivedTextGlyphs, invalidatesTextPicture } from './text-picture'
+
+export type { NodeCloneMode } from './copy'
 
 const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'width',
@@ -41,7 +44,8 @@ const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'borderRightWeight',
   'borderBottomWeight',
   'borderLeftWeight',
-  'boundVariables'
+  'boundVariables',
+  'variableModes'
 ]
 
 const INSTANCE_TEXT_SYNC_PROPS = [
@@ -77,6 +81,8 @@ function copyProp(
   } else if (key === 'boundVariables') {
     // Shallow copy the binding map — values are variable IDs (strings), not objects
     setSceneProp(target, key, { ...source.boundVariables })
+  } else if (key === 'variableModes') {
+    setSceneProp(target, key, { ...source.variableModes })
   } else if (key === 'gridPosition') {
     // Shallow copy the grid position object — all fields are primitives
     setSceneProp(target, key, source.gridPosition ? { ...source.gridPosition } : null)
@@ -84,16 +90,6 @@ function copyProp(
     const value = source[key]
     setSceneProp(target, key, Array.isArray(value) ? structuredClone(value) : value)
   }
-}
-
-function copyPropIfChanged(
-  target: Partial<SceneNode> | SceneNode,
-  source: SceneNode,
-  key: keyof SceneNode
-): boolean {
-  if (isEqual(target[key], source[key])) return false
-  copyProp(target, source, key)
-  return true
 }
 
 function clearTextDerivedDataForProp(target: SceneNode, key: keyof SceneNode): void {
@@ -105,71 +101,14 @@ function clearTextDerivedDataForProp(target: SceneNode, key: keyof SceneNode): v
   }
 }
 
-function cloneChildrenWithMapping(
-  graph: SceneGraph,
-  sourceParentId: string,
-  destParentId: string
-): void {
-  const sourceParent = graph.nodes.get(sourceParentId)
-  if (!sourceParent) return
-
-  for (const childId of sourceParent.childIds) {
-    const src = graph.nodes.get(childId)
-    if (!src) continue
-
-    const clone = graph.createNode(src.type, destParentId, cloneNodeProps(src, childId))
-
-    if (src.childIds.length > 0) {
-      cloneChildrenWithMapping(graph, childId, clone.id)
-    }
-  }
-}
-
-function buildInstanceChildMap(graph: SceneGraph, instParent: SceneNode): Map<string, SceneNode> {
-  const instChildMap = new Map<string, SceneNode>()
-  for (const childId of instParent.childIds) {
-    const child = graph.nodes.get(childId)
-    if (child?.componentId) instChildMap.set(child.componentId, child)
-  }
-  return instChildMap
-}
-
-function removeStaleInstanceChildren(
-  graph: SceneGraph,
-  instChildMap: Map<string, SceneNode>,
-  compChildIds: readonly string[]
-): void {
-  const compChildIdSet = new Set(compChildIds)
-  for (const [componentChildId, instanceChild] of instChildMap) {
-    if (compChildIdSet.has(componentChildId)) continue
-    graph.deleteNode(instanceChild.id)
-    instChildMap.delete(componentChildId)
-  }
-}
-
-function ensureInstanceChild(
-  graph: SceneGraph,
-  instParentId: string,
-  instChildMap: Map<string, SceneNode>,
-  compChildId: string
-): void {
-  if (instChildMap.has(compChildId)) return
-  const src = graph.nodes.get(compChildId)
-  if (!src) return
-  const clone = graph.createNode(src.type, instParentId, cloneNodeProps(src, compChildId))
-  if (src.childIds.length > 0) cloneChildrenWithMapping(graph, compChildId, clone.id)
-  instChildMap.set(compChildId, clone)
-}
-
-function ensureInstanceChildren(
-  graph: SceneGraph,
-  instParentId: string,
-  instChildMap: Map<string, SceneNode>,
-  compChildIds: readonly string[]
-): void {
-  for (const compChildId of compChildIds) {
-    ensureInstanceChild(graph, instParentId, instChildMap, compChildId)
-  }
+function copyPropIfChanged(
+  target: Partial<SceneNode> | SceneNode,
+  source: SceneNode,
+  key: keyof SceneNode
+): boolean {
+  if (isEqual(target[key], source[key])) return false
+  copyProp(target, source, key)
+  return true
 }
 
 function syncPropList(
@@ -185,31 +124,25 @@ function syncPropList(
   }
 }
 
-function syncInstanceChild(
+function cloneChildrenWithMapping(
   graph: SceneGraph,
-  compChildId: string,
-  instChild: SceneNode,
-  overrides: Record<string, unknown>
+  sourceParentId: string,
+  destParentId: string,
+  mode: NodeCloneMode = 'deep'
 ): void {
-  const compChild = graph.nodes.get(compChildId)
-  if (!compChild) return
-  syncPropList(instChild, compChild, INSTANCE_SYNC_PROPS, overrides)
-  syncPropList(instChild, compChild, INSTANCE_TEXT_SYNC_PROPS, overrides)
-  syncChildren(graph, compChildId, instChild.id, overrides)
-}
+  const sourceParent = graph.nodes.get(sourceParentId)
+  if (!sourceParent) return
 
-function sortInstanceChildrenByComponentOrder(
-  graph: SceneGraph,
-  instParent: SceneNode,
-  compChildOrder: readonly string[]
-): void {
-  instParent.childIds.sort((a, b) => {
-    const nodeA = graph.nodes.get(a)
-    const nodeB = graph.nodes.get(b)
-    const idxA = nodeA?.componentId ? compChildOrder.indexOf(nodeA.componentId) : -1
-    const idxB = nodeB?.componentId ? compChildOrder.indexOf(nodeB.componentId) : -1
-    return idxA - idxB
-  })
+  for (const childId of sourceParent.childIds) {
+    const src = graph.nodes.get(childId)
+    if (!src) continue
+
+    const clone = graph.createNode(src.type, destParentId, cloneNodeProps(src, childId, mode))
+
+    if (src.childIds.length > 0) {
+      cloneChildrenWithMapping(graph, childId, clone.id, mode)
+    }
+  }
 }
 
 function syncChildren(
@@ -222,16 +155,59 @@ function syncChildren(
   const instParent = graph.nodes.get(instParentId)
   if (!compParent || !instParent) return
 
-  const instChildMap = buildInstanceChildMap(graph, instParent)
-  removeStaleInstanceChildren(graph, instChildMap, compParent.childIds)
-  ensureInstanceChildren(graph, instParentId, instChildMap, compParent.childIds)
-
-  for (const compChildId of compParent.childIds) {
-    const instChild = instChildMap.get(compChildId)
-    if (instChild) syncInstanceChild(graph, compChildId, instChild, overrides)
+  const instChildMap = new Map<string, SceneNode>()
+  for (const childId of instParent.childIds) {
+    const child = graph.nodes.get(childId)
+    if (!child) continue
+    const sourceComponentId = overrides[`${child.id}:sourceComponentId`]
+    const mappedComponentId =
+      typeof sourceComponentId === 'string' ? sourceComponentId : child.componentId
+    if (mappedComponentId) instChildMap.set(mappedComponentId, child)
   }
 
-  sortInstanceChildrenByComponentOrder(graph, instParent, compParent.childIds)
+  for (const compChildId of compParent.childIds) {
+    if (!instChildMap.has(compChildId)) {
+      const src = graph.nodes.get(compChildId)
+      if (!src) continue
+      const clone = graph.createNode(src.type, instParentId, cloneNodeProps(src, compChildId))
+      if (src.childIds.length > 0) {
+        cloneChildrenWithMapping(graph, compChildId, clone.id)
+      }
+      instChildMap.set(compChildId, clone)
+    }
+  }
+
+  for (const compChildId of compParent.childIds) {
+    const compChild = graph.nodes.get(compChildId)
+    const instChild = instChildMap.get(compChildId)
+    if (!compChild || !instChild) continue
+
+    syncPropList(instChild, compChild, INSTANCE_SYNC_PROPS, overrides)
+    syncPropList(instChild, compChild, INSTANCE_TEXT_SYNC_PROPS, overrides)
+
+    if (compChild.childIds.length > 0 && !(`${instChild.id}:componentId` in overrides)) {
+      syncChildren(graph, compChildId, instChild.id, overrides)
+    }
+  }
+
+  const compChildOrder = compParent.childIds
+  instParent.childIds.sort((a, b) => {
+    const nodeA = graph.nodes.get(a)
+    const nodeB = graph.nodes.get(b)
+    const sourceA = nodeA ? overrides[`${nodeA.id}:sourceComponentId`] : undefined
+    const sourceB = nodeB ? overrides[`${nodeB.id}:sourceComponentId`] : undefined
+    const mappedA = typeof sourceA === 'string' ? sourceA : nodeA?.componentId
+    const mappedB = typeof sourceB === 'string' ? sourceB : nodeB?.componentId
+    const idxA = mappedA ? compChildOrder.indexOf(mappedA) : -1
+    const idxB = mappedB ? compChildOrder.indexOf(mappedB) : -1
+    return idxA - idxB
+  })
+}
+
+export function copyInstanceComponentProps(component: SceneNode): Partial<SceneNode> {
+  const props: Partial<SceneNode> = {}
+  for (const key of INSTANCE_SYNC_PROPS) copyProp(props, component, key)
+  return props
 }
 
 export function createInstance(
@@ -243,9 +219,10 @@ export function createInstance(
   const component = graph.nodes.get(componentId)
   if (component?.type !== 'COMPONENT') return null
 
-  const props: Partial<SceneNode> = { name: component.name, componentId }
-  for (const key of INSTANCE_SYNC_PROPS) {
-    copyProp(props, component, key)
+  const props: Partial<SceneNode> = {
+    ...copyInstanceComponentProps(component),
+    name: component.name,
+    componentId
   }
 
   const instance = graph.createNode('INSTANCE', parentId, { ...props, ...overrides })
@@ -258,12 +235,13 @@ export function createInstance(
 export function populateInstanceChildren(
   graph: SceneGraph,
   instanceId: string,
-  componentId: string
+  componentId: string,
+  mode: NodeCloneMode = 'deep'
 ): void {
   const instance = graph.nodes.get(instanceId)
   const component = graph.nodes.get(componentId)
   if (!instance || !component || instance.type !== 'INSTANCE') return
-  cloneChildrenWithMapping(graph, componentId, instanceId)
+  cloneChildrenWithMapping(graph, componentId, instanceId, mode)
 }
 
 export function swapInstanceComponent(
@@ -296,9 +274,7 @@ export function syncInstances(graph: SceneGraph, componentId: string): void {
   for (const instance of getInstances(graph, componentId)) {
     for (const key of INSTANCE_SYNC_PROPS) {
       if (key in instance.overrides) continue
-      if (copyPropIfChanged(instance, component, key)) {
-        clearTextDerivedDataForProp(instance, key)
-      }
+      if (copyPropIfChanged(instance, component, key)) clearTextDerivedDataForProp(instance, key)
     }
 
     syncChildren(graph, component.id, instance.id, instance.overrides)

@@ -19,6 +19,8 @@ import type { OkHCLColor, OkHCLPayload } from '#core/color/okhcl'
 
 import { installBasicNodeProxyAccessors } from './accessors/basic'
 import { installLayoutNodeProxyAccessors } from './accessors/layout'
+import { installVariableModeNodeProxyAccessors } from './accessors/variables'
+import { installVectorNodeProxyAccessors, type FigmaVectorPath } from './accessors/vector'
 import { installVisualNodeProxyAccessors } from './accessors/visual'
 import type { FigmaFontName } from './fonts'
 import * as PluginData from './plugin-data'
@@ -103,6 +105,9 @@ export class FigmaNodeProxy {
   declare maxWidth: number | null
   declare minHeight: number | null
   declare maxHeight: number | null
+  declare readonly vectorPaths: readonly FigmaVectorPath[]
+  declare readonly explicitVariableModes: Readonly<Record<string, string>>
+  declare readonly resolvedVariableModes: Readonly<Record<string, string>>
 
   constructor(id: string, graph: SceneGraph, api: NodeProxyHost) {
     this[INTERNAL_ID] = id
@@ -149,7 +154,12 @@ export class FigmaNodeProxy {
   }
 
   set strokeCap(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { strokeCap: v as SceneNode['strokeCap'] })
+    const strokeCap = v as SceneNode['strokeCap']
+    const node = this._raw()
+    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
+      strokeCap,
+      strokes: node.strokes.map((stroke) => ({ ...stroke, cap: strokeCap }))
+    })
   }
 
   get strokeJoin(): string {
@@ -157,7 +167,12 @@ export class FigmaNodeProxy {
   }
 
   set strokeJoin(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { strokeJoin: v as SceneNode['strokeJoin'] })
+    const strokeJoin = v as SceneNode['strokeJoin']
+    const node = this._raw()
+    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
+      strokeJoin,
+      strokes: node.strokes.map((stroke) => ({ ...stroke, join: strokeJoin }))
+    })
   }
 
   get strokeMiterLimit(): number {
@@ -536,8 +551,12 @@ installVisualNodeProxyAccessors(
   MIXED
 )
 
-installLayoutNodeProxyAccessors(FigmaNodeProxy.prototype, {
+const proxyInternals = {
   id: INTERNAL_ID,
   graph: INTERNAL_GRAPH,
   api: INTERNAL_API
-})
+}
+
+installLayoutNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)
+installVariableModeNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)
+installVectorNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)

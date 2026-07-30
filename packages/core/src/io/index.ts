@@ -11,7 +11,7 @@ export {
   jsxFormat
 } from './formats'
 export { exportFigFile, parseFigFile, readFigFile, type ParseFigFileOptions } from './formats/fig'
-export { parsePenFile, readPenFile } from './formats/pen'
+export { parsePenFile, readPenFile } from '@open-pencil/pen'
 export { sceneNodeToJSX, selectionToJSX, type JSXFormat } from './formats/jsx'
 export {
   computeContentBounds,
@@ -23,7 +23,22 @@ export {
   type RasterExportFormat,
   type ExportFormat
 } from './formats/raster'
-export { renderNodesToSVG, geometryBlobToSVGPath, vectorNetworkToSVGPaths } from './formats/svg'
+export {
+  createSVGNodes,
+  createSVGNodesFromImport,
+  prepareSVGImport,
+  renderNodesToSVG,
+  geometryBlobToSVGPath,
+  vectorNetworkToSVGPaths,
+  type SVGImportData,
+  type SVGImportOptions
+} from './formats/svg'
+export {
+  renderNodesToPPTX,
+  type PPTXExportOptions,
+  type PPTXExportStats,
+  type PPTXRasterize
+} from './formats/pptx'
 export type {
   IOFormatRole,
   IOFormatCategory,

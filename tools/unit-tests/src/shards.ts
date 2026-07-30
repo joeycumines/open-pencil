@@ -8,6 +8,7 @@ export const UNIT_TEST_GROUPS = {
   app: [
     'tests/engine/acp',
     'tests/engine/app',
+    'tests/engine/bytes',
     'tests/engine/cli',
     'tests/engine/collab',
     'tests/engine/tauri'

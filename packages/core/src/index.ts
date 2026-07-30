@@ -7,39 +7,25 @@ export * from './constants'
 
 export { createDefaultEditorState, createEditor, EDITOR_TOOLS, TOOL_SHORTCUTS } from './editor'
 export type {
+  ClipboardImageResolution,
   Editor,
   EditorContext,
   EditorOptions,
   EditorState,
   EditorToolDef,
+  FigmaClipboardImageResolver,
   Tool
 } from './editor'
 
 export {
   SceneGraph,
-  TransformMatrix,
-  computeAbsoluteBounds,
-  computeBounds,
-  degToRad,
   generateId,
-  getAbsolutePosition,
-  getAbsoluteRotation,
-  getWorldHandles,
-  getWorldMatrix,
-  radToDeg,
-  rotatePoint,
-  rotatedBBox,
-  rotatedCorners,
   cloneVectorNetwork,
   normalizeVectorNetwork,
   validateVectorNetwork,
-  type GUID,
-  type Color,
-  type Vector,
-  type Matrix,
-  type Rect,
   type SceneNode,
   type NodeType,
+  type Rect,
   type Fill,
   type FillType,
   type Stroke,
@@ -234,7 +220,8 @@ export {
   geometryBlobToPath,
   decodeVectorNetworkBlob,
   encodeVectorNetworkBlob,
-  buildStyleOverrideTable
+  buildStyleOverrideTable,
+  regenerateFillGeometry
 } from './vector'
 export {
   evalCubic,
@@ -289,7 +276,7 @@ export {
   type SVGExportOptions
 } from './io/formats/svg/export'
 export { svg, renderSVGNode, type SVGNode } from './io/formats/svg/node'
-export { parseSVGPath } from './io/formats/svg/parse-path'
+export { parseSVGPath } from '@open-pencil/scene-graph/parse-path'
 export {
   fetchIcon,
   fetchIcons,
@@ -388,7 +375,7 @@ export {
 } from './clipboard'
 export { probeGlyphOutlineCommands, type GlyphOutlineProbe } from './text/opentype'
 
-export { readPenFile, parsePenFile } from './io/formats/pen'
+export { readPenFile, parsePenFile } from '@open-pencil/pen'
 
 export {
   readFigFile,

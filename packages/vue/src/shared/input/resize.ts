@@ -1,11 +1,16 @@
 export { constrainToAspectRatio } from '#vue/shared/input/resize/rect'
 export { tryStartResize } from '#vue/shared/input/resize/start'
 import type { Editor } from '@open-pencil/core/editor'
-import { computeLayout } from '@open-pencil/core/layout'
+import { computeAllLayouts } from '@open-pencil/core/layout'
+import { cloneVectorNetwork } from '@open-pencil/scene-graph'
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { copyGeometryPaths, scaleGeometryPaths } from '@open-pencil/scene-graph/copy'
+import {
+  computeConstrainedResizeChanges,
+  scaleVectorNetworkForResize
+} from '@open-pencil/scene-graph/resize'
 
 import { calculateResizeRect } from '#vue/shared/input/resize/rect'
-import { scaleVectorNetworkForResize } from '#vue/shared/input/resize/vector'
 import type { DragResize } from '#vue/shared/input/types'
 
 function resizeChanges(d: DragResize, cx: number, cy: number, constrain: boolean) {
@@ -22,7 +27,38 @@ function resizeChanges(d: DragResize, cx: number, cy: number, constrain: boolean
     newRect.height
   )
   if (resizedVectorNetwork) changes.vectorNetwork = resizedVectorNetwork
+  if (origRect.width > 0 && origRect.height > 0) {
+    const scaleX = newRect.width / origRect.width
+    const scaleY = newRect.height / origRect.height
+    if (scaleX !== 1 || scaleY !== 1) {
+      if (d.origFillGeometry.length > 0) {
+        changes.fillGeometry = scaleGeometryPaths(d.origFillGeometry, scaleX, scaleY)
+      }
+      if (d.origStrokeGeometry.length > 0) {
+        changes.strokeGeometry = scaleGeometryPaths(d.origStrokeGeometry, scaleX, scaleY)
+      }
+    }
+  }
   return { changes, newRect }
+}
+
+function applyConstrainedChildren(
+  d: DragResize,
+  newRect: Pick<SceneNode, 'width' | 'height'>,
+  editor: Editor
+) {
+  if (!d.origChildren || d.origRect.width <= 0 || d.origRect.height <= 0) return
+  const changes = computeConstrainedResizeChanges(
+    editor.graph,
+    d.nodeId,
+    d.origRect,
+    newRect,
+    d.origChildren
+  )
+  for (const [childId, childChanges] of changes) {
+    editor.graph.updateNodePreview(childId, childChanges)
+    editor.renderer?.invalidateVectorPath(childId)
+  }
 }
 
 export function applyResize(
@@ -34,38 +70,10 @@ export function applyResize(
 ) {
   const { changes, newRect } = resizeChanges(d, cx, cy, constrain)
   editor.graph.updateNodePreview(d.nodeId, changes)
-
-  if (d.origChildren && d.origRect.width > 0 && d.origRect.height > 0) {
-    const sx = newRect.width / d.origRect.width
-    const sy = newRect.height / d.origRect.height
-    for (const [childId, orig] of d.origChildren) {
-      const childWidth = Math.round(Math.max(1, orig.width * sx))
-      const childHeight = Math.round(Math.max(1, orig.height * sy))
-      const childChanges: Partial<SceneNode> = {
-        x: Math.round(orig.x * sx),
-        y: Math.round(orig.y * sy),
-        width: childWidth,
-        height: childHeight
-      }
-      if (orig.vectorNetwork) {
-        const scaledVN = scaleVectorNetworkForResize(
-          orig.vectorNetwork,
-          orig.width,
-          orig.height,
-          childWidth,
-          childHeight
-        )
-        if (scaledVN) childChanges.vectorNetwork = scaledVN
-      }
-      editor.graph.updateNodePreview(childId, childChanges)
-      editor.renderer?.invalidateVectorPath(childId)
-    }
-  }
-
-  const node = editor.graph.getNode(d.nodeId)
-  if (node?.layoutMode !== 'NONE') {
-    editor.graph.runPreviewUpdates(() => computeLayout(editor.graph, d.nodeId))
-  }
+  applyConstrainedChildren(d, newRect, editor)
+  editor.graph.runPreviewUpdates(() => computeAllLayouts(editor.graph, d.nodeId))
+  applyConstrainedChildren(d, newRect, editor)
+  editor.graph.runPreviewUpdates(() => computeAllLayouts(editor.graph, d.nodeId))
   editor.requestRepaint()
 }
 
@@ -78,7 +86,9 @@ export function commitResizePreview(d: DragResize, editor: Editor) {
     width: node.width,
     height: node.height
   }
-  if (node.vectorNetwork) finalChanges.vectorNetwork = node.vectorNetwork
+  if (node.vectorNetwork) finalChanges.vectorNetwork = cloneVectorNetwork(node.vectorNetwork)
+  finalChanges.fillGeometry = copyGeometryPaths(node.fillGeometry)
+  finalChanges.strokeGeometry = copyGeometryPaths(node.strokeGeometry)
 
   if (d.origChildren) {
     const finalChildren = new Map<string, Partial<SceneNode>>()
@@ -91,7 +101,9 @@ export function commitResizePreview(d: DragResize, editor: Editor) {
         width: child.width,
         height: child.height
       }
-      if (child.vectorNetwork) final.vectorNetwork = child.vectorNetwork
+      if (child.vectorNetwork) final.vectorNetwork = cloneVectorNetwork(child.vectorNetwork)
+      final.fillGeometry = copyGeometryPaths(child.fillGeometry)
+      final.strokeGeometry = copyGeometryPaths(child.strokeGeometry)
       finalChildren.set(childId, final)
     }
     editor.graph.updateNodePreview(d.nodeId, d.origRect)
@@ -109,7 +121,9 @@ export function commitResizePreview(d: DragResize, editor: Editor) {
     editor.updateNode(d.nodeId, finalChanges)
     editor.commitResize(d.nodeId, {
       ...d.origRect,
-      ...(d.origVectorNetwork || node.vectorNetwork ? { vectorNetwork: d.origVectorNetwork } : {})
+      vectorNetwork: d.origVectorNetwork,
+      fillGeometry: d.origFillGeometry,
+      strokeGeometry: d.origStrokeGeometry
     })
   }
 }

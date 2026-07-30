@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
 import { AppearanceControlsRoot, MIXED, useI18n } from '@open-pencil/vue'
 
 import NumberField from '@/components/inputs/NumberField.vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
+import { useBlendModeOptions } from '@/components/properties/blend-mode/use'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
-import PanelRail from '@/components/ui/panel/PanelRail.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 
 import type { BlendMode } from '@open-pencil/scene-graph'
@@ -17,25 +15,7 @@ import type { BlendMode } from '@open-pencil/scene-graph'
 const { panels } = useI18n()
 type BlendModeSelectValue = BlendMode | 'MIXED'
 
-const baseBlendModeOptions = computed<Array<{ value: BlendModeSelectValue; label: string }>>(() => [
-  { value: 'PASS_THROUGH', label: panels.value.blendModePassThrough },
-  { value: 'NORMAL', label: panels.value.blendModeNormal },
-  { value: 'DARKEN', label: panels.value.blendModeDarken },
-  { value: 'MULTIPLY', label: panels.value.blendModeMultiply },
-  { value: 'COLOR_BURN', label: panels.value.blendModeColorBurn },
-  { value: 'LIGHTEN', label: panels.value.blendModeLighten },
-  { value: 'SCREEN', label: panels.value.blendModeScreen },
-  { value: 'COLOR_DODGE', label: panels.value.blendModeColorDodge },
-  { value: 'OVERLAY', label: panels.value.blendModeOverlay },
-  { value: 'SOFT_LIGHT', label: panels.value.blendModeSoftLight },
-  { value: 'HARD_LIGHT', label: panels.value.blendModeHardLight },
-  { value: 'DIFFERENCE', label: panels.value.blendModeDifference },
-  { value: 'EXCLUSION', label: panels.value.blendModeExclusion },
-  { value: 'HUE', label: panels.value.blendModeHue },
-  { value: 'SATURATION', label: panels.value.blendModeSaturation },
-  { value: 'COLOR', label: panels.value.blendModeColor },
-  { value: 'LUMINOSITY', label: panels.value.blendModeLuminosity }
-])
+const baseBlendModeOptions = useBlendModeOptions(true)
 
 function blendModeOptions(value: BlendMode | typeof MIXED) {
   return value === MIXED
@@ -54,6 +34,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
       independentCorners,
       showIndependentCorners,
       cornerRadiusValue,
+      cornerSmoothingPercent,
       opacityPercent,
       blendModeValue,
       visibilityState,
@@ -73,7 +54,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
         </IconButton>
       </template>
 
-      <PanelGrid columns="two">
+      <PanelGrid :columns="2" distribution="wide-first">
         <PanelFieldGroup :label="panels.blendMode">
           <AppSelect
             :model-value="blendModeValue === MIXED ? 'MIXED' : blendModeValue"
@@ -121,11 +102,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
         </PanelFieldGroup>
       </PanelGrid>
 
-      <PanelGrid
-        v-if="hasCornerRadius && !showIndependentCorners"
-        columns="fill-rail"
-        class="mt-panel"
-      >
+      <PanelGrid v-if="hasCornerRadius && !showIndependentCorners" :columns="2" class="mt-1.5">
         <PanelFieldGroup :label="panels.radius">
           <VariableNumberField
             v-if="node && !isMulti"
@@ -155,7 +132,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             </template>
           </NumberField>
         </PanelFieldGroup>
-        <PanelRail>
+        <div class="flex h-6 items-center justify-end">
           <IconButton
             :label="panels.independentCornerRadii"
             size="md"
@@ -164,13 +141,13 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           >
             <icon-lucide-square-round-corner class="size-3" />
           </IconButton>
-        </PanelRail>
+        </div>
       </PanelGrid>
 
       <PanelGrid
         v-else-if="hasCornerRadius && !isMulti && node"
-        columns="two-rail"
-        class="mt-panel"
+        :columns="2"
+        class="mt-1.5 [&>[data-slot=actions]]:self-start"
         data-corner-grid
       >
         <VariableNumberField
@@ -191,16 +168,6 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           @update:model-value="actions.updateCornerProp('topRightRadius', $event)"
           @commit="(v: number, p: number) => actions.commitCornerProp('topRightRadius', v, p)"
         />
-        <PanelRail>
-          <IconButton
-            :label="panels.independentCornerRadii"
-            size="md"
-            active
-            @click="actions.toggleIndependentCorners"
-          >
-            <icon-lucide-square-round-corner class="size-3" />
-          </IconButton>
-        </PanelRail>
         <VariableNumberField
           label="BL"
           :model-value="node.bottomLeftRadius"
@@ -219,7 +186,38 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           @update:model-value="actions.updateCornerProp('bottomRightRadius', $event)"
           @commit="(v: number, p: number) => actions.commitCornerProp('bottomRightRadius', v, p)"
         />
-        <PanelRail />
+        <template #actions>
+          <IconButton
+            :label="panels.independentCornerRadii"
+            size="md"
+            active
+            @click="actions.toggleIndependentCorners"
+          >
+            <icon-lucide-square-round-corner class="size-3" />
+          </IconButton>
+        </template>
+      </PanelGrid>
+
+      <PanelGrid v-if="hasCornerRadius" :columns="2" class="mt-1.5">
+        <PanelFieldGroup :label="panels.cornerSmoothing">
+          <NumberField
+            suffix="%"
+            :model-value="cornerSmoothingPercent"
+            :min="0"
+            :max="100"
+            :aria-label="panels.cornerSmoothing"
+            data-property="corner-smoothing"
+            @update:model-value="actions.updateCornerProp('cornerSmoothing', $event / 100)"
+            @commit="
+              (v: number, p: number) =>
+                actions.commitCornerProp('cornerSmoothing', v / 100, p / 100)
+            "
+          >
+            <template #icon>
+              <icon-lucide-squircle class="size-3" />
+            </template>
+          </NumberField>
+        </PanelFieldGroup>
       </PanelGrid>
     </PanelSection>
   </AppearanceControlsRoot>
