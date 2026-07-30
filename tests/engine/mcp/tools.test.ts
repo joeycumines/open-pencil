@@ -4,17 +4,6 @@ import { ALL_TOOLS, FigmaAPI, SceneGraph, computeAllLayouts, parseFigFile } from
 
 import { expectDefined } from '#tests/helpers/assert'
 
-/** True if the LFS fixture file is a real binary (not a Git LFS pointer stub). */
-function fixtureAvailable(relativePath: string): boolean {
-  try {
-    const file = Bun.file(relativePath)
-    return file.size > 1024
-  } catch {
-    return false
-  }
-}
-const hasGoldPreviewFig = fixtureAvailable('tests/fixtures/gold-preview.fig')
-
 interface PageTreeResult {
   page: string
   children: PageTreeNode[]
@@ -318,7 +307,7 @@ describe('MCP tool execution', () => {
     expect(result.error).toContain('not found')
   })
 
-  test.skipIf(!hasGoldPreviewFig)('open and query .fig file', async () => {
+  test('open and query .fig file', async () => {
     const data = await Bun.file('tests/fixtures/gold-preview.fig').arrayBuffer()
     const { api } = await setupWithFile(data)
     const pages = findTool('list_pages').execute(api, {}) as { pages: { name: string }[] }
