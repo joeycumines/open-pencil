@@ -32,6 +32,9 @@ runs:
           rm -f .lfsconfig
           git config --local --unset lfs.url 2>/dev/null || true
           git lfs install --force
+          # Use the fork's own GitHub LFS endpoint (origin remote after fork checkout)
+          LFS_URL="https://github.com/$(git remote get-url origin | sed 's|.*github.com/||;s|\.git$||')/info/lfs"
+          git config --local lfs.url "$LFS_URL"
           git lfs pull || :
           git checkout HEAD -- .lfsconfig 2>/dev/null || true
         fi
