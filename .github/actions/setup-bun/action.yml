@@ -35,6 +35,8 @@ runs:
           # objects live in the upstream's private R2 storage). Warn but
           # continue — LFS-dependent tests will be skipped gracefully.
           git lfs pull || echo "::warning::LFS pull also failed after GitHub native fallback — LFS fixtures may be unavailable"
+          # Restore the tracked .lfsconfig so git status is clean for later checks
+          git checkout HEAD -- .lfsconfig 2>/dev/null || true
         fi
 
     - uses: oven-sh/setup-bun@v2
