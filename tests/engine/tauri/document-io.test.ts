@@ -6,24 +6,13 @@ import { createDocumentWriter } from '@/app/document/io/write'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'
 
-/** True if the LFS fixture file is a real binary (not a Git LFS pointer stub). */
-function fixtureAvailable(relativePath: string): boolean {
-  try {
-    const file = Bun.file(relativePath)
-    return file.size > 1024
-  } catch {
-    return false
-  }
-}
-const hasGoldPreviewFig = fixtureAvailable('tests/fixtures/gold-preview.fig')
-
 afterEach(async () => {
   await clearTauriMocks()
   Reflect.deleteProperty(globalThis, 'window')
 })
 
 describe('Tauri document IO helpers', () => {
-  test.skipIf(!hasGoldPreviewFig)('reads reload source bytes through plugin-fs', async () => {
+  test('reads reload source bytes through plugin-fs', async () => {
     const fixture = await Bun.file('tests/fixtures/gold-preview.fig').arrayBuffer()
     await mockTauriIPC((cmd, args) => {
       expect(cmd).toBe('plugin:fs|read_file')
