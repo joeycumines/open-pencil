@@ -7,17 +7,6 @@ import { parseFigBuffer } from '@open-pencil/fig'
 import { guidToString } from '@open-pencil/kiwi/fig/guid'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
-/** True if the LFS fixture file is a real binary (not a Git LFS pointer stub). */
-function fixtureAvailable(relativePath: string): boolean {
-  try {
-    const file = Bun.file(relativePath)
-    return file.size > 1024
-  } catch {
-    return false
-  }
-}
-const hasGoldPreviewFig = fixtureAvailable('tests/fixtures/gold-preview.fig')
-
 describe('export subgraph extraction', () => {
   test('page extraction keeps the source root and page descendants', () => {
     const graph = new SceneGraph()
@@ -102,31 +91,27 @@ describe('export subgraph extraction', () => {
     expect(reparsedInstance?.childIds).toEqual([])
   })
 
-  test.skipIf(!hasGoldPreviewFig)(
-    'fig export preserves imported instance symbol overrides and guids',
-    async () => {
-      await initCodec()
-      const fixture = new Uint8Array(readFileSync('tests/fixtures/gold-preview.fig'))
-      const graph = await parseFigFile(
-        fixture.buffer.slice(
-          fixture.byteOffset,
-          fixture.byteOffset + fixture.byteLength
-        ) as ArrayBuffer
-      )
-      const exported = await exportFigFile(graph)
-      const parsed = parseFigBuffer(exported.buffer as ArrayBuffer)
-      const input = parsed.nodeChanges.find(
-        (node) => node.guid && guidToString(node.guid) === '1:3503'
-      )
-      const lists = parsed.nodeChanges.find(
-        (node) => node.guid && guidToString(node.guid) === '1:3491'
-      )
+  test('fig export preserves imported instance symbol overrides and guids', async () => {
+    await initCodec()
+    const fixture = new Uint8Array(readFileSync('tests/fixtures/gold-preview.fig'))
+    const graph = await parseFigFile(
+      fixture.buffer.slice(
+        fixture.byteOffset,
+        fixture.byteOffset + fixture.byteLength
+      ) as ArrayBuffer
+    )
+    const exported = await exportFigFile(graph)
+    const parsed = parseFigBuffer(exported.buffer as ArrayBuffer)
+    const input = parsed.nodeChanges.find(
+      (node) => node.guid && guidToString(node.guid) === '1:3503'
+    )
+    const lists = parsed.nodeChanges.find(
+      (node) => node.guid && guidToString(node.guid) === '1:3491'
+    )
 
-      expect(input?.type).toBe('INSTANCE')
-      expect(input?.symbolData?.symbolOverrides?.length).toBe(9)
-      expect(input?.symbolData?.uniformScaleFactor).toBeCloseTo(0.8908441662788391)
-      expect(lists?.symbolData?.symbolOverrides?.length).toBe(5)
-    },
-    15000
-  )
+    expect(input?.type).toBe('INSTANCE')
+    expect(input?.symbolData?.symbolOverrides?.length).toBe(9)
+    expect(input?.symbolData?.uniformScaleFactor).toBeCloseTo(0.8908441662788391)
+    expect(lists?.symbolData?.symbolOverrides?.length).toBe(5)
+  }, 15000)
 })
