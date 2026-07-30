@@ -212,7 +212,7 @@ export function createClipboardActions(ctx: EditorContext) {
       ctx.emitEditorEvent('clipboard:images-missing', {
         total: hashes.length,
         missing,
-        fetchAttempted: resolver !== null
+        fetchAttempted: Boolean(resolver)
       })
     }
   }
