@@ -31,7 +31,10 @@ runs:
           rm -f .lfsconfig
           git config --local --unset lfs.url 2>/dev/null || true
           git lfs install --force
-          git lfs pull
+          # Even the GitHub-native fallback may fail for fork PRs (the LFS
+          # objects live in the upstream's private R2 storage). Warn but
+          # continue — LFS-dependent tests will be skipped gracefully.
+          git lfs pull || echo "::warning::LFS pull also failed after GitHub native fallback — LFS fixtures may be unavailable"
         fi
 
     - uses: oven-sh/setup-bun@v2
