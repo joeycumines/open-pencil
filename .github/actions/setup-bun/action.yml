@@ -18,6 +18,7 @@ runs:
     - name: Pull LFS files
       if: inputs.lfs == 'true'
       shell: bash
+      continue-on-error: true
       run: |
         git lfs install --force
         # Try the configured LFS endpoint first (R2 proxy via .lfsconfig).
