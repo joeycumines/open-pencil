@@ -9,8 +9,11 @@ import { prepareForExport } from '#core/canvas/renderer/fonts'
 
 import { repoPath } from '#tests/helpers/paths'
 
-type FallbackTestFontManager = typeof fontManager & {
-  cjkFallbackFamilies: Map<FontFallbackScript, string[]>
+/** FontManager internal state that the test mutates and must restore. */
+interface FallbackTestFontManager {
+  cjkFallbackFamilies: string[]
+  loadFont: typeof fontManager.loadFont
+  ensureFallbackPack: typeof fontManager.ensureFallbackPack
 }
 
 describe('export font loading', () => {
@@ -26,8 +29,10 @@ describe('export font loading', () => {
       width: 120,
       height: 24
     })
-    const manager = fontManager as FallbackTestFontManager
-    const originalFallbackFamilies = new Map(manager.cjkFallbackFamilies)
+    // Access internal state through a helper that narrows to the fields we mutate.
+    // eslint-disable-next-line open-pencil/no-broad-double-cast -- internal test helper, single-cast not possible due to upstream type mismatch
+    const manager = fontManager as unknown as FallbackTestFontManager
+    const originalFallbackFamilies = [...manager.cjkFallbackFamilies]
     const originalEnsureFallbackPack = fontManager.ensureFallbackPack.bind(fontManager)
     const originalLoadFont = fontManager.loadFont.bind(fontManager)
     const requests: FontFallbackScript[][] = []
@@ -36,15 +41,15 @@ describe('export font loading', () => {
     } as SkiaRenderer
 
     try {
-      manager.cjkFallbackFamilies = new Map()
-      fontManager.loadFont = async (family: string, style = 'Regular') => {
+      manager.cjkFallbackFamilies = []
+      manager.loadFont = async (family: string, style = 'Regular') => {
         if (family === 'Inter' && style === 'Regular') {
           fontManager.markLoaded(family, style, data)
           return data
         }
         return null
       }
-      fontManager.ensureFallbackPack = async (scripts = ['cjk', 'arabic']) => {
+      manager.ensureFallbackPack = async (scripts = ['cjk', 'arabic']) => {
         requests.push([...scripts])
         return { 'cjk-tc': ['Manual Traditional CJK Fallback'] }
       }
@@ -54,8 +59,8 @@ describe('export font loading', () => {
 
       expect(requests).toEqual([['cjk-tc']])
     } finally {
-      fontManager.ensureFallbackPack = originalEnsureFallbackPack
-      fontManager.loadFont = originalLoadFont
+      manager.ensureFallbackPack = originalEnsureFallbackPack
+      manager.loadFont = originalLoadFont
       manager.cjkFallbackFamilies = originalFallbackFamilies
     }
   })
