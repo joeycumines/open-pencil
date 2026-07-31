@@ -27,6 +27,7 @@
     },
     "./scene-graph": {
       "types": "./dist/scene-graph/index.d.ts",
+      "bun": "./src/scene-graph/index.ts",
       "import": "./dist/scene-graph/index.js",
       "default": "./dist/scene-graph/index.js"
     },
@@ -153,6 +154,7 @@
     },
     "./types": {
       "types": "./dist/types.d.ts",
+      "bun": "./src/types.ts",
       "import": "./dist/types.js",
       "default": "./dist/types.js"
     },
@@ -168,6 +170,7 @@
     },
     "./geometry": {
       "types": "./dist/geometry.d.ts",
+      "bun": "./src/geometry.ts",
       "import": "./dist/geometry.js",
       "default": "./dist/geometry.js"
     }
