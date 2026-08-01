@@ -54,6 +54,7 @@ import type {
 
 export {
   cloneVectorNetwork,
+  mergeVectorNetworks,
   normalizeVectorNetwork,
   transformVectorNetwork,
   validateVectorNetwork,

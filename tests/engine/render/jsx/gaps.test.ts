@@ -27,6 +27,38 @@ describe('jsx gaps', () => {
     expect(vector?.vectorNetwork).toBeTruthy()
   })
 
+  it('renders open and closed SVG paths as separate stroked vectors', async () => {
+    const g = makeSceneGraph()
+    await renderJSX(
+      g,
+      `<svg viewBox="0 0 24 24" size={24}><path d="M2 2 L22 2" stroke="#000" fill="none" /><path d="M2 6 H22 V22 H2 Z" stroke="#000" fill="none" /></svg>`
+    )
+    const vectors = [...g.nodes.values()].filter((node) => node.type === 'VECTOR')
+    expect(vectors).toHaveLength(2)
+    for (const vector of vectors) {
+      expect(vector.vectorNetwork?.vertices.length).toBeGreaterThan(0)
+      expect(vector.strokes.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('respects none paints on inline SVG paths', async () => {
+    const g = makeSceneGraph()
+    await renderJSX(
+      g,
+      `<svg viewBox="0 0 24 24" w={24} h={24}>
+        <path d="M2 2L22 22" fill="none" stroke="#021A3B" stroke-width="2" />
+        <path d="M2 22L12 2L22 22Z" fill="#FF0000" stroke="none" />
+      </svg>`
+    )
+
+    const vectors = [...g.nodes.values()].filter((node) => node.type === 'VECTOR')
+    expect(vectors).toHaveLength(2)
+    expect(vectors[0].fills).toEqual([])
+    expect(vectors[0].strokes).toHaveLength(1)
+    expect(vectors[1].fills).toHaveLength(1)
+    expect(vectors[1].strokes).toEqual([])
+  })
+
   it('instance overrides apply child text by name', async () => {
     const g = makeSceneGraph()
     await renderJSX(
