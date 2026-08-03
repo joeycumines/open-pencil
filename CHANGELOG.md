@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Match Figma Plugin API vector path and network editing, including bounds, winding rules, region fills, validation, and handle mirroring. (#444)
 - Let AI and MCP tools create arbitrary vectors from SVG path data without leaving blank layers after invalid input. (#440)
 - Show stroke colors and weights in AI visual descriptions. (#447)
 - Stop warning AI agents that supported inline SVG attributes were ignored. (#445)
@@ -18,6 +19,7 @@
 
 ### Added
 
+- Expose Figma-style mask, visibility, lock, flip, component, z-order, distribution, selection, ruler, multiplayer cursor, and Settings actions from the shared browser and desktop menus, with Move to page available in the browser menu.
 - Use MiniMax M3 as the default MiniMax model for AI design workflows. (#431)
 - Export selections, pages and documents as editable PowerPoint (`.pptx`) files from the File menu, CLI and SDK: text, rectangles, ellipses and lines stay native editable elements, while gradients, masks, blends, vectors and icons fall back to embedded images.
 - Figma-style Assets panel browsing with component thumbnails, grid/list views, page grouping, context actions, and drag-to-canvas insertion.
