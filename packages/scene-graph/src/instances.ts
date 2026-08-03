@@ -3,7 +3,11 @@ import { isEqual } from 'es-toolkit/predicate'
 import type { SceneGraph, SceneNode } from './'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from './copy'
 import type { NodeCloneMode } from './copy'
-import { invalidatesFigmaDerivedTextGlyphs, invalidatesTextPicture } from './text-picture'
+import {
+  changesInvalidateFigmaDerivedTextGlyphs,
+  invalidatesFigmaDerivedTextGlyphs,
+  invalidatesTextPicture
+} from './text-picture'
 
 export type { NodeCloneMode } from './copy'
 
@@ -92,21 +96,31 @@ function copyProp(
   }
 }
 
-function clearTextDerivedDataForProp(target: SceneNode, key: keyof SceneNode): void {
+/**
+ * Clear text-derived caches for a prop that is about to be copied from `source` onto `target`.
+ * Must run BEFORE the copy so `target` still holds its previous value — `styleRuns` invalidation
+ * is content-aware and compares the pre-copy target against the incoming source.
+ */
+function clearTextDerivedDataForProp(
+  target: SceneNode,
+  key: keyof SceneNode,
+  source: SceneNode
+): void {
   if (target.type !== 'TEXT') return
   const keyName = String(key)
   if (invalidatesTextPicture(keyName)) target.textPicture = null
-  if (keyName !== 'styleRuns' && invalidatesFigmaDerivedTextGlyphs(keyName)) {
+  if (keyName === 'styleRuns') {
+    if (changesInvalidateFigmaDerivedTextGlyphs(target, { styleRuns: source.styleRuns })) {
+      target.figmaDerivedTextGlyphs = null
+    }
+  } else if (invalidatesFigmaDerivedTextGlyphs(keyName)) {
     target.figmaDerivedTextGlyphs = null
   }
 }
 
-function copyPropIfChanged(
-  target: Partial<SceneNode> | SceneNode,
-  source: SceneNode,
-  key: keyof SceneNode
-): boolean {
+function copyPropIfChanged(target: SceneNode, source: SceneNode, key: keyof SceneNode): boolean {
   if (isEqual(target[key], source[key])) return false
+  if (target.type === 'TEXT') clearTextDerivedDataForProp(target, key, source)
   copyProp(target, source, key)
   return true
 }
@@ -120,7 +134,9 @@ function syncPropList(
   for (const key of keys) {
     const overrideKey = `${target.id}:${key}`
     if (overrideKey in overrides) continue
-    if (copyPropIfChanged(target, source, key)) clearTextDerivedDataForProp(target, key)
+    // copyPropIfChanged clears text-derived data before copying, so styleRuns
+    // content-aware invalidation compares the previous target against the source.
+    copyPropIfChanged(target, source, key)
   }
 }
 
@@ -274,7 +290,7 @@ export function syncInstances(graph: SceneGraph, componentId: string): void {
   for (const instance of getInstances(graph, componentId)) {
     for (const key of INSTANCE_SYNC_PROPS) {
       if (key in instance.overrides) continue
-      if (copyPropIfChanged(instance, component, key)) clearTextDerivedDataForProp(instance, key)
+      copyPropIfChanged(instance, component, key)
     }
 
     syncChildren(graph, component.id, instance.id, instance.overrides)

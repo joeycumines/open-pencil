@@ -79,7 +79,6 @@ export function parseFigKiwiContainer(data: Uint8Array): FigKiwiPayload | null {
     } catch {
       throw new Error('Failed to decompress fig-kiwi data chunk')
     }
-    dataRaw = inflateSync(compressed)
   }
 
   return { schemaDeflated: chunks[0], dataRaw, version }
