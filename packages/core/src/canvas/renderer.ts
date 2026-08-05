@@ -2,6 +2,7 @@ import type { SceneNode, SceneGraph, Fill, Stroke } from '@open-pencil/scene-gra
 import type { Color, Rect, Vector } from '@open-pencil/scene-graph/primitives'
 import type { SnapGuide } from '@open-pencil/scene-graph/snap'
 
+import { decodeBase64 } from '#core/bytes'
 import type { ResolvedRenderColor } from '#core/color/management'
 /* eslint-disable max-lines -- SkiaRenderer facade owns CanvasKit state and delegates domain drawing */
 import {
@@ -17,6 +18,7 @@ import {
 import type { EditorState } from '#core/editor/types'
 import { RenderProfiler } from '#core/profiler'
 import type { TextEditor } from '#core/text/editor'
+import type { FontResolutionSnapshot } from '#core/text/resolver'
 
 import { LabelCache } from './labels/cache'
 import * as LabelHitTest from './labels/hit-test'
@@ -50,6 +52,12 @@ export interface SubtreePictureCacheEntry {
   pageId: string | null
   sceneVersion: number
   positionPreviewVersion: number
+  fontGeneration: number
+}
+
+export interface PendingFontNode {
+  node: SceneNode
+  keys: Set<string>
 }
 
 import type { RenderOverlays, RulerTheme } from './renderer/types'
@@ -78,6 +86,12 @@ export class SkiaRenderer {
   fontMgr: FontMgr | null = null
   fontProvider: TypefaceFontProvider | null = null
   fontsLoaded = false
+  fontGeneration = 0
+  onFontResolutionSettled:
+    | ((snapshot: FontResolutionSnapshot, nodeIds: readonly string[]) => void)
+    | undefined
+  pendingFontNodes = new Map<string, PendingFontNode>()
+  textPictureGenerations = new Map<string, { data: Uint8Array; generation: number }>()
   imageCache = new Map<string, CKImage>()
   vectorPathCache = new Map<string, Path[]>()
   vectorStrokePathCache = new Map<string, Path[]>()
@@ -86,6 +100,7 @@ export class SkiaRenderer {
   strokeGeometryCache = new Map<string, Path[]>()
   scenePicture: SkPicture | null = null
   scenePictureVersion = -1
+  scenePictureFontGeneration = -1
   scenePicturePositionPreviewVersion = -1
   scenePicturePageId: string | null = null
   sceneBacking: {
@@ -93,6 +108,7 @@ export class SkiaRenderer {
     pageId: string | null
     sceneVersion: number
     positionPreviewVersion: number
+    fontGeneration: number
     panX: number
     panY: number
     zoom: number
@@ -115,6 +131,7 @@ export class SkiaRenderer {
     pageId: string | null
     sceneVersion: number
     positionPreviewVersion: number
+    fontGeneration: number
     panX: number
     panY: number
     zoom: number
@@ -131,10 +148,12 @@ export class SkiaRenderer {
   sceneBackingLastViewportEventAt = 0
   lastSceneViewport: { panX: number; panY: number; zoom: number } | null = null
   nodePictureCache = new Map<string, SkPicture | null>()
+  nodePictureCacheGenerations = new Map<string, number>()
   subtreePictureCache = new Map<string, SubtreePictureCacheEntry>()
   subtreePictureCachePageId: string | null = null
   subtreePictureCacheSceneVersion = -1
   subtreePictureCachePositionPreviewVersion = -1
+  subtreePictureCacheFontGeneration = -1
   readonly labelCache = new LabelCache()
   readonly profiler: RenderProfiler
 
@@ -409,6 +428,18 @@ export class SkiaRenderer {
     await RendererFonts.loadFonts(this, onFallbackFontsLoaded)
   }
 
+  syncFontGeneration(): void {
+    RendererFonts.syncFontGeneration(this)
+  }
+
+  trackFontDemand(node: SceneNode, key: string): void {
+    RendererFonts.trackFontDemand(this, node, key)
+  }
+
+  isTextPictureCurrent(node: SceneNode): boolean {
+    return RendererFonts.isTextPictureCurrent(this, node)
+  }
+
   async prepareForExport(
     graph: SceneGraph,
     pageId: string,
@@ -565,8 +596,12 @@ export class SkiaRenderer {
     return RenderText.measureTextNode(this, node, maxWidth)
   }
 
+  nodeFontReadiness(node: SceneNode): RenderText.NodeFontReadiness {
+    return RenderText.nodeFontReadiness(this, node)
+  }
+
   isNodeFontLoaded(node: SceneNode): boolean {
-    return RenderText.isNodeFontLoaded(this, node)
+    return this.nodeFontReadiness(node) === 'ready'
   }
 
   buildTextPicture(node: SceneNode): Uint8Array | null {
@@ -649,10 +684,7 @@ export class SkiaRenderer {
       if (!dataUrl.startsWith(`data:${mime}`)) return null
       const base64 = dataUrl.split(',')[1]
       if (!base64) return null
-      const binary = atob(base64)
-      const bytes = new Uint8Array(binary.length)
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-      return bytes
+      return decodeBase64(base64)
     } catch (err) {
       console.warn('Raster encode fallback failed:', err)
       return null

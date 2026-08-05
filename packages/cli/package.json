@@ -2,10 +2,9 @@
   "name": "@open-pencil/cli",
   "version": "0.13.2",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/open-pencil/open-pencil.git",
-    "directory": "packages/cli"
+  "type": "module",
+  "imports": {
+    "#cli/*": "./src/*"
   },
   "bin": {
     "openpencil": "./bin/openpencil.js"
@@ -14,17 +13,18 @@
     "bin",
     "dist"
   ],
-  "type": "module",
-  "imports": {
-    "#cli/*": "./src/*"
+  "scripts": {
+    "build": "bunx tsdown --config tsdown.config.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-pencil/open-pencil.git",
+    "directory": "packages/cli"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
-  },
-  "scripts": {
-    "build": "bunx tsdown --config tsdown.config.ts",
-    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@open-pencil/core": "workspace:*",

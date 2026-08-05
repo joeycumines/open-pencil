@@ -3,11 +3,11 @@ import { TooltipProvider } from 'reka-ui'
 import { computed, ref } from 'vue'
 
 import ProviderModelSelect from '@/components/chat/ProviderModelSelect.vue'
-import ProviderSettings from '@/components/chat/ProviderSettings/ProviderSettings.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import Tip from '@/components/ui/Tip.vue'
 import { useButtonUI } from '@/components/ui/button'
 import { useAIChat } from '@/app/ai/chat/use'
+import { openSettingsDialog } from '@/app/settings/dialog'
 import { useI18n } from '@open-pencil/vue'
 
 import { ACP_AGENTS } from '@open-pencil/core/constants'
@@ -35,6 +35,18 @@ const acpAgentName = computed(() => {
 const isCustomProvider = computed(
   () => providerID.value === 'openai-compatible' || providerID.value === 'anthropic-compatible'
 )
+const stopButton = useButtonUI({
+  tone: 'ghost',
+  shape: 'rounded',
+  size: 'sm',
+  ui: { base: 'shrink-0 border border-border px-2 py-1.5' }
+})
+const sendButton = useButtonUI({
+  tone: 'accent',
+  shape: 'rounded',
+  size: 'sm',
+  ui: { base: 'shrink-0 px-2.5 py-1.5 font-medium' }
+})
 const customModelName = computed(() => customModelID.value.trim())
 const usesCustomModel = computed(
   () => !!providerDef.value.supportsCustomModel && !!customModelName.value
@@ -80,7 +92,17 @@ function handleSubmit(e: Event) {
         </ProviderModelSelect>
 
         <div class="ml-auto">
-          <ProviderSettings />
+          <Tip :label="dialogs.providerSettings">
+            <button
+              type="button"
+              data-test-id="provider-settings-trigger"
+              :aria-label="dialogs.providerSettings"
+              class="rounded p-0.5 text-muted hover:bg-hover hover:text-surface"
+              @click="openSettingsDialog('ai')"
+            >
+              <icon-lucide-settings class="size-3" />
+            </button>
+          </Tip>
         </div>
       </div>
 
@@ -100,14 +122,7 @@ function handleSubmit(e: Event) {
           <button
             type="button"
             data-test-id="chat-stop-button"
-            :class="
-              useButtonUI({
-                tone: 'ghost',
-                shape: 'rounded',
-                size: 'sm',
-                ui: { base: 'shrink-0 border border-border px-2 py-1.5' }
-              }).base
-            "
+            :class="stopButton.base"
             @click="emit('stop')"
           >
             <icon-lucide-square class="size-3" />
@@ -117,14 +132,7 @@ function handleSubmit(e: Event) {
           <button
             type="submit"
             data-test-id="chat-send-button"
-            :class="
-              useButtonUI({
-                tone: 'accent',
-                shape: 'rounded',
-                size: 'sm',
-                ui: { base: 'shrink-0 px-2.5 py-1.5 font-medium' }
-              }).base
-            "
+            :class="sendButton.base"
             :disabled="!input.trim()"
           >
             <icon-lucide-send class="size-3" />

@@ -43,6 +43,7 @@
   "copyAsJSX": "Copia come JSX",
   "copyNodeId": "Copia ID nodo",
   "copyXPath": "Copia XPath",
+  "convertToVector": "Converti in vettore",
   "checkUpdates": "Controlla aggiornamenti…",
   "booleanOperations": "Operazioni booleane",
   "strikethrough": "Barrato",
@@ -52,5 +53,9 @@
   "arrangeAlignRight": "Allinea a destra",
   "arrangeAlignTop": "Allinea in alto",
   "arrangeAlignMiddle": "Centra verticalmente",
-  "arrangeAlignBottom": "Allinea in basso"
+  "arrangeAlignBottom": "Allinea in basso",
+  "multiplayerCursors": "Cursori multigiocatore",
+  "renameSelection": "Rinomina selezione…",
+  "rulers": "Righelli",
+  "settings": "Impostazioni…"
 }

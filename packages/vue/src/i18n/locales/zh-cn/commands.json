@@ -15,6 +15,7 @@
   "bringToFront": "置于顶层",
   "sendToBack": "置于底层",
   "moveToPage": "移动到页面",
+  "setOpacity": "设置不透明度",
   "zoomTo100": "缩放到 100%",
   "zoomToFit": "适应屏幕",
   "zoomToSelection": "适应所选内容",
@@ -33,5 +34,10 @@
   "outlineText": "文本转轮廓",
   "outlineStroke": "描边转轮廓",
   "useAsMask": "用作蒙版",
-  "removeMask": "取消蒙版"
+  "removeMask": "取消蒙版",
+  "bringForward": "上移一层",
+  "distributeHorizontal": "水平等距分布",
+  "distributeVertical": "垂直等距分布",
+  "selectInverse": "反向选择",
+  "sendBackward": "下移一层"
 }

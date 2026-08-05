@@ -5,6 +5,7 @@ import { onScopeDispose } from 'vue'
 import { editorCommandMetadata } from '@open-pencil/vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
+import { requestRenameSelection } from '@/app/editor/selection/rename-dialog'
 import { TOOL_SHORTCUTS } from '@/app/editor/session'
 import { isEditing } from '@/app/shell/keyboard/focus'
 import { bindSpaceHandTool } from '@/app/shell/keyboard/space-tool'
@@ -20,6 +21,7 @@ type ShortcutDefinition = {
   id: string
   keys: string | string[]
   run: ShortcutAction
+  shouldPreventDefault?: (event: KeyboardEvent) => boolean
 }
 
 function commandShortcut(
@@ -36,8 +38,36 @@ function commandShortcuts(...commands: EditorCommandId[]): ShortcutDefinition[] 
   })
 }
 
+function opacityBindings(): ShortcutDefinition[] {
+  return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => ({
+    id: `selection-opacity-${digit}`,
+    keys: digit,
+    run: ({ keyEvent, actions }) => {
+      if (keyEvent.metaKey || keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey) return
+      actions.opacityDigit(digit)
+    },
+    shouldPreventDefault: (event) =>
+      !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+  }))
+}
+
+const EDITOR_SHORTCUT_OVERLAY_SELECTOR =
+  '[data-picker-content], [role="dialog"], [role="listbox"], [role="menu"]'
+
+function originatedInOverlay(event: KeyboardEvent) {
+  return event
+    .composedPath()
+    .some((target) => target instanceof Element && target.matches(EDITOR_SHORTCUT_OVERLAY_SELECTOR))
+}
+
+function hasOpenDismissableLayer() {
+  return document.querySelector('[data-dismissable-layer]') !== null
+}
+
 function shouldIgnoreShortcut(event: KeyboardEvent, options: KeyboardShortcutOptions) {
   return (
+    hasOpenDismissableLayer() ||
+    originatedInOverlay(event) ||
     isEditing(event) ||
     options.inputFocused.value ||
     !!options.store.state.editingTextId ||
@@ -106,13 +136,19 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       run: ({ closeActiveTab }) => closeActiveTab()
     },
     { id: 'new-tab', keys: ['$mod+KeyN', '$mod+KeyT'], run: ({ createTab }) => createTab() },
+    {
+      id: 'rename-selection',
+      keys: appMenuTinykeysShortcut('selection.rename') ?? '$mod+KeyR',
+      run: ({ store }) => requestRenameSelection(store)
+    },
     ...commandShortcuts(
       'edit.undo',
       'view.zoom100',
       'view.zoomFit',
       'view.zoomSelection',
       'selection.duplicate',
-      'selection.selectAll'
+      'selection.selectAll',
+      'selection.selectInverse'
     ),
     {
       id: 'save',
@@ -130,12 +166,18 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       keys: 'Shift+KeyA',
       run: ({ actions }) => actions.toggleAutoLayout()
     },
-    ...commandShortcuts('selection.bringToFront', 'selection.sendToBack'),
+    ...commandShortcuts(
+      'selection.bringForward',
+      'selection.bringToFront',
+      'selection.sendBackward',
+      'selection.sendToBack'
+    ),
     { id: 'delete-backspace', keys: 'Backspace', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete', keys: 'Delete', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete-alt', keys: 'Alt+Delete', run: ({ actions }) => actions.smartDelete(true) },
     { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEnterText() },
-    { id: 'escape', keys: 'Escape', run: ({ actions }) => actions.escapeOrDeselect() }
+    { id: 'escape', keys: 'Escape', run: ({ actions }) => actions.escapeOrDeselect() },
+    ...opacityBindings()
   ]
 
   const bindings: KeyBindingMap = {}
@@ -143,8 +185,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
 
   for (const shortcut of shortcuts) {
     bindShortcut(bindings, shortcut.keys, (event) => {
-      event.preventDefault()
       shortcut.run(runOptions(event))
+      if (shortcut.shouldPreventDefault?.(event) ?? true) event.preventDefault()
     })
   }
 
@@ -158,7 +200,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
           handler(event)
         }
       ])
-    )
+    ),
+    { capture: true }
   )
 
   onScopeDispose(unsubscribe)

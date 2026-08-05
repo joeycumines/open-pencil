@@ -29,7 +29,8 @@ export function createSelectionCommands({
   capabilities,
   messages: t,
   otherPages,
-  moveSelectionToPage
+  moveSelectionToPage,
+  getOpacityTarget
 }: EditorCommandMapOptions): Record<SelectionCommandId, EditorCommand> {
   return {
     'selection.selectAll': {
@@ -39,6 +40,14 @@ export function createSelectionCommands({
       },
       enabled: capabilities.canSelectAll,
       run: () => editor.selectAll()
+    },
+    'selection.selectInverse': {
+      id: 'selection.selectInverse',
+      get label() {
+        return t.value.selectInverse
+      },
+      enabled: capabilities.canSelectAll,
+      run: () => editor.selectInverse()
     },
     'selection.duplicate': {
       id: 'selection.duplicate',
@@ -121,7 +130,7 @@ export function createSelectionCommands({
         return t.value.goToMainComponent
       },
       enabled: capabilities.canGoToMainComponent,
-      run: () => editor.goToMainComponent()
+      run: () => void editor.goToMainComponent()
     },
     'selection.wrapInAutoLayout': {
       id: 'selection.wrapInAutoLayout',
@@ -148,6 +157,14 @@ export function createSelectionCommands({
         )
       }
     },
+    'selection.bringForward': {
+      id: 'selection.bringForward',
+      get label() {
+        return t.value.bringForward
+      },
+      enabled: capabilities.canBringToFront,
+      run: () => editor.bringForward()
+    },
     'selection.bringToFront': {
       id: 'selection.bringToFront',
       get label() {
@@ -155,6 +172,14 @@ export function createSelectionCommands({
       },
       enabled: capabilities.canBringToFront,
       run: () => editor.bringToFront()
+    },
+    'selection.sendBackward': {
+      id: 'selection.sendBackward',
+      get label() {
+        return t.value.sendBackward
+      },
+      enabled: capabilities.canSendToBack,
+      run: () => editor.sendBackward()
     },
     'selection.sendToBack': {
       id: 'selection.sendToBack',
@@ -195,6 +220,22 @@ export function createSelectionCommands({
       },
       enabled: capabilities.canFlip,
       run: () => editor.flipNodes([...selection.selectedIds.value], 'vertical')
+    },
+    'selection.distributeHorizontal': {
+      id: 'selection.distributeHorizontal',
+      get label() {
+        return t.value.distributeHorizontal
+      },
+      enabled: capabilities.canDistribute,
+      run: () => editor.distributeNodes([...selection.selectedIds.value], 'horizontal')
+    },
+    'selection.distributeVertical': {
+      id: 'selection.distributeVertical',
+      get label() {
+        return t.value.distributeVertical
+      },
+      enabled: capabilities.canDistribute,
+      run: () => editor.distributeNodes([...selection.selectedIds.value], 'vertical')
     },
     'selection.booleanUnion': {
       id: 'selection.booleanUnion',
@@ -260,6 +301,17 @@ export function createSelectionCommands({
       enabled: capabilities.canMoveToPage,
       run: () => {
         moveSelectionToPage(otherPages.value[0].id)
+      }
+    },
+    'selection.setOpacity': {
+      id: 'selection.setOpacity',
+      get label() {
+        return t.value.setOpacity
+      },
+      enabled: capabilities.canSetOpacity,
+      run: () => {
+        const target = getOpacityTarget()
+        editor.setOpacity(target.value, target.coalesceKey)
       }
     }
   }

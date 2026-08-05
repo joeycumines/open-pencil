@@ -12,12 +12,11 @@ import { openFileFromPath, useMenu } from '@/app/shell/menu/use'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
 import { connectAutomation } from '@/app/automation/bridge/server'
 import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
-import { IS_TAURI } from '@/constants'
+import { isTauri } from '@/app/tauri/env'
 import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { createDemoShapes } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
-import { toast } from '@/app/shell/ui'
 
 import CollabPanel from '@/components/CollabPanel/CollabPanel.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
@@ -25,6 +24,7 @@ import LayersPanel from '@/components/LayersPanel.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
 import MobileHud from '@/components/MobileHud/MobileHud.vue'
 import PropertiesPanel from '@/components/PropertiesPanel.vue'
+import RenameSelectionDialog from '@/components/selection/RenameSelectionDialog.vue'
 import SafariBanner from '@/components/SafariBanner.vue'
 import TabBar from '@/components/TabBar.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -41,7 +41,7 @@ const { dialogs } = useI18n()
 const { isMobile } = useViewportKind()
 
 if (createdInitialTab && route.meta.demo && !('test' in params)) {
-  createDemoShapes(firstTab.store)
+  void createDemoShapes(firstTab.store)
 }
 
 useHead({ title: route.meta.demo ? 'Demo' : undefined })
@@ -78,7 +78,7 @@ async function openPendingAssociatedFiles() {
 }
 
 async function bindAssociatedFileOpen() {
-  if (!IS_TAURI) return
+  if (!isTauri()) return
   const { listen } = await import('@tauri-apps/api/event')
   fileAssociationCleanup.value = await listen('open-associated-files', () => {
     void openPendingAssociatedFiles().catch((e) => console.error('[Open With]', e))
@@ -90,17 +90,12 @@ onMounted(async () => {
   try {
     const mcp = await spawnMCPIfNeeded()
     mcpCleanup.value = mcp?.disconnect ?? null
-    if (import.meta.env.DEV || IS_TAURI) {
+    const tauri = isTauri()
+    if (import.meta.env.DEV || tauri) {
       automationCleanup.value = connectAutomation(getActiveStore, mcp?.authToken ?? null).disconnect
     }
   } catch (e) {
-    // Surface the failure to the user — without a visible signal, ACP
-    // agents and automation silently fail and the user can't tell why.
-    const message = e instanceof Error ? e.message : String(e)
-    console.warn('[MCP]', message, e)
-    if (IS_TAURI) {
-      toast.error(`MCP server failed to start: ${message}`)
-    }
+    console.warn('[MCP]', e)
   }
 
   try {
@@ -120,6 +115,7 @@ onUnmounted(() => {
 <template>
   <div data-test-id="editor-root" class="flex h-screen w-screen flex-col">
     <SafariBanner />
+    <RenameSelectionDialog />
     <TabBar />
 
     <!-- Desktop layout -->

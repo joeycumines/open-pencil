@@ -27,6 +27,8 @@ export function createComponentBridge(
       ),
     createInstanceFromComponent: components.createInstanceFromComponent,
     detachInstance: () => components.detachInstance(selection.getSelectedNode()),
+    focusComponent: (componentId: string) =>
+      components.focusComponent(componentId, pages.switchPage),
     goToMainComponent: () =>
       components.goToMainComponent(selection.getSelectedNode(), pages.switchPage),
     getComponentSetPropertyDefs: components.getComponentSetPropertyDefs,
@@ -37,6 +39,9 @@ export function createComponentBridge(
     findVariantByValues: components.findVariantByValues,
     getDefaultVariantForComponentSet: components.getDefaultVariantForComponentSet,
     getComponentSetVariantConflicts: components.getComponentSetVariantConflicts,
-    switchInstanceVariant: components.switchInstanceVariant
+    switchInstanceVariant: components.switchInstanceVariant,
+    getInstanceComponentPropertyDefinitions: components.getInstanceComponentPropertyDefinitions,
+    getInstanceComponentPropertyValue: components.getInstanceComponentPropertyValue,
+    setInstanceComponentProperty: components.setInstanceComponentProperty
   }
 }

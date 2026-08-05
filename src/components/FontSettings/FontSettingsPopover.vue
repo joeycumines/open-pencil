@@ -16,7 +16,7 @@ const cls = usePopoverUI({ content: 'isolate z-[51] w-80 p-3' })
 const trigger = useButtonUI({
   tone: 'ghost',
   size: 'iconSm',
-  ui: { base: 'shrink-0 border border-border bg-input' }
+  ui: { base: 'shrink-0' }
 })
 const secondaryButton = useButtonUI({
   tone: 'ghost',
@@ -76,7 +76,11 @@ onMounted(() => {
 <template>
   <PopoverRoot v-model:open="popoverOpen" @update:open="setPopoverOpen">
     <Tip :label="dialogs.fontSettings" :disabled="popoverOpen">
-      <PopoverTrigger data-test-id="font-settings-trigger" :class="trigger.base">
+      <PopoverTrigger
+        data-test-id="font-settings-trigger"
+        :aria-label="dialogs.fontSettings"
+        :class="trigger.base"
+      >
         <icon-lucide-settings class="size-3.5" />
       </PopoverTrigger>
     </Tip>

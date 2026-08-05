@@ -1,6 +1,8 @@
 import { lstat, mkdir, readlink, realpath, writeFile } from 'node:fs/promises'
 import { dirname, basename, isAbsolute, join, parse, resolve, sep as osSep } from 'node:path'
 
+import { decodeBase64 } from '@open-pencil/core/bytes'
+
 import { ok } from '#mcp/result'
 import type { MCPResult } from '#mcp/result'
 
@@ -226,25 +228,25 @@ export async function writeToolOutput(
   // realpath-validated path ensures the write lands inside root.
   const parentDir = dirname(realPath)
   await mkdir(parentDir, { recursive: true })
-  // TOCTOU mitigation: verify the parent directory is still a real directory
-  // (not a symlink) after mkdir. An attacker who replaces a directory
-  // component with a symlink between resolveSafePath and the write would be
-  // detected here. This narrows the race window significantly.
-  const parentStat = await lstat(parentDir)
-  if (parentStat.isSymbolicLink()) {
-    throw new Error(`Security: parent directory replaced with symlink: ${parentDir}`)
-  }
+  // TOCTOU mitigation: re-verify the parent directory still resolves inside
+  // the root after mkdir. An attacker who replaces an ancestor directory
+  // with a symlink between resolveSafePath and the write would be detected
+  // here — realpath follows the ancestor symlink and resolves outside root.
+  await resolveSafePath(parentDir, root)
   if (toolName === 'export_svg' && typeof result.svg === 'string') {
     await writeFile(realPath, result.svg, 'utf8')
+    await resolveSafePath(realPath, root)
     return ok({ written: resolved, byteLength: Buffer.byteLength(result.svg, 'utf8') })
   }
   if (toolName === 'export_image' && typeof result.base64 === 'string') {
-    const buffer = Buffer.from(result.base64, 'base64')
-    await writeFile(realPath, buffer)
-    return ok({ written: resolved, byteLength: buffer.length })
+    const bytes = decodeBase64(result.base64)
+    await writeFile(realPath, bytes)
+    await resolveSafePath(realPath, root)
+    return ok({ written: resolved, byteLength: bytes.length })
   }
   if (toolName === 'get_jsx' && typeof result.jsx === 'string') {
     await writeFile(realPath, result.jsx, 'utf8')
+    await resolveSafePath(realPath, root)
     return ok({ written: resolved, byteLength: Buffer.byteLength(result.jsx, 'utf8') })
   }
   return null

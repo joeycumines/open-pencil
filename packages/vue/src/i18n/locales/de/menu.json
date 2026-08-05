@@ -43,6 +43,7 @@
   "copyAsJSX": "Als JSX kopieren",
   "copyNodeId": "Knoten-ID kopieren",
   "copyXPath": "XPath kopieren",
+  "convertToVector": "In Vektor umwandeln",
   "checkUpdates": "Nach Updates suchen…",
   "booleanOperations": "Boolesche Operationen",
   "strikethrough": "Durchstreichen",
@@ -52,5 +53,9 @@
   "arrangeAlignRight": "Rechts ausrichten",
   "arrangeAlignTop": "Oben ausrichten",
   "arrangeAlignMiddle": "Mittig ausrichten",
-  "arrangeAlignBottom": "Unten ausrichten"
+  "arrangeAlignBottom": "Unten ausrichten",
+  "multiplayerCursors": "Multiplayer-Cursor",
+  "renameSelection": "Auswahl umbenennen…",
+  "rulers": "Lineale",
+  "settings": "Einstellungen…"
 }

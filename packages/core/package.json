@@ -27,6 +27,7 @@
     },
     "./scene-graph": {
       "types": "./dist/scene-graph/index.d.ts",
+      "bun": "./src/scene-graph/index.ts",
       "import": "./dist/scene-graph/index.js",
       "default": "./dist/scene-graph/index.js"
     },
@@ -105,11 +106,6 @@
       "import": "./dist/io/formats/fig/index.js",
       "default": "./dist/io/formats/fig/index.js"
     },
-    "./io/formats/pen": {
-      "types": "./dist/io/formats/pen/index.d.ts",
-      "import": "./dist/io/formats/pen/index.js",
-      "default": "./dist/io/formats/pen/index.js"
-    },
     "./io/formats/jsx": {
       "types": "./dist/io/formats/jsx/index.d.ts",
       "import": "./dist/io/formats/jsx/index.js",
@@ -135,6 +131,12 @@
       "import": "./dist/clipboard.js",
       "default": "./dist/clipboard.js"
     },
+    "./bytes": {
+      "bun": "./src/bytes/index.ts",
+      "types": "./dist/bytes/index.d.ts",
+      "import": "./dist/bytes/index.js",
+      "default": "./dist/bytes/index.js"
+    },
     "./constants": {
       "types": "./dist/constants.d.ts",
       "import": "./dist/constants.js",
@@ -152,6 +154,7 @@
     },
     "./types": {
       "types": "./dist/types.d.ts",
+      "bun": "./src/types.ts",
       "import": "./dist/types.js",
       "default": "./dist/types.js"
     },
@@ -167,6 +170,7 @@
     },
     "./geometry": {
       "types": "./dist/geometry.d.ts",
+      "bun": "./src/geometry.ts",
       "import": "./dist/geometry.js",
       "default": "./dist/geometry.js"
     }
@@ -182,22 +186,28 @@
   "dependencies": {
     "@chenglou/pretext": "^0.0.7",
     "@iconify/utils": "^3.1.0",
+    "@open-pencil/fig": "workspace:*",
     "@open-pencil/kiwi": "workspace:*",
     "@open-pencil/pen": "workspace:*",
     "@open-pencil/scene-graph": "workspace:*",
     "@tauri-apps/api": "^2",
+    "@xmldom/xmldom": "^0.9.10",
     "acorn": "^8.16.0",
     "canvaskit-wasm": "^0.40.0",
     "culori": "^4.0.2",
+    "destr": "^2.0.5",
     "diff": "^8.0.3",
     "es-toolkit": "^1.46.1",
     "expr-eval": "^2.0.2",
     "fflate": "^0.8.2",
     "fontoxpath": "^3.34.0",
     "fzstd": "^0.1.1",
+    "js-base64": "^3.9.2",
     "jspdf": "^4.2.1",
     "nanoevents": "^9.1.0",
-    "opentype.js": "^1.3.4",
+    "ofetch": "^1.5.1",
+    "opentype.js": "^2.0.0",
+    "pptxgenjs": "^4.0.1",
     "sucrase": "^3.35.1",
     "svg2pdf.js": "^2.7.0",
     "svgpath": "^2.6.0",

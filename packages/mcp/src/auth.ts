@@ -15,9 +15,7 @@ export function isAuthorized(provided: string | null, expected: string | null): 
   if (expected === null) return true
   if (provided === null) return false
 
-  // Hash both strings to fixed-length digests so timingSafeEqual always
-  // compares equal-length buffers, regardless of input token length.
-  const a = createHash('sha256').update(provided, 'utf-8').digest()
-  const b = createHash('sha256').update(expected, 'utf-8').digest()
-  return timingSafeEqual(a, b)
+  const providedDigest = createHash('sha256').update(provided, 'utf8').digest()
+  const expectedDigest = createHash('sha256').update(expected, 'utf8').digest()
+  return timingSafeEqual(providedDigest, expectedDigest)
 }

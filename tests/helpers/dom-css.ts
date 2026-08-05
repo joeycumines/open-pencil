@@ -1,14 +1,14 @@
 import { colorToCSS } from '@open-pencil/core/color'
-import type { DesignDocument } from '@open-pencil/dom-css'
-import type { SceneNode } from '@open-pencil/scene-graph'
+import type { DesignDocument, DesignElement, DesignNode } from '@open-pencil/dom-css'
 
-/**
- * Asserts a node is a FRAME and returns it narrowed.
- * Shared across DOM/CSS conversion test files.
- */
-export function expectFrame(node: SceneNode | undefined) {
-  if (node?.type !== 'FRAME') throw new Error(`Expected FRAME node, got ${node?.type ?? 'none'}`)
-  return node
+export function findTextElement(nodes: DesignNode[]): DesignElement | undefined {
+  for (const node of nodes) {
+    if (node.type !== 'element') continue
+    if (node.children.some((child) => child.type === 'text')) return node
+    const child = findTextElement(node.children)
+    if (child) return child
+  }
+  return undefined
 }
 
 export const DOM_CSS_COLORS = {

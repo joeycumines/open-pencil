@@ -13,15 +13,7 @@ let cachedInfo: DiscoveryInfo | null = null
 async function resolveDiscovery(): Promise<DiscoveryInfo> {
   if (cachedInfo) return cachedInfo
 
-  let info: DiscoveryInfo | null = null
-  try {
-    info = await readDiscoveryFile()
-  } catch (e) {
-    if (e instanceof Error && 'code' in e && (e as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.warn(`Failed to read discovery file: ${e.message}`)
-    }
-  }
-
+  const info = await readDiscoveryFile()
   if (!info) {
     throw new Error(
       'Could not read MCP discovery file.\n' +
@@ -118,51 +110,41 @@ class UnauthorizedError extends Error {
   }
 }
 
-function isSocketConnectionError(err: unknown): boolean {
-  if (err instanceof Error) {
-    const msg = err.message
-    return msg.includes('ECONNREFUSED') || msg.includes('ENOENT')
-  }
-  return false
+function isSocketConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = 'code' in error ? String(error.code) : ''
+  return (
+    code === 'ECONNREFUSED' ||
+    code === 'ENOENT' ||
+    code === 'FailedToOpenSocket' ||
+    error.message.includes('ECONNREFUSED') ||
+    error.message.includes('ENOENT')
+  )
 }
 
-function isTransientError(err: unknown): boolean {
-  if (err instanceof UnauthorizedError) return true
-  // Socket connection errors are handled separately by the TCP fallback
-  // in rpc() — they should not trigger a discovery re-read.
-  return false
+async function rpcWithFallback<T>(info: DiscoveryInfo, command: string, args: unknown): Promise<T> {
+  try {
+    return await doRpc<T>(info, command, args)
+  } catch (error) {
+    if (
+      !platformHasUnixSockets() ||
+      !info.socketPath ||
+      info.httpPort <= 0 ||
+      !isSocketConnectionError(error)
+    ) {
+      throw error
+    }
+    return doRpc<T>(info, command, args, true)
+  }
 }
 
 export async function rpc<T = unknown>(command: string, args: unknown = {}): Promise<T> {
-  const info = await resolveDiscovery()
-
   try {
-    return await doRpc<T>(info, command, args)
-  } catch (err) {
-    // If the Unix socket is unavailable (ENOENT = file gone, ECONNREFUSED =
-    // server not listening), retry the same request over TCP without
-    // re-reading the discovery file — the file hasn't changed, the socket
-    // just isn't reachable.
-    if (
-      platformHasUnixSockets() &&
-      info.socketPath &&
-      info.httpPort > 0 &&
-      isSocketConnectionError(err)
-    ) {
-      try {
-        return await doRpc<T>(info, command, args, true)
-      } catch (tcpErr) {
-        // If TCP also fails with a transient error, fall through to
-        // discovery re-read instead of masking the original error.
-        if (!isTransientError(tcpErr) && !isSocketConnectionError(tcpErr)) throw tcpErr
-      }
-    }
-
-    // Auth token rotation or both socket and TCP failed: re-read
-    // discovery and retry once.
-    if (!isTransientError(err) && !isSocketConnectionError(err)) throw err
+    return await rpcWithFallback<T>(await resolveDiscovery(), command, args)
+  } catch (error) {
+    if (!(error instanceof UnauthorizedError) && !isSocketConnectionError(error)) throw error
     cachedInfo = null
-    return doRpc<T>(await resolveDiscovery(), command, args)
+    return rpcWithFallback<T>(await resolveDiscovery(), command, args)
   }
 }
 

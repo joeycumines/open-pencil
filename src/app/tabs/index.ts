@@ -6,11 +6,19 @@ import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { setOpenPencilStore } from '@/app/browser-bridge'
-import { yieldToUI } from '@/app/document/io/browser'
+import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import { createEditorStore } from '@/app/editor/session'
 import type { EditorStore } from '@/app/editor/session'
-import { createFileOpenLock } from '@/app/tabs/identity'
+import {
+  activeStorageProviderID,
+  createActiveStorageAdapter,
+  type StorageDocument
+} from '@/app/integrations/storage'
+import { getLocalCanvasStore } from '@/app/storage/local-store'
+import { seedStorageCanvasFromRemote } from '@/app/storage/sync/persist'
+import { createFileOpenCoordinator } from '@/app/tabs/open/coordinator'
+import { findTabByFileIdentity } from '@/app/tabs/open/identity'
 
 export interface Tab {
   id: string
@@ -18,12 +26,7 @@ export interface Tab {
 }
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
-
-const fileOpenLock = createFileOpenLock(() => tabsRef.value)
-
-function hasSourceIdentity(store: EditorStore): boolean {
-  return !!(store.getSourcePath() || store.getSourceHandle() || store.getSourceFileName())
-}
+const fileOpenCoordinator = createFileOpenCoordinator()
 
 let nextTabId = 1
 
@@ -109,8 +112,80 @@ export function closeTab(tabId: string) {
   closingTab.store.dispose()
 }
 
+function yieldToUI(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
+}
+
 function isDOMImportFile(file: File): boolean {
   return /\.(html?|xhtml)$/i.test(file.name)
+}
+
+function reusableTabStore(): EditorStore {
+  const current = activeTab.value
+  const isUntouched =
+    current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
+  return isUntouched ? current.store : createTab().store
+}
+
+function findStorageTab(providerId: string, documentId: string): Tab | undefined {
+  return tabsRef.value.find((tab) => {
+    const binding = tab.store.getStorageBinding()
+    return binding?.providerId === providerId && binding.documentId === documentId
+  })
+}
+
+export async function openStorageDocumentInNewTab(document: StorageDocument): Promise<void> {
+  const providerId = activeStorageProviderID.value
+  const existing = findStorageTab(providerId, document.id)
+  if (existing) {
+    switchTab(existing.id)
+    return
+  }
+
+  const store = reusableTabStore()
+  store.state.documentName = document.name
+  store.state.loading = true
+  try {
+    const local = getLocalCanvasStore()
+    const localMetadata = await local.getMeta(document.id)
+    const localBytes = localMetadata?.hasFig ? await local.readFig(document.id) : null
+    const localIsAuthoritative =
+      localMetadata?.syncStatus !== 'synced' ||
+      !document.metadataAuthoritative ||
+      localMetadata.updatedAt >= document.updatedAt
+    let bytes = localBytes && localIsAuthoritative ? localBytes : null
+
+    if (!bytes) {
+      bytes = await createActiveStorageAdapter(providerId).getDocument(document.id)
+      await seedStorageCanvasFromRemote({
+        providerId,
+        canvasId: document.id,
+        name: document.name,
+        updatedAt: document.updatedAt,
+        figBytes: bytes
+      })
+    }
+
+    const fileBytes = new Uint8Array(bytes.byteLength)
+    fileBytes.set(bytes)
+    const file = new File([fileBytes.buffer], `${document.name}.fig`, {
+      type: 'application/octet-stream'
+    })
+    const imported = await readFigFile(file, { populate: 'first-page' })
+    const firstPageId = imported.getPages()[0]?.id
+    if (firstPageId) computeAllLayouts(imported, firstPageId)
+    store.replaceGraph(imported)
+    store.undo.clear()
+    store.setStorageDocumentSource({ providerId, documentId: document.id }, document.name)
+    store.clearSelection()
+    const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
+    await store.switchPage(pageId)
+    await store.fitCurrentPageToViewport()
+  } finally {
+    store.state.loading = false
+  }
 }
 
 export async function openFileInNewTab(
@@ -118,66 +193,50 @@ export async function openFileInNewTab(
   handle?: FileSystemFileHandle,
   path?: string
 ): Promise<void> {
-  // The global lock intentionally protects only identity/tab-reuse decisions,
-  // not the actual disk/network I/O. This keeps duplicate tabs impossible
-  // while still allowing multiple different files to load concurrently.
-  type OpenContext = { tab: Tab; isUntouched: boolean; previousDocumentName: string | undefined }
-
-  const context = await fileOpenLock.run<OpenContext | null>(handle, path, async (existingTab) => {
-    if (existingTab) {
-      switchTab(existingTab.id)
-      return null
+  const identity: DocumentSourceIdentity = {
+    handle: handle ?? null,
+    path: path ?? null
+  }
+  const decision = await fileOpenCoordinator.decide(async () => {
+    const pending = await fileOpenCoordinator.findPending(identity)
+    if (pending) {
+      const tab = getTabForStore(pending.store)
+      if (tab) switchTab(tab.id)
+      return { kind: 'pending' as const, completion: pending.completion }
     }
 
-    // Capture the current tab only after acquiring the global open lock so
-    // that the file loads into the tab the user is currently looking at.
-    const current = activeTab.value
-    const previousDocumentName = current?.store.state.documentName
-    const isUntouched =
-      current?.store.state.documentName === 'Untitled' &&
-      !current.store.undo.canUndo &&
-      // A tab with a redo stack is not "untouched" — overwriting it would
-      // destroy recoverable user work.
-      !current.store.undo.canRedo &&
-      !hasSourceIdentity(current.store)
+    const existing = await findTabByFileIdentity(tabsRef.value, identity)
+    if (existing) {
+      switchTab(existing.id)
+      return { kind: 'existing' as const }
+    }
 
-    const tab = isUntouched ? current : createTab()
+    const store = reusableTabStore()
+    store.state.documentName = file.name.replace(/\.[^.]+$/i, '')
+    store.state.loading = true
 
-    // Claim the source identity immediately so concurrent opens of the same
-    // file observe a matching tab. Heavy I/O then happens after the lock.
-    tab.store.updateSourceIdentity(file.name, handle, path)
-    return { tab, isUntouched, previousDocumentName }
+    const completion = Promise.withResolvers<undefined>()
+    void completion.promise.catch(() => undefined)
+    const pendingOpen = { completion: completion.promise, identity, store }
+    fileOpenCoordinator.add(pendingOpen)
+    return { kind: 'owner' as const, completion, pendingOpen, store }
   })
 
-  if (!context) return
-
-  const { tab, isUntouched, previousDocumentName } = context
-  const store = tab.store
-  if (isDOMImportFile(file)) {
-    try {
-      await store.openDOMFile(file, { handle, path })
-    } catch (error) {
-      store.clearSourceIdentity()
-      if (isUntouched && previousDocumentName !== undefined) {
-        store.state.documentName = previousDocumentName
-      }
-      if (!isUntouched) {
-        closeTab(tab.id)
-      }
-      throw error
-    }
-    if (isUntouched) {
-      activateTab(tab)
-    }
+  if (decision.kind === 'existing') return
+  if (decision.kind === 'pending') {
+    await decision.completion
     return
   }
-  const documentName = file.name.replace(/\.[^.]+$/i, '')
 
-  store.state.documentName = documentName
-  store.state.loading = true
-  await yieldToUI()
-
+  const { completion, pendingOpen, store } = decision
   try {
+    if (isDOMImportFile(file)) {
+      await store.openDOMFile(file, { handle, path })
+      completion.resolve(undefined)
+      return
+    }
+
+    await yieldToUI()
     const isFig = file.name.toLowerCase().endsWith('.fig')
     const { graph: imported, sourceFormat } = isFig
       ? { graph: await readFigFile(file, { populate: 'first-page' }), sourceFormat: 'fig' }
@@ -196,26 +255,13 @@ export async function openFileInNewTab(
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     await store.fitCurrentPageToViewport()
+    completion.resolve(undefined)
   } catch (error) {
-    // A failed read must not permanently taint the tab with a source identity
-    // that would block future attempts to open the same file.
-    store.clearSourceIdentity()
-    if (isUntouched && previousDocumentName !== undefined) {
-      store.state.documentName = previousDocumentName
-    }
-    store.state.loading = false
-    if (!isUntouched) {
-      closeTab(tab.id)
-    }
+    completion.reject(error)
     throw error
-  }
-
-  store.state.loading = false
-
-  // When reusing an untouched existing tab we must explicitly activate it,
-  // because the active tab may have changed while we were loading.
-  if (isUntouched) {
-    activateTab(tab)
+  } finally {
+    store.state.loading = false
+    fileOpenCoordinator.remove(pendingOpen)
   }
 }
 
@@ -235,6 +281,7 @@ export function useTabsStore() {
     getTabForStore,
     getTabsSnapshot,
     openFileInNewTab,
+    openStorageDocumentInNewTab,
     getActiveStore,
     tabCount
   }

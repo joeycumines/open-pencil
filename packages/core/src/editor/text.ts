@@ -1,6 +1,3 @@
-import { computeAllLayouts } from '#core/layout'
-import { ensureTextFallbackPacksForNodes } from '#core/text/coverage'
-
 import {
   createTextEditSession,
   resizeTextNodeForEdit,
@@ -12,23 +9,6 @@ import type { EditorContext } from './types'
 
 export function createTextActions(ctx: EditorContext) {
   let activeSession: TextEditSession | null = null
-
-  function requestTextFallbackFonts(nodeId: string): void {
-    void ensureTextFallbackPacksForNodes(ctx.graph, [nodeId])
-      .then((loaded) => {
-        if (loaded) {
-          ctx.getRenderer()?.invalidateAllPictures()
-          computeAllLayouts(ctx.graph, ctx.state.currentPageId)
-          ctx.requestRender()
-        }
-        return undefined
-      })
-      .catch((err) => {
-        console.error(
-          `Failed to load fallback fonts: ${err instanceof Error ? err.message : String(err)}`
-        )
-      })
-  }
 
   function startTextEditing(nodeId: string) {
     const te = ctx.getTextEditor()
@@ -83,7 +63,6 @@ export function createTextActions(ctx: EditorContext) {
       styleRuns: after.styleRuns,
       ...sizeChanges
     })
-    requestTextFallbackFonts(result.nodeId)
     ctx.state.editingTextId = null
     activeSession = null
 
@@ -95,7 +74,6 @@ export function createTextActions(ctx: EditorContext) {
           styleRuns: after.styleRuns,
           ...after.size
         })
-        requestTextFallbackFonts(result.nodeId)
       },
       inverse: () => {
         ctx.graph.updateNode(result.nodeId, {
@@ -103,7 +81,6 @@ export function createTextActions(ctx: EditorContext) {
           styleRuns: before.styleRuns,
           ...before.size
         })
-        requestTextFallbackFonts(result.nodeId)
       }
     })
   }

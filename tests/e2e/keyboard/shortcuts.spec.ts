@@ -48,6 +48,15 @@ function getZoom() {
   })
 }
 
+function getSelectedOpacity() {
+  return editor.page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const id = [...store.state.selectedIds][0]
+    return id ? store.graph.getNode(id)?.opacity : undefined
+  })
+}
+
 test.describe('tool switching', () => {
   test('V → SELECT', async () => {
     await editor.page.keyboard.press('v')
@@ -103,6 +112,45 @@ test.describe('selection shortcuts', () => {
 
     await editor.page.keyboard.press('Meta+a')
     expect(await getSelectedCount()).toBe(2)
+  })
+
+  test('⌘R starts inline rename for one layer', async () => {
+    const id = await editor.page.evaluate(() => {
+      const store = window.openPencil?.getStore?.()
+      if (!store) throw new Error('OpenPencil store not initialized')
+      const node = store.graph.createNode('RECTANGLE', store.state.currentPageId)
+      store.select([node.id])
+      return node.id
+    })
+
+    await editor.page.keyboard.press('Meta+r')
+
+    const input = editor.page.getByTestId('layers-item-input')
+    await expect(input).toBeFocused()
+    await input.fill('Renamed rectangle')
+    await input.press('Enter')
+    const child = (await getPageChildren()).find((node) => node.id === id)
+    expect(child?.name).toBe('Renamed rectangle')
+  })
+
+  test('⌘R opens bulk rename for multiple layers', async () => {
+    const ids = await editor.page.evaluate(() => {
+      const store = window.openPencil?.getStore?.()
+      if (!store) throw new Error('OpenPencil store not initialized')
+      const first = store.graph.createNode('RECTANGLE', store.state.currentPageId)
+      const second = store.graph.createNode('RECTANGLE', store.state.currentPageId)
+      store.select([first.id, second.id])
+      return [first.id, second.id]
+    })
+
+    await editor.page.keyboard.press('Meta+r')
+
+    const dialog = editor.page.getByRole('dialog', { name: 'Rename 2 layers' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('Rename to').fill('Layer $n')
+    await dialog.getByRole('button', { name: 'Rename', exact: true }).click()
+    const renamed = (await getPageChildren()).filter((node) => ids.includes(node.id))
+    expect(renamed.map((node) => node.name)).toEqual(['Layer 1', 'Layer 2'])
   })
 
   test('Escape clears selection and resets to SELECT tool', async () => {
@@ -219,6 +267,56 @@ test.describe('duplicate', () => {
 
     const children = await getPageChildren()
     expect(children).toHaveLength(2)
+  })
+})
+
+test.describe('opacity shortcuts', () => {
+  test.beforeEach(async () => {
+    await editor.canvas.clearCanvas()
+    await editor.canvas.drawRect(100, 100, 60, 60)
+  })
+
+  test('combines digits and undoes them as one interaction', async () => {
+    await editor.page.keyboard.press('2')
+    await editor.page.keyboard.press('8')
+    expect(await getSelectedOpacity()).toBe(0.28)
+
+    await editor.page.keyboard.press('Meta+z')
+    expect(await getSelectedOpacity()).toBe(1)
+
+    await editor.page.keyboard.press('Meta+Shift+z')
+    expect(await getSelectedOpacity()).toBe(0.28)
+  })
+
+  test('maps 0 to 100% and 00 to 0%', async () => {
+    await editor.page.keyboard.press('5')
+    expect(await getSelectedOpacity()).toBe(0.5)
+
+    await editor.canvas.clearCanvas()
+    await editor.canvas.drawRect(100, 100, 60, 60)
+    await editor.page.keyboard.press('0')
+    expect(await getSelectedOpacity()).toBe(1)
+    await editor.page.keyboard.press('0')
+    expect(await getSelectedOpacity()).toBe(0)
+  })
+
+  test('does not consume shifted digits or NumLock-off navigation keys', async () => {
+    await editor.page.keyboard.press('5')
+    await editor.page.keyboard.press('Shift+1')
+    expect(await getSelectedOpacity()).toBe(0.5)
+
+    const prevented = await editor.page.evaluate(() => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'End',
+        code: 'Numpad1',
+        bubbles: true,
+        cancelable: true
+      })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    })
+    expect(prevented).toBe(false)
+    expect(await getSelectedOpacity()).toBe(0.5)
   })
 })
 

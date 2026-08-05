@@ -1,7 +1,6 @@
+import { populateAndApplyOverrides } from '@open-pencil/fig/instance-overrides'
+import type { InstanceNodeChange } from '@open-pencil/fig/instance-overrides'
 import type { SceneGraph } from '@open-pencil/scene-graph'
-
-import { populateAndApplyOverrides } from '#core/kiwi/fig/instance-overrides'
-import type { InstanceNodeChange } from '#core/kiwi/fig/instance-overrides'
 
 export interface LazyFigImportContext {
   changeMap: Map<string, InstanceNodeChange>
@@ -20,6 +19,24 @@ export function getLazyFigImportContext(graph: SceneGraph): LazyFigImportContext
   return lazyFigImportContexts.get(graph)
 }
 
+function applyPopulation(
+  graph: SceneGraph,
+  context: LazyFigImportContext,
+  rootIds?: string[]
+): void {
+  graph.preserveSourceMetadataDuring(() => {
+    populateAndApplyOverrides(
+      graph,
+      context.changeMap,
+      context.guidToNodeId,
+      context.blobs,
+      rootIds
+    )
+  })
+  const populatedRootIds = rootIds ?? graph.getPages(true).map((page) => page.id)
+  for (const id of populatedRootIds) context.populatedRootIds.add(id)
+}
+
 function populateRoots(
   graph: SceneGraph,
   context: LazyFigImportContext,
@@ -27,18 +44,7 @@ function populateRoots(
 ): boolean {
   const pending = [...rootIds].filter((id) => id && !context.populatedRootIds.has(id))
   if (pending.length === 0) return false
-
-  graph.preserveSourceMetadataDuring(() => {
-    populateAndApplyOverrides(
-      graph,
-      context.changeMap,
-      context.guidToNodeId,
-      context.blobs,
-      pending
-    )
-  })
-
-  for (const id of pending) context.populatedRootIds.add(id)
+  applyPopulation(graph, context, pending)
   return true
 }
 
@@ -50,9 +56,12 @@ export function populateLazyFigImportRoots(graph: SceneGraph, rootIds: Iterable<
 export function populateAllLazyFigImportRoots(graph: SceneGraph): boolean {
   const context = getLazyFigImportContext(graph)
   if (!context) return false
-  return populateRoots(
-    graph,
-    context,
-    graph.getPages(true).map((page) => page.id)
-  )
+  const rootIds = graph.getPages(true).map((page) => page.id)
+  if (rootIds.every((id) => context.populatedRootIds.has(id))) return false
+
+  // Revisit the initially populated page without an active-root filter.
+  // Cross-page component chains can only stabilize when global override
+  // resolution can see every source and target in the same pass.
+  applyPopulation(graph, context)
+  return true
 }

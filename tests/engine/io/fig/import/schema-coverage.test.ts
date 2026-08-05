@@ -3,9 +3,8 @@ import { readFileSync } from 'node:fs'
 
 import ts from 'typescript'
 
+import { FIGMA_RAW_NODE_FIELD_KEYS } from '@open-pencil/fig/node-change'
 import { parseSchema } from '@open-pencil/kiwi/schema-runtime'
-
-import { FIGMA_RAW_NODE_FIELD_KEYS } from '#core/kiwi/fig/node-change/convert'
 
 interface SchemaField {
   name: string
@@ -374,12 +373,12 @@ describe('Figma Kiwi schema coverage', () => {
     expect(
       Object.fromEntries([...buckets].map(([bucket, items]) => [bucket, items.length]))
     ).toEqual({
-      modeled: 112,
+      modeled: 114,
       schemaTag: 60,
       internalBookkeeping: 17,
-      rawPreserved: 52,
+      rawPreserved: 51,
       styleLibraryMetadata: 39,
-      componentInstanceMetadata: 34,
+      componentInstanceMetadata: 33,
       textMetadata: 23,
       slideFigjamMetadata: 39,
       visualGeometryMetadata: 38,
