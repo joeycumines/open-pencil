@@ -10,9 +10,24 @@ export function automationPlugin(authToken: string | null, corsOrigin: string): 
   let child: ReturnType<typeof spawn> | null = null
   let starting: Promise<void> | null = null
 
+  async function stopChild(): Promise<void> {
+    const pendingStart = starting
+    if (pendingStart) {
+      try {
+        await pendingStart
+      } catch (error) {
+        // configureServer reports startup failures to Vite; teardown still has to settle.
+        void error
+      }
+    }
+    const runningChild = child
+    child = null
+    runningChild?.kill()
+  }
+
   return {
     name: 'open-pencil-automation',
-    async configureServer() {
+    async configureServer(server) {
       if (child || starting) return
 
       starting = (async () => {
@@ -65,6 +80,12 @@ export function automationPlugin(authToken: string | null, corsOrigin: string): 
           if (child === spawned) child = null
         })
       })()
+      // Direct hook on the underlying HTTP server: shutdown paths that bypass
+      // the Vite plugin lifecycle (e.g. process exit after the dev server is
+      // force-closed) still tear down the spawned MCP child.
+      server.httpServer?.once('close', () => {
+        void stopChild()
+      })
 
       try {
         await starting

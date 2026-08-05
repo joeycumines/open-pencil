@@ -27,7 +27,7 @@
     },
     "./scene-graph": {
       "types": "./dist/scene-graph/index.d.ts",
-      "bun": "./src/scene-graph/index.ts",
+      "bun": "./dist/scene-graph/index.js",
       "import": "./dist/scene-graph/index.js",
       "default": "./dist/scene-graph/index.js"
     },
@@ -132,8 +132,8 @@
       "default": "./dist/clipboard.js"
     },
     "./bytes": {
-      "bun": "./src/bytes/index.ts",
       "types": "./dist/bytes/index.d.ts",
+      "bun": "./dist/bytes/index.js",
       "import": "./dist/bytes/index.js",
       "default": "./dist/bytes/index.js"
     },
@@ -154,7 +154,7 @@
     },
     "./types": {
       "types": "./dist/types.d.ts",
-      "bun": "./src/types.ts",
+      "bun": "./dist/types.js",
       "import": "./dist/types.js",
       "default": "./dist/types.js"
     },
@@ -170,7 +170,7 @@
     },
     "./geometry": {
       "types": "./dist/geometry.d.ts",
-      "bun": "./src/geometry.ts",
+      "bun": "./dist/geometry.js",
       "import": "./dist/geometry.js",
       "default": "./dist/geometry.js"
     }

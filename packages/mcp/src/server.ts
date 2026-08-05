@@ -15,6 +15,7 @@ import type { RpcJsonObject } from '#mcp/json'
 import { preprocessRpc } from '#mcp/jsx-preprocess'
 import { createMcpSessionManager } from '#mcp/server/sessions'
 import { registerTools } from '#mcp/tool/registration'
+import { getDiscoveryPath } from '#mcp/transport/paths'
 
 import packageJson from '../package.json' with { type: 'json' }
 import {
@@ -114,7 +115,11 @@ function createHonoApp(options: {
       status: browserRpc.isConnected() ? 'ok' : 'no_app',
       version: MCP_VERSION,
       installCommand: await mcpInstallCommand(),
-      authRequired: authToken !== null
+      authRequired: authToken !== null,
+      // Advertise the server's actual discovery-file location so clients whose
+      // locally computed path diverges (e.g. Linux $XDG_RUNTIME_DIR) can fall
+      // back to the authoritative path instead of failing token discovery.
+      discoveryPath: await getDiscoveryPath()
     })
   )
 

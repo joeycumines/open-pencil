@@ -71,9 +71,15 @@ export function connectAutomation(getStore: () => EditorStore, authToken: string
     }
 
     socket.onclose = (event) => {
-      if (ws === socket) ws = null
-      if (intentionalDisconnect || event.code === 1000) return
-      console.warn('[Automation] WebSocket closed:', `code=${event.code} reason=${event.reason}`)
+      const wasCurrentSocket = ws === socket
+      if (wasCurrentSocket) ws = null
+      // Ignore closes from superseded sockets and intentional disconnects.
+      // A normal code-1000 close is still reconnectable: a graceful MCP/WebSocket
+      // server restart would otherwise leave automation disconnected forever.
+      if (!wasCurrentSocket || intentionalDisconnect) return
+      const details = `code=${event.code} reason=${event.reason}`
+      if (event.code === 1000) console.debug('[Automation] WebSocket closed:', details)
+      else console.warn('[Automation] WebSocket closed:', details)
       scheduleReconnect()
     }
 

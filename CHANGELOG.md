@@ -83,6 +83,13 @@
 - Match regional browser languages to supported locales without selecting a lower-priority language. (#417)
 - Improve Simplified Chinese translations and correct localized menu terminology.
 - Resolve published package types correctly for TypeScript consumers and keep file-backed CLI commands working under Node.
+- Protect recoverable redo history when opening files: a tab with a redo stack or a loaded source is never silently reused, failed imports roll back the tab name and source identity, and platform-equivalent paths open into the same tab instead of duplicating. (#297)
+- Restart live CLI and automation sessions after the MCP server closes gracefully, and advertise the server's discovery-file path from `/health` so desktop clients find the auth token on Linux.
+- Invalidate cached text rendering and glyphs when a node's text language changes.
+- Reconnect the desktop MCP bridge after the MCP server restarts on the same token, and deduplicate Tauri file-association events with platform path normalization.
+- Keep the browser download helper writing only the selected byte range instead of including adjacent buffer bytes.
+- Restore the committed `slop-funnel.fig` round-trip fixture and register the `tests/engine/fig` shard so the full plugin-data coverage runs in the quality gate.
+- Publish `bun` export conditions that resolve from packed tarballs, and make the package smoke harness portable to stock macOS without GNU `timeout`.
 
 ### Security
 

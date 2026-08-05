@@ -81,7 +81,9 @@ function walkExports(
 ): void {
   if (typeof value === 'string') {
     const key = path.at(-1)
-    if (key === 'bun') return
+    // `bun` is a runtime condition like `import`/`default` and must resolve
+    // from the packed tarball. Skipping it here hides publish-time failures
+    // (e.g. targets pointing at absent ./src files).
     if (key === 'types') {
       checkIncludedTypePath(packageName, `exports.${path.join('.')}`, value, files)
     } else {

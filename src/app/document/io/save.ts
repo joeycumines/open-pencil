@@ -13,6 +13,7 @@ type SaveActionsOptions = Omit<DocumentSourceAccess, 'getSavedVersion'> & {
   state: SaveDocumentState
   buildFigFile: () => Uint8Array | Promise<Uint8Array>
   startWatchingFile: () => void
+  updateSourceIdentity: (fileName: string, handle?: FileSystemFileHandle, path?: string) => void
 }
 
 export function createSaveActions({
@@ -29,7 +30,8 @@ export function createSaveActions({
   setSourceIdentity,
   setSavedVersion,
   setLastWriteTime,
-  startWatchingFile
+  startWatchingFile,
+  updateSourceIdentity
 }: SaveActionsOptions) {
   const writeFile = createDocumentWriter({
     state,
@@ -87,6 +89,7 @@ export function createSaveActions({
     setStorageBinding(null)
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)
+    updateSourceIdentity(filename, undefined, undefined)
     downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
   }
 
