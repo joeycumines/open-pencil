@@ -187,7 +187,7 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [sk
 | `new_document`   | Create a new empty document                  |
 | `list_documents` | List open app documents/tabs and their pages |
 
-Note: `open_file`, `new_document`, and file-writing export tools are always available — their paths are scoped to `OPENPENCIL_MCP_ROOT`, which defaults to the current working directory (`cwd()`) when unset. `save_file` is always available; its path is validated against `OPENPENCIL_MCP_ROOT` only when the root is explicitly configured.
+Note: `open_file`, `new_document`, and file-writing export tools are registered when a file root is configured — the shipped `openpencil-mcp` and `openpencil-mcp-http` binaries always set one, defaulting to the current working directory (`cwd()`) when `OPENPENCIL_MCP_ROOT` is unset. Programmatic `startServer({ mcpRoot: null })` omits `open_file` and `new_document` because no root is configured. `save_file` is always registered; its path is validated against the root whenever one is set, otherwise the existing file path is used.
 
 ### Read
 
