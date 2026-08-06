@@ -14,13 +14,8 @@ const SHARED_TEXT_KEYS = [
   'textAutoResize',
   'lineHeight',
   'letterSpacing',
-  'textDecoration',
-  'textDecorationStyle',
-  'textDecorationThickness',
-  'textDecorationFills',
-  'textDecorationSkipInk',
-  'textUnderlineOffset',
   'textCase',
+  'textLanguage',
   'leadingTrim',
   'maxLines',
   'styleRuns',
@@ -31,10 +26,19 @@ const SHARED_TEXT_KEYS = [
   'height'
 ] as const
 
+const DECORATION_APPEARANCE_KEYS = [
+  'textDecoration',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textDecorationFills',
+  'textDecorationSkipInk',
+  'textUnderlineOffset'
+] as const
+
 describe('TEXT_PICTURE_KEYS membership', () => {
   test('contains text rendering properties', () => {
     const keys = SceneGraph.TEXT_PICTURE_KEYS
-    for (const k of [...SHARED_TEXT_KEYS, 'fills']) {
+    for (const k of [...SHARED_TEXT_KEYS, ...DECORATION_APPEARANCE_KEYS, 'fills']) {
       expect(keys.has(k)).toBe(true)
     }
   })
@@ -44,7 +48,7 @@ describe('TEXT_PICTURE_KEYS membership', () => {
     for (const k of SHARED_TEXT_KEYS) {
       expect(keys.has(k)).toBe(true)
     }
-    for (const k of ['fills', 'opacity', 'visible', 'name']) {
+    for (const k of [...DECORATION_APPEARANCE_KEYS, 'fills', 'opacity', 'visible', 'name']) {
       expect(keys.has(k)).toBe(false)
     }
   })

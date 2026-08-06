@@ -16,16 +16,19 @@ const decorationFill = {
 
 const advancedTextInvalidationCases: Array<[string, Partial<SceneNode>]> = [
   ['textAutoResize', { textAutoResize: 'TRUNCATE' }],
-  ['textDecorationStyle', { textDecorationStyle: 'DOTTED' }],
-  ['textDecorationThickness', { textDecorationThickness: 2 }],
-  ['textDecorationFills', { textDecorationFills: [decorationFill] }],
-  ['textDecorationSkipInk', { textDecorationSkipInk: false }],
-  ['textUnderlineOffset', { textUnderlineOffset: 4 }],
   ['leadingTrim', { leadingTrim: 'CAP_HEIGHT' }],
   ['maxLines', { maxLines: 1 }],
   ['fontVariations', { fontVariations: [{ axis: 'wght', value: 700 }] }],
   ['fontFeatures', { fontFeatures: [{ tag: 'liga', enabled: false }] }],
   ['textTruncation', { textTruncation: 'ENDING' }]
+]
+
+const decorationAppearanceInvalidationCases: Array<[string, Partial<SceneNode>]> = [
+  ['textDecoration', { textDecoration: 'UNDERLINE' }],
+  ['textDecorationStyle', { textDecorationStyle: 'DOTTED' }],
+  ['textDecorationThickness', { textDecorationThickness: 2 }],
+  ['textDecorationSkipInk', { textDecorationSkipInk: false }],
+  ['textUnderlineOffset', { textUnderlineOffset: 4 }]
 ]
 
 describe('updateNode', () => {
@@ -252,6 +255,29 @@ describe('updateNode', () => {
     }
   })
 
+  test('decoration appearance updates preserve imported glyph geometry', () => {
+    for (const [label, changes] of decorationAppearanceInvalidationCases) {
+      const graph = new SceneGraph()
+      const page = pageId(graph)
+      const textId = graph.createNode('TEXT', page, {
+        name: `Decorated ${label}`,
+        text: 'Import',
+        width: 100,
+        height: 20
+      }).id
+      const glyphs = [{ commandsBlob: new Uint8Array([4, 5, 6]), x: 0, y: 10, fontSize: 14 }]
+      const textNode = expectDefined(graph.getNode(textId), 'text node')
+      textNode.textPicture = new Uint8Array([1, 2, 3])
+      textNode.figmaDerivedTextGlyphs = glyphs
+
+      graph.updateNode(textId, changes)
+
+      const updated = expectDefined(graph.getNode(textId), `updated ${label} node`)
+      expect([label, updated.textPicture]).toEqual([label, null])
+      expect([label, updated.figmaDerivedTextGlyphs]).toEqual([label, glyphs])
+    }
+  })
+
   test('figmaDerivedTextGlyphs survive non-text property change on TEXT node', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)
@@ -294,6 +320,50 @@ describe('updateNode', () => {
     const updated = expectDefined(graph.getNode(textId), 'updated node')
     expect(updated.textPicture).toBeNull()
     expect(updated.figmaDerivedTextGlyphs).toBe(glyphs)
+  })
+
+  test('decoration fill updates clear textPicture but preserve imported glyph geometry', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const textId = graph.createNode('TEXT', page, {
+      name: 'Decorated imported text',
+      text: 'Import',
+      width: 100,
+      height: 20
+    }).id
+    const glyphs = [{ commandsBlob: new Uint8Array([4, 5, 6]), x: 0, y: 10, fontSize: 14 }]
+    const textNode = expectDefined(graph.getNode(textId), 'text node')
+    textNode.textPicture = new Uint8Array([1, 2, 3])
+    textNode.figmaDerivedTextGlyphs = glyphs
+
+    graph.updateNode(textId, { textDecorationFills: [decorationFill] })
+
+    const updated = expectDefined(graph.getNode(textId), 'updated node')
+    expect(updated.textPicture).toBeNull()
+    expect(updated.figmaDerivedTextGlyphs).toBe(glyphs)
+  })
+
+  test('top-level text language updates clear both text caches', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const textId = graph.createNode('TEXT', page, {
+      name: 'Localized imported text',
+      text: '漢字',
+      textLanguage: 'zh-Hans',
+      width: 100,
+      height: 20
+    }).id
+    const textNode = expectDefined(graph.getNode(textId), 'text node')
+    textNode.textPicture = new Uint8Array([1, 2, 3])
+    textNode.figmaDerivedTextGlyphs = [
+      { commandsBlob: new Uint8Array([4, 5, 6]), x: 0, y: 10, fontSize: 14 }
+    ]
+
+    graph.updateNode(textId, { textLanguage: 'zh-Hant' })
+
+    const updated = expectDefined(graph.getNode(textId), 'updated node')
+    expect(updated.textPicture).toBeNull()
+    expect(updated.figmaDerivedTextGlyphs).toBeNull()
   })
 
   test('range fill styleRuns updates clear textPicture but preserve imported glyph geometry', () => {
@@ -362,6 +432,31 @@ describe('updateNode', () => {
 
     graph.updateNode(textId, {
       styleRuns: [{ start: 0, length: 6, style: { fontFamily: 'Noto Sans SC' } }]
+    })
+
+    const updated = expectDefined(graph.getNode(textId), 'updated node')
+    expect(updated.textPicture).toBeNull()
+    expect(updated.figmaDerivedTextGlyphs).toBeNull()
+  })
+
+  test('range language styleRuns updates clear imported glyph geometry', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const textId = graph.createNode('TEXT', page, {
+      name: 'Range localized imported text',
+      text: '漢字',
+      width: 100,
+      height: 20,
+      styleRuns: [{ start: 0, length: 2, style: { textLanguage: 'zh-Hans' } }]
+    }).id
+    const textNode = expectDefined(graph.getNode(textId), 'text node')
+    textNode.textPicture = new Uint8Array([1, 2, 3])
+    textNode.figmaDerivedTextGlyphs = [
+      { commandsBlob: new Uint8Array([4, 5, 6]), x: 0, y: 10, fontSize: 14 }
+    ]
+
+    graph.updateNode(textId, {
+      styleRuns: [{ start: 0, length: 2, style: { textLanguage: 'zh-Hant' } }]
     })
 
     const updated = expectDefined(graph.getNode(textId), 'updated node')

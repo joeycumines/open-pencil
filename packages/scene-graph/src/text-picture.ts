@@ -12,12 +12,6 @@ const TEXT_RENDERING_GEOMETRY_KEYS = [
   'textAutoResize',
   'lineHeight',
   'letterSpacing',
-  'textDecoration',
-  'textDecorationStyle',
-  'textDecorationThickness',
-  'textDecorationFills',
-  'textDecorationSkipInk',
-  'textUnderlineOffset',
   'textCase',
   'textLanguage',
   'leadingTrim',
@@ -32,7 +26,13 @@ const TEXT_RENDERING_GEOMETRY_KEYS = [
 
 export const TEXT_PICTURE_KEYS: ReadonlySet<string> = new Set([
   ...TEXT_RENDERING_GEOMETRY_KEYS,
-  'fills'
+  'fills',
+  'textDecoration',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textDecorationFills',
+  'textDecorationSkipInk',
+  'textUnderlineOffset'
 ])
 
 export const FIGMA_DERIVED_TEXT_GLYPH_KEYS: ReadonlySet<string> = new Set(
@@ -68,6 +68,7 @@ function glyphGeometryStyleForRun(style: CharacterStyleOverride): Partial<StyleR
   if (style.italic !== undefined) geometry.italic = style.italic
   if (style.fontSize !== undefined) geometry.fontSize = style.fontSize
   if (style.fontFamily !== undefined) geometry.fontFamily = style.fontFamily
+  if (style.textLanguage != null) geometry.textLanguage = style.textLanguage
   if (style.letterSpacing !== undefined) geometry.letterSpacing = style.letterSpacing
   if (style.lineHeight !== undefined) geometry.lineHeight = style.lineHeight
   if (style.fontVariations !== undefined) geometry.fontVariations = style.fontVariations
@@ -95,6 +96,7 @@ function glyphGeometrySignature(style: Partial<StyleRunGlyphGeometry>): string {
   if (style.italic !== undefined) parts.push(`italic=${style.italic ? '1' : '0'}`)
   if (style.fontSize !== undefined) parts.push(`fontSize=${style.fontSize}`)
   if (style.fontFamily !== undefined) parts.push(`fontFamily=${style.fontFamily}`)
+  if (style.textLanguage != null) parts.push(`textLanguage=${style.textLanguage}`)
   if (style.letterSpacing !== undefined) parts.push(`letterSpacing=${style.letterSpacing}`)
   if (style.lineHeight !== undefined) parts.push(`lineHeight=${style.lineHeight ?? 'null'}`)
   if (style.fontVariations !== undefined) {
@@ -158,7 +160,11 @@ export function clearInvalidatedTextRenderingData(
   if (node.type !== 'TEXT') return
   const changeKeys = Object.keys(changes)
   if (node.textPicture && changeKeys.some(invalidatesTextPicture)) node.textPicture = null
-  if (node.figmaDerivedTextGlyphs && changesInvalidateFigmaDerivedTextGlyphs(node, changes)) {
+  if (
+    node.figmaDerivedTextGlyphs &&
+    changes.figmaDerivedTextGlyphs === undefined &&
+    changesInvalidateFigmaDerivedTextGlyphs(node, changes)
+  ) {
     node.figmaDerivedTextGlyphs = null
   }
 }
