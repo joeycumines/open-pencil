@@ -2,11 +2,22 @@ import { spawn } from 'node:child_process'
 
 import type { Plugin } from 'vite'
 
-import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
-import { getSocketPath, platformHasUnixSockets } from '@open-pencil/mcp/transport'
+interface AutomationPluginOptions {
+  authToken: string | null
+  corsOrigin: string
+  httpPort: number
+  getSocketPath: () => Promise<string>
+  platformHasUnixSockets: () => boolean
+}
 
 // TODO: production — bundle MCP server as Tauri sidecar or spawn via shell plugin
-export function automationPlugin(authToken: string | null, corsOrigin: string): Plugin {
+export function automationPlugin({
+  authToken,
+  corsOrigin,
+  httpPort,
+  getSocketPath,
+  platformHasUnixSockets
+}: AutomationPluginOptions): Plugin {
   let child: ReturnType<typeof spawn> | null = null
   let starting: Promise<void> | null = null
 
@@ -45,7 +56,7 @@ export function automationPlugin(authToken: string | null, corsOrigin: string): 
           stdio: ['ignore', 'inherit', 'pipe'],
           env: {
             ...childEnv,
-            PORT: String(AUTOMATION_HTTP_PORT),
+            PORT: String(httpPort),
             OPENPENCIL_MCP_TCP: '1',
             ...(socketPath ? { OPENPENCIL_MCP_SOCKET: socketPath } : {}),
             ...(authToken ? { OPENPENCIL_MCP_AUTH_TOKEN: authToken } : {}),
@@ -64,7 +75,7 @@ export function automationPlugin(authToken: string | null, corsOrigin: string): 
           const text = data.toString()
           if (text.includes('EADDRINUSE')) {
             console.error(
-              `\x1b[31m[MCP] MCP bind failed (port ${AUTOMATION_HTTP_PORT}${socketPath ? ` or socket ${socketPath}` : ''}). Is another OpenPencil instance running?\x1b[0m`
+              `\x1b[31m[MCP] MCP bind failed (port ${httpPort}${socketPath ? ` or socket ${socketPath}` : ''}). Is another OpenPencil instance running?\x1b[0m`
             )
             spawned.kill()
             if (child === spawned) child = null
@@ -94,16 +105,7 @@ export function automationPlugin(authToken: string | null, corsOrigin: string): 
       }
     },
     async buildEnd() {
-      if (starting) {
-        try {
-          await starting
-        } catch {
-          void 0
-        }
-      }
-      child?.kill()
-      child = null
-      starting = null
+      await stopChild()
     }
   }
 }
