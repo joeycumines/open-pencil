@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import {
   createTauriFetch,
   tauriFetch,
+  withAbortSignal,
   type ProxyHttpRequest,
   type ProxyHttpResponse
 } from '@/app/tauri/http'
@@ -41,6 +42,49 @@ async function withBrowserStrictNullBodyResponse<T>(callback: () => Promise<T>):
 
 afterEach(async () => {
   await clearTauriMocks()
+})
+
+describe('withAbortSignal', () => {
+  test('resolves with the wrapped promise', async () => {
+    const controller = new AbortController()
+
+    await expect(withAbortSignal(Promise.resolve('ok'), controller.signal)).resolves.toBe('ok')
+  })
+
+  test('rejects immediately when the signal is already aborted', async () => {
+    const controller = new AbortController()
+    const reason = new Error('cancelled')
+    controller.abort(reason)
+
+    const pending = Promise.withResolvers<string>()
+    const result = withAbortSignal(pending.promise, controller.signal)
+
+    await expect(result).rejects.toBe(reason)
+    pending.reject(new Error('late request failure'))
+    await Promise.resolve()
+  })
+
+  test('rejects a pending promise when the signal aborts', async () => {
+    const controller = new AbortController()
+    const pending = Promise.withResolvers<string>()
+    const result = withAbortSignal(pending.promise, controller.signal)
+    const reason = new Error('cancelled')
+
+    controller.abort(reason)
+
+    await expect(result).rejects.toBe(reason)
+    pending.resolve('late result')
+  })
+
+  test('normalizes non-Error rejections from the wrapped promise', async () => {
+    const controller = new AbortController()
+    // oxlint-disable-next-line eslint(prefer-promise-reject-errors) -- Non-Error input is the contract under test.
+    const rejected = Promise.reject('desktop failure')
+
+    await expect(withAbortSignal(rejected, controller.signal)).rejects.toThrow(
+      'Desktop HTTP request failed'
+    )
+  })
 })
 
 describe('tauriFetch', () => {
@@ -93,20 +137,22 @@ describe('tauriFetch', () => {
     expect(proxyBodyText(captured.request)).toBe('from-request')
   })
 
-  test('constructs null bodies for browser null-body response statuses', async () => {
-    await mockTauriIPC((command) => {
-      expect(command).toBe('proxy_http_request')
-      return { status: 204, headers: [{ name: 'x-no-content', value: '1' }], body: [] }
-    })
+  for (const status of [204, 205, 304]) {
+    test(`constructs a null body for status ${status}`, async () => {
+      await mockTauriIPC((command) => {
+        expect(command).toBe('proxy_http_request')
+        return { status, headers: [{ name: 'x-no-content', value: '1' }], body: [] }
+      })
 
-    await withBrowserStrictNullBodyResponse(async () => {
-      const response = await tauriFetch('https://example.test/no-content')
+      await withBrowserStrictNullBodyResponse(async () => {
+        const response = await tauriFetch(`https://example.test/status/${status}`)
 
-      expect(response.status).toBe(204)
-      expect(response.headers.get('x-no-content')).toBe('1')
-      expect(await response.text()).toBe('')
+        expect(response.status).toBe(status)
+        expect(response.headers.get('x-no-content')).toBe('1')
+        expect(await response.text()).toBe('')
+      })
     })
-  })
+  }
 
   test('forwards FormData bytes with the Request-generated content boundary', async () => {
     let captured: InvokeArgs | null = null
