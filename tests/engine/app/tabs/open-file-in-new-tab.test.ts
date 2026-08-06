@@ -363,7 +363,11 @@ describe('openFileInNewTab', () => {
       await ownerStarted.promise
       const firstDuplicate = openFileInNewTab(new File([], 'owner.fig'), handle)
       await identityStarted.promise
-      const different = openFileInNewTab(new File([], 'different.fig'), undefined, '/different.fig')
+      const different = openFileInNewTab(
+        new File([], 'different.fig'),
+        undefined,
+        '/queued-different.fig'
+      )
       const secondDuplicate = openFileInNewTab(new File([], 'owner.fig'), handle)
 
       ownerResult.reject(failure)
@@ -379,6 +383,7 @@ describe('openFileInNewTab', () => {
       expect(firstFailure).toBe(failure)
       expect(differentResult).toBeUndefined()
       expect(secondFailure).toBe(failure)
+      expect(readFigFile).toHaveBeenCalledTimes(2)
     })
 
     test('clears preclaimed source identity when DOM import fails', async () => {
