@@ -53,14 +53,14 @@ graph TB
 
 Yoga от Meta обеспечивает вычисление макета CSS flexbox и grid через [форк](https://github.com/open-pencil/yoga/tree/grid) с поддержкой CSS Grid. Тонкий адаптер сопоставляет имена свойств Figma с эквивалентами Yoga:
 
-| Свойство Figma | Эквивалент Yoga |
-|---|---|
-| `stackMode: HORIZONTAL` | `flexDirection: row` |
-| `stackMode: VERTICAL` | `flexDirection: column` |
-| `stackSpacing` | `gap` |
-| `stackPadding` | `padding` |
-| `stackJustify` | `justifyContent` |
-| `stackChildPrimaryGrow` | `flexGrow` |
+| Свойство Figma          | Эквивалент Yoga         |
+| ----------------------- | ----------------------- |
+| `stackMode: HORIZONTAL` | `flexDirection: row`    |
+| `stackMode: VERTICAL`   | `flexDirection: column` |
+| `stackSpacing`          | `gap`                   |
+| `stackPadding`          | `padding`               |
+| `stackJustify`          | `justifyContent`        |
+| `stackChildPrimaryGrow` | `flexGrow`              |
 
 ### Формат файлов (Kiwi Binary)
 
@@ -92,7 +92,7 @@ Yoga от Meta обеспечивает вычисление макета CSS fl
 
 ### RPC-мост CLI—приложение
 
-Когда запущено десктоп-приложение, команды CLI подключаются к нему по WebSocket вместо загрузки файла .fig. Сервер автоматизации работает на `127.0.0.1:7600` (HTTP) и `127.0.0.1:7601` (WebSocket). Команды выполняются относительно состояния живого редактора, позволяя скриптам автоматизации и ИИ-агентам взаимодействовать с запущенным приложением.
+Когда запущено десктоп-приложение, команды CLI подключаются к нему через MCP-сервер вместо загрузки файла .fig. На macOS и Linux MCP-сервер слушает на Unix-сокете с опциональным TCP на `127.0.0.1:7600` (HTTP + WebSocket). На Windows сервер привязывается только к TCP на `127.0.0.1:7600`. Команды выполняются относительно состояния живого редактора, позволяя скриптам автоматизации и ИИ-агентам взаимодействовать с запущенным приложением.
 
 ## Что дальше
 

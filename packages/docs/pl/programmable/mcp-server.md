@@ -1,18 +1,93 @@
+---
+title: MCP Server
+description: Połącz narzędzia AI do kodowania z OpenPencil, aby przeglądać i edytować projekty przez Model Context Protocol.
+---
+
 # MCP Server
 
-OpenPencil includes an MCP (Model Context Protocol) server that lets AI coding tools — Claude Code, Cursor, Windsurf, etc. — read and modify `.fig` files headlessly.
+OpenPencil zawiera serwer MCP, który pozwala narzędziom AI do kodowania — Claude Code, Cursor, Windsurf itd. — odczytywać i modyfikować projekty w działającej aplikacji. Dwa pliki binarne:
 
-Two transports: **stdio** for MCP clients, **HTTP** for everything else.
+- **`openpencil-mcp`** — transport stdio dla klientów MCP
+- **`openpencil-mcp-http`** — serwer HTTP + WebSocket dla przeglądarek, skryptów i wewnętrznego mostu aplikacji
 
-## Install
+## Wymagania wstępne
+
+Przed podłączeniem dowolnego klienta upewnij się, że:
+
+1. Aplikacja desktopowa OpenPencil działa **z otwartym dokumentem**. Serwer MCP jest bezużyteczny bez połączenia z aplikacją — to most, a nie renderer.
+2. Wersja pakietu MCP odpowiada wersji aplikacji. Endpoint `/health` raportuje wersje, dzięki czemu klienci mogą wykryć niezgodności.
+
+Serwer MCP uruchamia się automatycznie przy starcie aplikacji desktopowej (buildy produkcyjne Tauri uruchamiają `openpencil-mcp-http`; tryb dev używa pluginu Vite). Można też uruchomić go samodzielnie.
+
+## Architektura
+
+```text
+  MCP Client          MCP Server              OpenPencil App
+  (Claude Code,       (openpencil-mcp-http)   (desktop / browser)
+   Cursor, etc.)
+                      ┌──────────────┐
+  stdio ◄───────────► │  /rpc (HTTP) │ ◄──── JSON-RPC ─────► Stdio bridge
+                      │              │
+                      │  /    (WS)   │ ◄──── WebSocket ────► Browser tab
+  (openpencil-mcp)    │              │
+                      │  /mcp (HTTP) │ ◄── Streamable HTTP ──► External tools
+                      │              │
+                      │  /health     │
+                      └──────┬───────┘
+                             │
+                    socket or TCP (127.0.0.1)
+```
+
+Most stdio (`openpencil-mcp`) łączy się z serwerem HTTP przez gniazdo domeny Unix (na macOS/Linux) lub przez port HTTP z pliku discovery (`httpPort`, na Windows lub w konfiguracjach bez gniazda). Nie mówi MCP bezpośrednio do aplikacji — tuneluje wywołania narzędzi MCP przez HTTP do serwera, który przekazuje je do działającej aplikacji przez WebSocket.
+
+## Jak się łączy
+
+Serwer zapisuje **plik discovery** przy starcie. Most stdio czyta ten plik, aby znaleźć serwer. Nie jest wymagana żadna ręczna konfiguracja.
+
+Dwa transporty: **stdio** dla klientów MCP oraz **Streamable HTTP** dla rozszerzeń przeglądarki i skryptów. Na macOS i Linux lokalni klienci preferują prywatne gniazdo domeny Unix; Windows i niedostępne gniazda korzystają z zapasowego TCP na localhost.
+
+## Instalacja
 
 ```sh
 npm install -g @open-pencil/mcp
 ```
 
-## Stdio (Claude Code, Cursor, etc.)
+## Stdio (Claude Code, Cursor itd.)
 
-Add to your MCP config (e.g. `~/.claude/settings.json` or `.cursor/mcp.json`):
+Serwer stdio automatycznie wykrywa działającą aplikację OpenPencil. Na macOS i Linux preferuje gniazdo domeny Unix aplikacji, a w razie potrzeby korzysta z zapasowego TCP na localhost. Upewnij się, że aplikacja desktopowa jest otwarta z załadowanym dokumentem.
+
+### Claude Code
+
+```sh
+npm install -g @open-pencil/mcp
+claude mcp add --scope user open-pencil -- openpencil-mcp
+```
+
+Weryfikacja:
+
+```sh
+claude mcp list
+```
+
+Claude Code pyta przed użyciem każdego narzędzia MCP. Aby automatycznie zatwierdzać narzędzia OpenPencil, dodaj do `~/.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": ["mcp__open-pencil__*"]
+  }
+}
+```
+
+Przykładowy prompt:
+
+```text
+Use the open-pencil MCP server to inspect the current page and create a small hero section on the canvas.
+```
+
+### Inni klienci MCP
+
+Dodaj do konfiguracji MCP (np. `.cursor/mcp.json`):
 
 ```json
 {
@@ -24,9 +99,10 @@ Add to your MCP config (e.g. `~/.claude/settings.json` or `.cursor/mcp.json`):
 }
 ```
 
-Or run from source without installing:
+Uruchomienie ze źródeł bez instalacji:
 
 ::: code-group
+
 ```json [Bun]
 {
   "mcpServers": {
@@ -37,6 +113,7 @@ Or run from source without installing:
   }
 }
 ```
+
 ```json [Node.js]
 {
   "mcpServers": {
@@ -47,205 +124,216 @@ Or run from source without installing:
   }
 }
 ```
+
 :::
 
 ## HTTP
 
-For browser extensions, scripts, CI, or any HTTP client:
+Dla rozszerzeń przeglądarki, skryptów, CI lub dowolnego klienta HTTP:
 
 ```sh
 openpencil-mcp-http
 ```
 
-Or from source: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/index.ts`
+Albo ze źródeł: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/index.ts`
 
-Security defaults (HTTP transport):
+Domyślne ustawienia bezpieczeństwa:
 
-- Binds to `127.0.0.1` by default (`HOST` to override)
-- `eval` tool is disabled
-- File operations are limited to `OPENPENCIL_MCP_ROOT` (defaults to current working directory)
-- CORS is disabled by default; set `OPENPENCIL_MCP_CORS_ORIGIN` to allow one origin
-- Optional auth token: `OPENPENCIL_MCP_AUTH_TOKEN` (client sends `Authorization: Bearer <token>` or `x-mcp-token`)
+- Gniazdo Unix i pliki discovery są tworzone z uprawnieniami tylko dla właściciela na macOS i Linux.
+- TCP wiąże się z `127.0.0.1` i domyślnie używa portu 7600.
+- Uwierzytelnianie jest domyślnie włączone z wygenerowanym tokenem przechowywanym w prywatnym pliku discovery.
+- `eval` jest wyłączony.
+- Operacje na plikach są ograniczone do `OPENPENCIL_MCP_ROOT` (domyślnie bieżący katalog roboczy) i odrzucają wyjście poza ścieżką przez symlinki.
+- CORS jest domyślnie wyłączony; ustaw `OPENPENCIL_MCP_CORS_ORIGIN`, aby zezwolić na jeden origin.
 
-Server starts on port 7600 (override with `PORT` env var). Endpoints:
+Ustaw `PORT=0`, aby wyłączyć TCP na macOS i Linux. Windows wymaga TCP. Ustaw `OPENPENCIL_MCP_SOCKET`, aby nadpisać ścieżkę gniazda Unix, lub `OPENPENCIL_MCP_DISCOVERY_PATH`, aby nadpisać lokalizację pliku discovery. Aby zapewnić stabilny token, ustaw `OPENPENCIL_MCP_AUTH_TOKEN`; jawnie pusta wartość wyłącza uwierzytelnianie i powinna być używana tylko z zaufanym lokalnym gniazdem.
 
-- `GET /health` — server status
-- `POST /mcp` — MCP Streamable HTTP (SSE). Sessions via `mcp-session-id` header.
+Endpointy są dostępne na obu aktywnych transportach:
 
-## Workflow
+- `GET /health` — status połączenia serwera i aplikacji; nigdy nie zwraca tokenu uwierzytelniającego.
+- `POST /rpc` — uwierzytelniona automatyzacja działającej aplikacji.
+- `POST /mcp` — MCP Streamable HTTP. Sesje używają nagłówka `mcp-session-id`.
 
-1. **Open** — `open_file` to load an existing `.fig`, or `new_document` for a blank canvas
-2. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
-3. **Create** — `create_shape`, `render` (JSX)
-4. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
-5. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`
-6. **Save** — `save_file` to write back to `.fig`
+## Przepływ pracy
 
-## AI Agent Skill
+1. **Wykryj cele** — najpierw wywołaj `list_documents`, gdy może być otwartych więcej niż jeden dokument lub strona. Zwraca stabilne `document_id` i ID stron.
+2. **Otwórz** — `open_file`, aby wczytać istniejący `.fig`, lub `new_document` dla pustego płótna. Zwracają one metadane celu dla otwartego lub utworzonego dokumentu.
+3. **Odczyt** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
+4. **Tworzenie** — `create_shape`, `render` (JSX)
+5. **Modyfikacja** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
+6. **Struktura** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`
+7. **Zapis** — `save_file`, aby zapisać z powrotem do `.fig`
 
-Teach your AI coding agent to use OpenPencil tools:
+Większość narzędzi przyjmuje opcjonalne pola `document_id` i `page_id`. Przekazuj je jawnie w przepływach agentów zamiast polegać na widocznej aktywnej karcie/stronie. `create_page` tworzy tylko stronę; wywołaj osobno `switch_page`, gdy przepływ pracy powinien zmienić aktywną stronę.
+
+## Umiejętność agenta AI
+
+Naucz swojego agenta AI do kodowania korzystania z narzędzi OpenPencil:
 
 ```sh
 npx skills add open-pencil/skills@open-pencil
 ```
 
-Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [skills](https://skills.sh). The skill covers the CLI, MCP tools, JSX rendering, eval, and the running app's automation bridge.
+Działa z Claude Code, Cursor, Windsurf, Codex i dowolnym agentem obsługującym [skills](https://skills.sh). Umiejętność obejmuje CLI, narzędzia MCP, renderowanie JSX, eval i most automatyzacji działającej aplikacji.
 
-## Tools (90)
+## Narzędzia (91)
 
-### Document
+### Dokument
 
-| Tool | Description |
-|------|-------------|
-| `open_file` | Open a `.fig` file for editing |
-| `save_file` | Save the current document to a `.fig` file |
-| `new_document` | Create a new empty document |
+| Tool             | Description                                 |
+| ---------------- | ------------------------------------------- |
+| `open_file`      | Otwórz plik `.fig` do edycji                |
+| `save_file`      | Zapisz bieżący dokument do pliku `.fig`     |
+| `new_document`   | Utwórz nowy pusty dokument                  |
+| `list_documents` | Lista otwartych dokumentów/kart i ich stron |
 
-### Read
+Uwaga: `open_file`, `new_document` oraz narzędzia eksportu zapisujące pliki są rejestrowane, gdy skonfigurowany jest katalog główny plików — dołączane binaria `openpencil-mcp` i `openpencil-mcp-http` zawsze go ustawiają, domyślnie na bieżący katalog roboczy (`cwd()`), gdy `OPENPENCIL_MCP_ROOT` nie jest ustawiony. Programowe `startServer({ mcpRoot: null })` pomija `open_file` i `new_document`, ponieważ nie skonfigurowano katalogu głównego. `save_file` jest zawsze rejestrowany; jego ścieżka jest weryfikowana względem katalogu głównego, gdy ten jest ustawiony, w przeciwnym razie używana jest istniejąca ścieżka pliku.
 
-| Tool | Description |
-|------|-------------|
-| `get_selection` | Get currently selected nodes |
-| `get_page_tree` | Get the full node tree of the current page |
-| `get_current_page` | Get the current page name and ID |
-| `get_node` | Get detailed properties of a node by ID |
-| `find_nodes` | Find nodes by name pattern and/or type |
-| `get_components` | List all components in the document |
-| `list_pages` | List all pages |
-| `list_variables` | List design variables |
-| `list_collections` | List variable collections |
-| `list_fonts` | List fonts used in the current page |
-| `page_bounds` | Get bounding box of all objects on the current page |
-| `node_bounds` | Get bounding box of a node |
-| `node_ancestors` | Get ancestor chain of a node |
-| `node_children` | Get direct children of a node |
-| `node_tree` | Get the subtree rooted at a node |
-| `node_bindings` | Get variable bindings on a node |
+### Odczyt
 
-### Create
+| Tool               | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| `get_selection`    | Pobierz aktualnie zaznaczone węzły                       |
+| `get_page_tree`    | Pobierz pełne drzewo węzłów bieżącej strony              |
+| `get_current_page` | Pobierz nazwę i ID bieżącej strony                       |
+| `get_node`         | Pobierz szczegółowe właściwości węzła po ID              |
+| `find_nodes`       | Znajdź węzły według wzorca nazwy i/lub typu              |
+| `get_components`   | Lista wszystkich komponentów w dokumencie                |
+| `list_pages`       | Lista wszystkich stron                                   |
+| `list_variables`   | Lista zmiennych projektu                                 |
+| `list_collections` | Lista kolekcji zmiennych                                 |
+| `list_fonts`       | Lista czcionek używanych na bieżącej stronie             |
+| `page_bounds`      | Pobierz ramkę ograniczającą obiektów na bieżącej stronie |
+| `node_bounds`      | Pobierz ramkę ograniczającą węzła                        |
+| `node_ancestors`   | Pobierz łańcuch przodków węzła                           |
+| `node_children`    | Pobierz bezpośrednie dzieci węzła                        |
+| `node_tree`        | Pobierz poddrzewo z węzłem jako korzeniem                |
+| `node_bindings`    | Pobierz powiązania zmiennych na węźle                    |
 
-| Tool | Description |
-|------|-------------|
-| `create_shape` | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
-| `create_vector` | Create a vector node from a path string |
-| `create_slice` | Create an export slice |
-| `create_page` | Create a new page |
-| `render` | Render JSX to design nodes — create entire component trees in one call |
-| `create_component` | Convert a frame/group into a component |
-| `create_instance` | Create an instance of a component |
-| `node_to_component` | Convert an existing node into a component in-place |
+### Tworzenie
 
-### Modify
+| Tool                | Description                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `create_shape`      | Utwórz kształt (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
+| `create_vector`     | Utwórz węzeł wektorowy z ciągu ścieżki                                                         |
+| `create_slice`      | Utwórz wycinek eksportu                                                                        |
+| `create_page`       | Utwórz nową stronę                                                                             |
+| `render`            | Renderuj JSX do węzłów projektu — utwórz całe drzewa komponentów w jednym wywołaniu            |
+| `create_component`  | Przekształć ramkę/grupę w komponent                                                            |
+| `create_instance`   | Utwórz instancję komponentu                                                                    |
+| `node_to_component` | Przekształć istniejący węzeł w komponent w miejscu                                             |
 
-| Tool | Description |
-|------|-------------|
-| `set_fill` | Set fill color (hex) |
-| `set_stroke` | Set stroke color, weight, alignment |
-| `set_effects` | Add shadow or blur effects |
-| `update_node` | Update position, size, opacity, corner radius, text, font |
-| `set_layout` | Set auto-layout (flexbox) — direction, spacing, padding, alignment |
-| `set_constraints` | Set resize constraints |
-| `set_rotation` | Set rotation angle in degrees |
-| `set_opacity` | Set opacity (0–1) |
-| `set_radius` | Set corner radius (uniform or per-corner) |
-| `set_minmax` | Set min/max width and height constraints |
-| `set_text` | Set text content of a `TEXT` node |
-| `set_font` | Set font family and weight |
-| `set_font_range` | Set font properties on a character range |
-| `set_text_resize` | Set text auto-resize mode (fixed/auto-width/auto-height) |
-| `set_visible` | Show or hide a node |
-| `set_blend` | Set blend mode |
-| `set_locked` | Lock or unlock a node |
-| `set_stroke_align` | Set stroke alignment (inside/center/outside) |
-| `set_text_properties` | Set text layout: alignment, auto-resize, text case, decoration, truncation |
-| `set_layout_child` | Configure auto-layout child: sizing, grow, alignment, absolute positioning |
-| `node_move` | Move a node to a new position |
-| `node_resize` | Resize a node |
-| `node_replace_with` | Replace a node with another node |
-| `arrange` | Align or distribute selected nodes |
+### Modyfikacja
 
-### Structure
+| Tool                  | Description                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `set_fill`            | Ustaw kolor wypełnienia (hex)                                                              |
+| `set_stroke`          | Ustaw kolor, grubość i wyrównanie obrysu                                                   |
+| `set_effects`         | Dodaj efekty cienia lub rozmycia                                                           |
+| `update_node`         | Aktualizuj pozycję, rozmiar, przezroczystość, promień narożników, tekst, czcionkę          |
+| `set_layout`          | Ustaw auto-layout (flexbox) — kierunek, odstępy, padding, wyrównanie                       |
+| `set_constraints`     | Ustaw ograniczenia zmiany rozmiaru                                                         |
+| `set_rotation`        | Ustaw kąt obrotu w stopniach                                                               |
+| `set_opacity`         | Ustaw przezroczystość (0–1)                                                                |
+| `set_radius`          | Ustaw promień narożników (jednolity lub per narożnik)                                      |
+| `set_minmax`          | Ustaw ograniczenia min/maks szerokości i wysokości                                         |
+| `set_text`            | Ustaw treść tekstową węzła `TEXT`                                                          |
+| `set_font`            | Ustaw rodzinę czcionki i grubość                                                           |
+| `set_font_range`      | Ustaw właściwości czcionki na zakresie znaków                                              |
+| `set_text_resize`     | Ustaw tryb automatycznego rozmiaru tekstu (stały/szerokość/wysokość automatyczna)          |
+| `set_visible`         | Pokaż lub ukryj węzeł                                                                      |
+| `set_blend`           | Ustaw tryb mieszania                                                                       |
+| `set_locked`          | Zablokuj lub odblokuj węzeł                                                                |
+| `set_stroke_align`    | Ustaw wyrównanie obrysu (wewnątrz/środek/na zewnątrz)                                      |
+| `set_text_properties` | Ustaw układ tekstu: wyrównanie, auto-resize, wielkość liter, dekoracja, przycięcie         |
+| `set_layout_child`    | Skonfiguruj dziecko auto-layoutu: wymiarowanie, grow, wyrównanie, pozycjonowanie absolutne |
+| `node_move`           | Przesuń węzeł na nową pozycję                                                              |
+| `node_resize`         | Zmień rozmiar węzła                                                                        |
+| `node_replace_with`   | Zastąp węzeł innym węzłem                                                                  |
+| `arrange`             | Wyrównaj lub rozłóż zaznaczone węzły                                                       |
 
-| Tool | Description |
-|------|-------------|
-| `delete_node` | Delete a node |
-| `clone_node` | Duplicate a node |
-| `rename_node` | Rename a node |
-| `reparent_node` | Move a node into a different parent |
-| `select_nodes` | Select nodes by ID |
-| `group_nodes` | Group nodes |
-| `ungroup_node` | Ungroup a group |
-| `flatten_nodes` | Flatten nodes into a single vector |
-| `boolean_union` | Boolean union of two or more nodes |
-| `boolean_subtract` | Boolean subtraction |
-| `boolean_intersect` | Boolean intersection |
-| `boolean_exclude` | Boolean exclusion |
+### Struktura
 
-### Vector Path
+| Tool                | Description                            |
+| ------------------- | -------------------------------------- |
+| `delete_node`       | Usuń węzeł                             |
+| `clone_node`        | Zduplikuj węzeł                        |
+| `rename_node`       | Zmień nazwę węzła                      |
+| `reparent_node`     | Przenieś węzeł do innego rodzica       |
+| `select_nodes`      | Zaznacz węzły po ID                    |
+| `group_nodes`       | Grupuj węzły                           |
+| `ungroup_node`      | Rozgrupuj grupę                        |
+| `flatten_nodes`     | Spłaszcz węzły do pojedynczego wektora |
+| `boolean_union`     | Suma boolowska dwóch lub więcej węzłów |
+| `boolean_subtract`  | Odejmowanie boolowskie                 |
+| `boolean_intersect` | Przecięcie boolowskie                  |
+| `boolean_exclude`   | Wykluczenie boolowskie                 |
 
-| Tool | Description |
-|------|-------------|
-| `path_get` | Get the path data of a vector node |
-| `path_set` | Set the path data of a vector node |
-| `path_scale` | Scale a vector path |
-| `path_flip` | Flip a vector path horizontally or vertically |
-| `path_move` | Translate a vector path |
+### Ścieżka wektorowa
 
-### Export
+| Tool         | Description                                 |
+| ------------ | ------------------------------------------- |
+| `path_get`   | Pobierz dane ścieżki węzła wektorowego      |
+| `path_set`   | Ustaw dane ścieżki węzła wektorowego        |
+| `path_scale` | Skaluj ścieżkę wektorową                    |
+| `path_flip`  | Odbij ścieżkę wektorową poziomo lub pionowo |
+| `path_move`  | Przesuń ścieżkę wektorową                   |
 
-| Tool | Description |
-|------|-------------|
-| `export_image` | Export nodes as PNG, JPG, or WEBP. Returns base64-encoded image data |
-| `export_svg` | Export nodes as SVG markup |
+### Eksport
 
-### Viewport
+| Tool           | Description                                                                    |
+| -------------- | ------------------------------------------------------------------------------ |
+| `export_image` | Eksportuj węzły jako PNG, JPG lub WEBP. Zwraca dane obrazu zakodowane w base64 |
+| `export_svg`   | Eksportuj węzły jako znaczniki SVG                                             |
 
-| Tool | Description |
-|------|-------------|
-| `viewport_get` | Get current viewport position and zoom level |
-| `viewport_set` | Set viewport position and zoom |
-| `viewport_zoom_to_fit` | Zoom viewport to fit specified nodes |
+### Widok
 
-### Variables
+| Tool                   | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| `viewport_get`         | Pobierz bieżącą pozycję widoku i poziom zoomu |
+| `viewport_set`         | Ustaw pozycję i zoom widoku                   |
+| `viewport_zoom_to_fit` | Dostosuj zoom widoku do wskazanych węzłów     |
 
-| Tool | Description |
-|------|-------------|
-| `get_variable` | Get a variable by ID or name |
-| `find_variables` | Find variables by name pattern or type |
-| `create_variable` | Create a new variable in a collection |
-| `set_variable` | Set a variable value in a mode |
-| `delete_variable` | Delete a variable |
-| `bind_variable` | Bind a variable to a node property |
-| `get_collection` | Get a variable collection by ID or name |
-| `create_collection` | Create a new variable collection |
-| `delete_collection` | Delete a variable collection |
+### Zmienne
 
-### Analyze
+| Tool                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `get_variable`      | Pobierz zmienną po ID lub nazwie            |
+| `find_variables`    | Znajdź zmienne według wzorca nazwy lub typu |
+| `create_variable`   | Utwórz nową zmienną w kolekcji              |
+| `set_variable`      | Ustaw wartość zmiennej w trybie             |
+| `delete_variable`   | Usuń zmienną                                |
+| `bind_variable`     | Powiąż zmienną z właściwością węzła         |
+| `get_collection`    | Pobierz kolekcję zmiennych po ID lub nazwie |
+| `create_collection` | Utwórz nową kolekcję zmiennych              |
+| `delete_collection` | Usuń kolekcję zmiennych                     |
 
-| Tool | Description |
-|------|-------------|
-| `analyze_colors` | Analyze color palette usage across the document |
-| `analyze_typography` | Analyze font/size/weight distribution |
-| `analyze_spacing` | Analyze gap and padding values |
-| `analyze_clusters` | Detect repeated patterns (potential components) |
+### Analiza
+
+| Tool                 | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `analyze_colors`     | Analizuj użycie palety kolorów w dokumencie               |
+| `analyze_typography` | Analizuj rozkład czcionek/rozmiarów/grubości              |
+| `analyze_spacing`    | Analizuj wartości odstępów i paddingów                    |
+| `analyze_clusters`   | Wykrywaj powtarzające się wzorce (potencjalne komponenty) |
 
 ### Diff
 
-| Tool | Description |
-|------|-------------|
-| `diff_create` | Create a snapshot of the current document state |
-| `diff_show` | Show differences between the current state and a snapshot |
+| Tool          | Description                                    |
+| ------------- | ---------------------------------------------- |
+| `diff_create` | Utwórz migawkę bieżącego stanu dokumentu       |
+| `diff_show`   | Pokaż różnice między bieżącym stanem a migawką |
 
-### Navigation
+### Nawigacja
 
-| Tool | Description |
-|------|-------------|
-| `switch_page` | Switch to a page by name or ID |
+| Tool          | Description                         |
+| ------------- | ----------------------------------- |
+| `switch_page` | Przełącz na stronę po nazwie lub ID |
 
-### Escape Hatch
+### Wyjście awaryjne
 
-| Tool | Description |
-|------|-------------|
-| `eval` | Execute JavaScript with full Figma Plugin API access |
+| Tool   | Description                                              |
+| ------ | -------------------------------------------------------- |
+| `eval` | Wykonaj JavaScript z pełnym dostępem do Figma Plugin API |
 
-Note: `eval` is available over stdio, but disabled in HTTP mode for security.
+Uwaga: `eval` jest dostępny przez stdio, ale wyłączony w trybie HTTP ze względów bezpieczeństwa.

@@ -1,18 +1,93 @@
+---
+title: MCP Server
+description: Подключайте ИИ-инструменты для кода к OpenPencil для просмотра и редактирования дизайнов через Model Context Protocol.
+---
+
 # MCP Server
 
-OpenPencil includes an MCP (Model Context Protocol) server that lets AI coding tools — Claude Code, Cursor, Windsurf, etc. — read and modify `.fig` files headlessly.
+OpenPencil поставляется с MCP-сервером, который позволяет ИИ-инструментам для кода — Claude Code, Cursor, Windsurf и др. — читать и изменять дизайны в запущенном приложении. Два бинарных файла:
 
-Two transports: **stdio** for MCP clients, **HTTP** for everything else.
+- **`openpencil-mcp`** — stdio-транспорт для MCP-клиентов
+- **`openpencil-mcp-http`** — HTTP + WebSocket-сервер для браузеров, скриптов и внутреннего моста приложения
 
-## Install
+## Предварительные требования
+
+Перед подключением любого клиента убедитесь, что:
+
+1. Настольное приложение OpenPencil запущено **с открытым документом**. MCP-сервер бесполезен без соединения с приложением — это мост, а не рендерер.
+2. Версия пакета MCP совпадает с версией приложения. Эндпоинт `/health` сообщает версии, чтобы клиенты могли обнаружить несоответствия.
+
+MCP-сервер запускается автоматически при запуске настольного приложения (продакшен-сборки Tauri запускают `openpencil-mcp-http`; в режиме разработки используется плагин Vite). Вы также можете запустить его отдельно.
+
+## Архитектура
+
+```text
+  MCP Client          MCP Server              OpenPencil App
+  (Claude Code,       (openpencil-mcp-http)   (desktop / browser)
+   Cursor, etc.)
+                      ┌──────────────┐
+  stdio ◄───────────► │  /rpc (HTTP) │ ◄──── JSON-RPC ─────► Stdio bridge
+                      │              │
+                      │  /    (WS)   │ ◄──── WebSocket ────► Browser tab
+  (openpencil-mcp)    │              │
+                      │  /mcp (HTTP) │ ◄── Streamable HTTP ──► External tools
+                      │              │
+                      │  /health     │
+                      └──────┬───────┘
+                             │
+                    socket or TCP (127.0.0.1)
+```
+
+Stdio-мост (`openpencil-mcp`) подключается к HTTP-серверу через Unix domain socket (на macOS/Linux) или через HTTP-порт из файла обнаружения (`httpPort`, на Windows или при отключённых сокетах). Он **не** общается с приложением напрямую по MCP — он туннелирует вызовы MCP-инструментов через HTTP к серверу, который передаёт их в запущенное приложение через WebSocket.
+
+## Как происходит подключение
+
+Сервер при запуске записывает **файл обнаружения**. Stdio-мост читает этот файл, чтобы найти сервер. Ручная настройка не требуется.
+
+Два транспорта: **stdio** для MCP-клиентов и **Streamable HTTP** для браузерных расширений и скриптов. На macOS и Linux локальные клиенты предпочитают приватный Unix domain socket; Windows и недоступные сокеты переключаются на localhost TCP.
+
+## Установка
 
 ```sh
 npm install -g @open-pencil/mcp
 ```
 
-## Stdio (Claude Code, Cursor, etc.)
+## Stdio (Claude Code, Cursor и др.)
 
-Add to your MCP config (e.g. `~/.claude/settings.json` or `.cursor/mcp.json`):
+Stdio-сервер автоматически обнаруживает запущенное приложение OpenPencil. На macOS и Linux он предпочитает Unix domain socket приложения и при необходимости переключается на localhost TCP. Убедитесь, что настольное приложение открыто с загруженным документом.
+
+### Claude Code
+
+```sh
+npm install -g @open-pencil/mcp
+claude mcp add --scope user open-pencil -- openpencil-mcp
+```
+
+Проверка:
+
+```sh
+claude mcp list
+```
+
+Claude Code спрашивает разрешение перед использованием каждого MCP-инструмента. Чтобы автоматически одобрять инструменты OpenPencil, добавьте в `~/.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": ["mcp__open-pencil__*"]
+  }
+}
+```
+
+Пример запроса:
+
+```text
+Use the open-pencil MCP server to inspect the current page and create a small hero section on the canvas.
+```
+
+### Другие MCP-клиенты
+
+Добавьте в конфигурацию MCP (например, `.cursor/mcp.json`):
 
 ```json
 {
@@ -24,9 +99,10 @@ Add to your MCP config (e.g. `~/.claude/settings.json` or `.cursor/mcp.json`):
 }
 ```
 
-Or run from source without installing:
+Запуск из исходников без установки:
 
 ::: code-group
+
 ```json [Bun]
 {
   "mcpServers": {
@@ -37,6 +113,7 @@ Or run from source without installing:
   }
 }
 ```
+
 ```json [Node.js]
 {
   "mcpServers": {
@@ -47,205 +124,216 @@ Or run from source without installing:
   }
 }
 ```
+
 :::
 
 ## HTTP
 
-For browser extensions, scripts, CI, or any HTTP client:
+Для браузерных расширений, скриптов, CI или любого HTTP-клиента:
 
 ```sh
 openpencil-mcp-http
 ```
 
-Or from source: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/index.ts`
+Или из исходников: `bun packages/mcp/src/index.ts` / `npx tsx packages/mcp/src/index.ts`
 
-Security defaults (HTTP transport):
+Безопасность по умолчанию:
 
-- Binds to `127.0.0.1` by default (`HOST` to override)
-- `eval` tool is disabled
-- File operations are limited to `OPENPENCIL_MCP_ROOT` (defaults to current working directory)
-- CORS is disabled by default; set `OPENPENCIL_MCP_CORS_ORIGIN` to allow one origin
-- Optional auth token: `OPENPENCIL_MCP_AUTH_TOKEN` (client sends `Authorization: Bearer <token>` or `x-mcp-token`)
+- Unix socket и файлы обнаружения создаются с правами только для владельца на macOS и Linux.
+- TCP привязывается к `127.0.0.1` и по умолчанию использует порт 7600.
+- Аутентификация включена по умолчанию со сгенерированным токеном, хранящимся в приватном файле обнаружения.
+- `eval` отключён.
+- Файловые операции ограничены `OPENPENCIL_MCP_ROOT` (по умолчанию — текущая рабочая директория) и отклоняют попытки выхода через симлинки.
+- CORS отключён по умолчанию; задайте `OPENPENCIL_MCP_CORS_ORIGIN`, чтобы разрешить один источник.
 
-Server starts on port 7600 (override with `PORT` env var). Endpoints:
+Установите `PORT=0`, чтобы отключить TCP на macOS и Linux. Windows требует TCP. Установите `OPENPENCIL_MCP_SOCKET`, чтобы изменить путь Unix socket, или `OPENPENCIL_MCP_DISCOVERY_PATH`, чтобы изменить расположение файла обнаружения. Для стабильного токена установите `OPENPENCIL_MCP_AUTH_TOKEN`; явно пустое значение отключает аутентификацию и должно использоваться только с доверенным локальным сокетом.
 
-- `GET /health` — server status
-- `POST /mcp` — MCP Streamable HTTP (SSE). Sessions via `mcp-session-id` header.
+Эндпоинты доступны по обоим активным транспортам:
 
-## Workflow
+- `GET /health` — статус соединения сервера и приложения; никогда не возвращает токен аутентификации.
+- `POST /rpc` — аутентифицированная автоматизация живого приложения.
+- `POST /mcp` — MCP Streamable HTTP. Сессии используют заголовок `mcp-session-id`.
 
-1. **Open** — `open_file` to load an existing `.fig`, or `new_document` for a blank canvas
-2. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
-3. **Create** — `create_shape`, `render` (JSX)
-4. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
-5. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`
-6. **Save** — `save_file` to write back to `.fig`
+## Рабочий процесс
 
-## AI Agent Skill
+1. **Обнаружение целей** — сначала вызовите `list_documents`, если может быть открыто более одного документа или страницы. Он возвращает стабильные `document_id` и идентификаторы страниц.
+2. **Открытие** — `open_file` для загрузки существующего `.fig` или `new_document` для пустого холста. Эти инструменты возвращают метаданные открытого или созданного документа.
+3. **Чтение** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
+4. **Создание** — `create_shape`, `render` (JSX)
+5. **Изменение** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
+6. **Структура** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`
+7. **Сохранение** — `save_file` для записи обратно в `.fig`
 
-Teach your AI coding agent to use OpenPencil tools:
+Большинство инструментов принимают необязательные поля `document_id` и `page_id`. Для рабочих процессов агентов передавайте их явно, а не полагайтесь на видимую активную вкладку/страницу. `create_page` только создаёт страницу; при необходимости сменить активную страницу вызовите `switch_page` отдельно.
+
+## Навык ИИ-агента
+
+Научите вашего ИИ-агента для кода использовать инструменты OpenPencil:
 
 ```sh
 npx skills add open-pencil/skills@open-pencil
 ```
 
-Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [skills](https://skills.sh). The skill covers the CLI, MCP tools, JSX rendering, eval, and the running app's automation bridge.
+Работает с Claude Code, Cursor, Windsurf, Codex и любым агентом, поддерживающим [skills](https://skills.sh). Навык охватывает CLI, MCP-инструменты, рендеринг JSX, eval и мост автоматизации запущенного приложения.
 
-## Tools (90)
+## Инструменты (91)
 
-### Document
+### Документ
 
-| Tool | Description |
-|------|-------------|
-| `open_file` | Open a `.fig` file for editing |
-| `save_file` | Save the current document to a `.fig` file |
-| `new_document` | Create a new empty document |
+| Tool             | Description                                     |
+| ---------------- | ----------------------------------------------- |
+| `open_file`      | Открывает файл `.fig` для редактирования        |
+| `save_file`      | Сохраняет текущий документ в файл `.fig`        |
+| `new_document`   | Создаёт новый пустой документ                   |
+| `list_documents` | Список открытых документов/вкладок и их страниц |
 
-### Read
+Note: `open_file`, `new_document` и экспортные инструменты, записывающие файлы, регистрируются при настроенном корневом каталоге файлов — поставляемые бинарники `openpencil-mcp` и `openpencil-mcp-http` всегда задают его, по умолчанию используя текущую рабочую директорию (`cwd()`), если `OPENPENCIL_MCP_ROOT` не задан. Программный вызов `startServer({ mcpRoot: null })` пропускает `open_file` и `new_document`, поскольку корневой каталог не настроен. `save_file` регистрируется всегда; его путь проверяется относительно корневого каталога, когда он задан, в противном случае используется существующий путь к файлу.
 
-| Tool | Description |
-|------|-------------|
-| `get_selection` | Get currently selected nodes |
-| `get_page_tree` | Get the full node tree of the current page |
-| `get_current_page` | Get the current page name and ID |
-| `get_node` | Get detailed properties of a node by ID |
-| `find_nodes` | Find nodes by name pattern and/or type |
-| `get_components` | List all components in the document |
-| `list_pages` | List all pages |
-| `list_variables` | List design variables |
-| `list_collections` | List variable collections |
-| `list_fonts` | List fonts used in the current page |
-| `page_bounds` | Get bounding box of all objects on the current page |
-| `node_bounds` | Get bounding box of a node |
-| `node_ancestors` | Get ancestor chain of a node |
-| `node_children` | Get direct children of a node |
-| `node_tree` | Get the subtree rooted at a node |
-| `node_bindings` | Get variable bindings on a node |
+### Чтение
 
-### Create
+| Tool               | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `get_selection`    | Получает текущие выделенные узлы                       |
+| `get_page_tree`    | Получает полное дерево узлов текущей страницы          |
+| `get_current_page` | Получает имя и ID текущей страницы                     |
+| `get_node`         | Получает подробные свойства узла по ID                 |
+| `find_nodes`       | Находит узлы по имени и/или типу                       |
+| `get_components`   | Список всех компонентов в документе                    |
+| `list_pages`       | Список всех страниц                                    |
+| `list_variables`   | Список переменных дизайна                              |
+| `list_collections` | Список коллекций переменных                            |
+| `list_fonts`       | Список шрифтов, используемых на текущей странице       |
+| `page_bounds`      | Ограничивающая рамка всех объектов на текущей странице |
+| `node_bounds`      | Ограничивающая рамка узла                              |
+| `node_ancestors`   | Цепочка предков узла                                   |
+| `node_children`    | Прямые потомки узла                                    |
+| `node_tree`        | Поддерево с корнем в узле                              |
+| `node_bindings`    | Привязки переменных узла                               |
 
-| Tool | Description |
-|------|-------------|
-| `create_shape` | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
-| `create_vector` | Create a vector node from a path string |
-| `create_slice` | Create an export slice |
-| `create_page` | Create a new page |
-| `render` | Render JSX to design nodes — create entire component trees in one call |
-| `create_component` | Convert a frame/group into a component |
-| `create_instance` | Create an instance of a component |
-| `node_to_component` | Convert an existing node into a component in-place |
+### Создание
 
-### Modify
+| Tool                | Description                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `create_shape`      | Создаёт фигуру (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
+| `create_vector`     | Создаёт векторный узел из строки пути                                                          |
+| `create_slice`      | Создаёт экспортный срез                                                                        |
+| `create_page`       | Создаёт новую страницу                                                                         |
+| `render`            | Рендерит JSX в узлы дизайна — создаёт целые деревья компонентов одним вызовом                  |
+| `create_component`  | Преобразует фрейм/группу в компонент                                                           |
+| `create_instance`   | Создаёт экземпляр компонента                                                                   |
+| `node_to_component` | Преобразует существующий узел в компонент на месте                                             |
 
-| Tool | Description |
-|------|-------------|
-| `set_fill` | Set fill color (hex) |
-| `set_stroke` | Set stroke color, weight, alignment |
-| `set_effects` | Add shadow or blur effects |
-| `update_node` | Update position, size, opacity, corner radius, text, font |
-| `set_layout` | Set auto-layout (flexbox) — direction, spacing, padding, alignment |
-| `set_constraints` | Set resize constraints |
-| `set_rotation` | Set rotation angle in degrees |
-| `set_opacity` | Set opacity (0–1) |
-| `set_radius` | Set corner radius (uniform or per-corner) |
-| `set_minmax` | Set min/max width and height constraints |
-| `set_text` | Set text content of a `TEXT` node |
-| `set_font` | Set font family and weight |
-| `set_font_range` | Set font properties on a character range |
-| `set_text_resize` | Set text auto-resize mode (fixed/auto-width/auto-height) |
-| `set_visible` | Show or hide a node |
-| `set_blend` | Set blend mode |
-| `set_locked` | Lock or unlock a node |
-| `set_stroke_align` | Set stroke alignment (inside/center/outside) |
-| `set_text_properties` | Set text layout: alignment, auto-resize, text case, decoration, truncation |
-| `set_layout_child` | Configure auto-layout child: sizing, grow, alignment, absolute positioning |
-| `node_move` | Move a node to a new position |
-| `node_resize` | Resize a node |
-| `node_replace_with` | Replace a node with another node |
-| `arrange` | Align or distribute selected nodes |
+### Изменение
 
-### Structure
+| Tool                  | Description                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `set_fill`            | Задаёт цвет заливки (hex)                                                                            |
+| `set_stroke`          | Задаёт цвет, толщину и выравнивание обводки                                                          |
+| `set_effects`         | Добавляет эффекты тени или размытия                                                                  |
+| `update_node`         | Обновляет позицию, размер, непрозрачность, скругление углов, текст, шрифт                            |
+| `set_layout`          | Задаёт авто-раскладку (flexbox) — направление, отступы, паддинги, выравнивание                       |
+| `set_constraints`     | Задаёт ограничения при изменении размера                                                             |
+| `set_rotation`        | Задаёт угол поворота в градусах                                                                      |
+| `set_opacity`         | Задаёт непрозрачность (0–1)                                                                          |
+| `set_radius`          | Задаёт скругление углов (равномерное или для каждого угла)                                           |
+| `set_minmax`          | Задаёт ограничения минимальной/максимальной ширины и высоты                                          |
+| `set_text`            | Задаёт текстовое содержимое узла `TEXT`                                                              |
+| `set_font`            | Задаёт семейство шрифта и начертание                                                                 |
+| `set_font_range`      | Задаёт свойства шрифта для диапазона символов                                                        |
+| `set_text_resize`     | Задаёт режим авторазмера текста (фиксированный/по ширине/по высоте)                                  |
+| `set_visible`         | Показывает или скрывает узел                                                                         |
+| `set_blend`           | Задаёт режим наложения                                                                               |
+| `set_locked`          | Блокирует или разблокирует узел                                                                      |
+| `set_stroke_align`    | Задаёт выравнивание обводки (внутри/по центру/снаружи)                                               |
+| `set_text_properties` | Задаёт раскладку текста: выравнивание, авторазмер, регистр, оформление, обрезку                      |
+| `set_layout_child`    | Настраивает дочерний элемент авто-раскладки: размер, рост, выравнивание, абсолютное позиционирование |
+| `node_move`           | Перемещает узел в новую позицию                                                                      |
+| `node_resize`         | Изменяет размер узла                                                                                 |
+| `node_replace_with`   | Заменяет узел другим узлом                                                                           |
+| `arrange`             | Выравнивает или распределяет выделенные узлы                                                         |
 
-| Tool | Description |
-|------|-------------|
-| `delete_node` | Delete a node |
-| `clone_node` | Duplicate a node |
-| `rename_node` | Rename a node |
-| `reparent_node` | Move a node into a different parent |
-| `select_nodes` | Select nodes by ID |
-| `group_nodes` | Group nodes |
-| `ungroup_node` | Ungroup a group |
-| `flatten_nodes` | Flatten nodes into a single vector |
-| `boolean_union` | Boolean union of two or more nodes |
-| `boolean_subtract` | Boolean subtraction |
-| `boolean_intersect` | Boolean intersection |
-| `boolean_exclude` | Boolean exclusion |
+### Структура
 
-### Vector Path
+| Tool                | Description                           |
+| ------------------- | ------------------------------------- |
+| `delete_node`       | Удаляет узел                          |
+| `clone_node`        | Дублирует узел                        |
+| `rename_node`       | Переименовывает узел                  |
+| `reparent_node`     | Перемещает узел к другому родителю    |
+| `select_nodes`      | Выделяет узлы по ID                   |
+| `group_nodes`       | Группирует узлы                       |
+| `ungroup_node`      | Разгруппировывает группу              |
+| `flatten_nodes`     | Сплющивает узлы в единый вектор       |
+| `boolean_union`     | Булево объединение двух и более узлов |
+| `boolean_subtract`  | Булево вычитание                      |
+| `boolean_intersect` | Булево пересечение                    |
+| `boolean_exclude`   | Булево исключение                     |
 
-| Tool | Description |
-|------|-------------|
-| `path_get` | Get the path data of a vector node |
-| `path_set` | Set the path data of a vector node |
-| `path_scale` | Scale a vector path |
-| `path_flip` | Flip a vector path horizontally or vertically |
-| `path_move` | Translate a vector path |
+### Векторный путь
 
-### Export
+| Tool         | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `path_get`   | Получает данные пути векторного узла                 |
+| `path_set`   | Задаёт данные пути векторного узла                   |
+| `path_scale` | Масштабирует векторный путь                          |
+| `path_flip`  | Отражает векторный путь по горизонтали или вертикали |
+| `path_move`  | Перемещает векторный путь                            |
 
-| Tool | Description |
-|------|-------------|
-| `export_image` | Export nodes as PNG, JPG, or WEBP. Returns base64-encoded image data |
-| `export_svg` | Export nodes as SVG markup |
+### Экспорт
 
-### Viewport
+| Tool           | Description                                                                      |
+| -------------- | -------------------------------------------------------------------------------- |
+| `export_image` | Экспортирует узлы в PNG, JPG или WEBP. Возвращает изображение в кодировке base64 |
+| `export_svg`   | Экспортирует узлы в разметку SVG                                                 |
 
-| Tool | Description |
-|------|-------------|
-| `viewport_get` | Get current viewport position and zoom level |
-| `viewport_set` | Set viewport position and zoom |
-| `viewport_zoom_to_fit` | Zoom viewport to fit specified nodes |
+### Область просмотра
 
-### Variables
+| Tool                   | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `viewport_get`         | Получает текущую позицию области просмотра и уровень масштаба |
+| `viewport_set`         | Задаёт позицию области просмотра и масштаб                    |
+| `viewport_zoom_to_fit` | Масштабирует область просмотра под указанные узлы             |
 
-| Tool | Description |
-|------|-------------|
-| `get_variable` | Get a variable by ID or name |
-| `find_variables` | Find variables by name pattern or type |
-| `create_variable` | Create a new variable in a collection |
-| `set_variable` | Set a variable value in a mode |
-| `delete_variable` | Delete a variable |
-| `bind_variable` | Bind a variable to a node property |
-| `get_collection` | Get a variable collection by ID or name |
-| `create_collection` | Create a new variable collection |
-| `delete_collection` | Delete a variable collection |
+### Переменные
 
-### Analyze
+| Tool                | Description                                   |
+| ------------------- | --------------------------------------------- |
+| `get_variable`      | Получает переменную по ID или имени           |
+| `find_variables`    | Находит переменные по имени или типу          |
+| `create_variable`   | Создаёт новую переменную в коллекции          |
+| `set_variable`      | Задаёт значение переменной в режиме           |
+| `delete_variable`   | Удаляет переменную                            |
+| `bind_variable`     | Привязывает переменную к свойству узла        |
+| `get_collection`    | Получает коллекцию переменных по ID или имени |
+| `create_collection` | Создаёт новую коллекцию переменных            |
+| `delete_collection` | Удаляет коллекцию переменных                  |
 
-| Tool | Description |
-|------|-------------|
-| `analyze_colors` | Analyze color palette usage across the document |
-| `analyze_typography` | Analyze font/size/weight distribution |
-| `analyze_spacing` | Analyze gap and padding values |
-| `analyze_clusters` | Detect repeated patterns (potential components) |
+### Анализ
+
+| Tool                 | Description                                                    |
+| -------------------- | -------------------------------------------------------------- |
+| `analyze_colors`     | Анализирует использование цветовой палитры в документе         |
+| `analyze_typography` | Анализирует распределение шрифтов/размеров/начертаний          |
+| `analyze_spacing`    | Анализирует значения отступов между элементами и паддингов     |
+| `analyze_clusters`   | Обнаруживает повторяющиеся паттерны (потенциальные компоненты) |
 
 ### Diff
 
-| Tool | Description |
-|------|-------------|
-| `diff_create` | Create a snapshot of the current document state |
-| `diff_show` | Show differences between the current state and a snapshot |
+| Tool          | Description                                            |
+| ------------- | ------------------------------------------------------ |
+| `diff_create` | Создаёт снимок текущего состояния документа            |
+| `diff_show`   | Показывает различия между текущим состоянием и снимком |
 
-### Navigation
+### Навигация
 
-| Tool | Description |
-|------|-------------|
-| `switch_page` | Switch to a page by name or ID |
+| Tool          | Description                             |
+| ------------- | --------------------------------------- |
+| `switch_page` | Переключает на страницу по имени или ID |
 
-### Escape Hatch
+### Запасной выход
 
-| Tool | Description |
-|------|-------------|
-| `eval` | Execute JavaScript with full Figma Plugin API access |
+| Tool   | Description                                               |
+| ------ | --------------------------------------------------------- |
+| `eval` | Выполняет JavaScript с полным доступом к Figma Plugin API |
 
-Note: `eval` is available over stdio, but disabled in HTTP mode for security.
+Note: `eval` доступен через stdio, но отключён в режиме HTTP из соображений безопасности.

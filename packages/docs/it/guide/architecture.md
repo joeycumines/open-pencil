@@ -53,14 +53,14 @@ Consulta il [riferimento Scene Graph](/it/reference/scene-graph) per i dettagli 
 
 Yoga di Meta fornisce il calcolo del layout CSS flexbox e grid tramite un [fork](https://github.com/open-pencil/yoga/tree/grid) con supporto CSS Grid. Un adattatore sottile mappa i nomi delle proprietà Figma agli equivalenti Yoga:
 
-| Proprietà Figma | Equivalente Yoga |
-|---|---|
-| `stackMode: HORIZONTAL` | `flexDirection: row` |
-| `stackMode: VERTICAL` | `flexDirection: column` |
-| `stackSpacing` | `gap` |
-| `stackPadding` | `padding` |
-| `stackJustify` | `justifyContent` |
-| `stackChildPrimaryGrow` | `flexGrow` |
+| Proprietà Figma         | Equivalente Yoga        |
+| ----------------------- | ----------------------- |
+| `stackMode: HORIZONTAL` | `flexDirection: row`    |
+| `stackMode: VERTICAL`   | `flexDirection: column` |
+| `stackSpacing`          | `gap`                   |
+| `stackPadding`          | `padding`               |
+| `stackJustify`          | `justifyContent`        |
+| `stackChildPrimaryGrow` | `flexGrow`              |
 
 ### Formato File (Kiwi Binary)
 
@@ -92,7 +92,7 @@ Collaborazione peer-to-peer in tempo reale tramite Trystero (WebRTC) + Yjs CRDT.
 
 ### Bridge RPC CLI-App
 
-Quando l'app desktop è in esecuzione, i comandi CLI si connettono tramite WebSocket invece di richiedere un file .fig. Il server di automazione è in esecuzione su `127.0.0.1:7600` (HTTP) e `127.0.0.1:7601` (WebSocket). I comandi vengono eseguiti sullo stato dell'editor live, consentendo a script di automazione e agenti AI di interagire con l'app in esecuzione.
+Quando l'app desktop è in esecuzione, i comandi CLI si connettono tramite il server MCP invece di richiedere un file .fig. Su macOS e Linux, il server MCP ascolta su un socket di dominio Unix con TCP opzionale su `127.0.0.1:7600` (HTTP + WebSocket). Su Windows, il server si lega solo al TCP su `127.0.0.1:7600`. I comandi vengono eseguiti sullo stato dell'editor live, consentendo a script di automazione e agenti AI di interagire con l'app in esecuzione.
 
 ## Prossimi Passi
 

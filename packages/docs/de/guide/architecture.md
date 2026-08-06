@@ -53,14 +53,14 @@ Siehe [Szenengraph-Referenz](/reference/scene-graph) für Interna.
 
 Metas Yoga bietet CSS-Flexbox- und Grid-Layout-Berechnung über einen [Fork](https://github.com/open-pencil/yoga/tree/grid) mit CSS-Grid-Unterstützung. Ein dünner Adapter mappt Figma-Eigenschaftsnamen auf Yoga-Äquivalente:
 
-| Figma-Eigenschaft | Yoga-Äquivalent |
-|---|---|
-| `stackMode: HORIZONTAL` | `flexDirection: row` |
-| `stackMode: VERTICAL` | `flexDirection: column` |
-| `stackSpacing` | `gap` |
-| `stackPadding` | `padding` |
-| `stackJustify` | `justifyContent` |
-| `stackChildPrimaryGrow` | `flexGrow` |
+| Figma-Eigenschaft       | Yoga-Äquivalent         |
+| ----------------------- | ----------------------- |
+| `stackMode: HORIZONTAL` | `flexDirection: row`    |
+| `stackMode: VERTICAL`   | `flexDirection: column` |
+| `stackSpacing`          | `gap`                   |
+| `stackPadding`          | `padding`               |
+| `stackJustify`          | `justifyContent`        |
+| `stackChildPrimaryGrow` | `flexGrow`              |
 
 ### Dateiformat (Kiwi-Binär)
 
@@ -92,7 +92,7 @@ Echtzeit-Peer-to-Peer-Kollaboration über Trystero (WebRTC) + Yjs CRDT. Kein Ser
 
 ### CLI-zu-App RPC-Bridge
 
-Wenn die Desktop-App läuft, verbinden sich CLI-Befehle über WebSocket statt eine .fig-Datei zu benötigen. Der Automatisierungsserver läuft auf `127.0.0.1:7600` (HTTP) und `127.0.0.1:7601` (WebSocket). Befehle werden gegen den Live-Editor-Zustand ausgeführt, sodass Automatisierungsskripte und KI-Agenten mit der laufenden App interagieren können.
+Wenn die Desktop-App läuft, verbinden sich CLI-Befehle über den MCP-Server mit ihr, statt eine .fig-Datei zu benötigen. Auf macOS und Linux lauscht der MCP-Server auf einem Unix-Domain-Socket mit optionalem TCP auf `127.0.0.1:7600` (HTTP + WebSocket). Auf Windows bindet der Server ausschließlich TCP auf `127.0.0.1:7600`. Befehle werden gegen den Live-Editor-Zustand ausgeführt, sodass Automatisierungsskripte und KI-Agenten mit der laufenden App interagieren können.
 
 ## Ausblick
 

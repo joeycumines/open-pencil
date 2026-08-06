@@ -53,14 +53,14 @@ Voir la [Référence du graphe de scène](/reference/scene-graph) pour les déta
 
 Yoga de Meta fournit le calcul de layout CSS flexbox et grid via un [fork](https://github.com/open-pencil/yoga/tree/grid) avec support CSS Grid. Un adaptateur fin mappe les noms de propriétés Figma vers les équivalents Yoga :
 
-| Propriété Figma | Équivalent Yoga |
-|---|---|
-| `stackMode: HORIZONTAL` | `flexDirection: row` |
-| `stackMode: VERTICAL` | `flexDirection: column` |
-| `stackSpacing` | `gap` |
-| `stackPadding` | `padding` |
-| `stackJustify` | `justifyContent` |
-| `stackChildPrimaryGrow` | `flexGrow` |
+| Propriété Figma         | Équivalent Yoga         |
+| ----------------------- | ----------------------- |
+| `stackMode: HORIZONTAL` | `flexDirection: row`    |
+| `stackMode: VERTICAL`   | `flexDirection: column` |
+| `stackSpacing`          | `gap`                   |
+| `stackPadding`          | `padding`               |
+| `stackJustify`          | `justifyContent`        |
+| `stackChildPrimaryGrow` | `flexGrow`              |
 
 ### Format de fichier (Kiwi binaire)
 
@@ -92,7 +92,7 @@ Collaboration peer-to-peer en temps réel via Trystero (WebRTC) + Yjs CRDT. Sans
 
 ### Pont RPC CLI-vers-application
 
-Lorsque l'application de bureau est lancée, les commandes CLI s'y connectent via WebSocket au lieu de nécessiter un fichier .fig. Le serveur d'automatisation tourne sur `127.0.0.1:7600` (HTTP) et `127.0.0.1:7601` (WebSocket). Les commandes s'exécutent sur l'état en direct de l'éditeur, permettant aux scripts d'automatisation et aux agents IA d'interagir avec l'application en cours d'exécution.
+Lorsque l'application de bureau est lancée, les commandes CLI s'y connectent via le serveur MCP au lieu de nécessiter un fichier .fig. Sur macOS et Linux, le serveur MCP écoute sur un socket Unix avec TCP facultatif sur `127.0.0.1:7600` (HTTP + WebSocket). Sur Windows, le serveur se lie uniquement en TCP sur `127.0.0.1:7600`. Les commandes s'exécutent sur l'état en direct de l'éditeur, permettant aux scripts d'automatisation et aux agents IA d'interagir avec l'application en cours d'exécution.
 
 ## Prochaines étapes
 

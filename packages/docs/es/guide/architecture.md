@@ -53,14 +53,14 @@ Véase [Referencia del grafo de escena](/reference/scene-graph) para los detalle
 
 Yoga de Meta proporciona cálculo de layout CSS flexbox y grid a través de un [fork](https://github.com/open-pencil/yoga/tree/grid) con soporte CSS Grid. Un adaptador delgado mapea nombres de propiedades de Figma a equivalentes de Yoga:
 
-| Propiedad Figma | Equivalente Yoga |
-|---|---|
-| `stackMode: HORIZONTAL` | `flexDirection: row` |
-| `stackMode: VERTICAL` | `flexDirection: column` |
-| `stackSpacing` | `gap` |
-| `stackPadding` | `padding` |
-| `stackJustify` | `justifyContent` |
-| `stackChildPrimaryGrow` | `flexGrow` |
+| Propiedad Figma         | Equivalente Yoga        |
+| ----------------------- | ----------------------- |
+| `stackMode: HORIZONTAL` | `flexDirection: row`    |
+| `stackMode: VERTICAL`   | `flexDirection: column` |
+| `stackSpacing`          | `gap`                   |
+| `stackPadding`          | `padding`               |
+| `stackJustify`          | `justifyContent`        |
+| `stackChildPrimaryGrow` | `flexGrow`              |
 
 ### Formato de archivo (Kiwi binario)
 
@@ -92,7 +92,7 @@ Colaboración peer-to-peer en tiempo real vía Trystero (WebRTC) + Yjs CRDT. Sin
 
 ### Puente RPC CLI-a-App
 
-Cuando la app de escritorio está en ejecución, los comandos CLI se conectan a ella vía WebSocket en lugar de requerir un archivo .fig. El servidor de automatización corre en `127.0.0.1:7600` (HTTP) y `127.0.0.1:7601` (WebSocket). Los comandos se ejecutan contra el estado del editor en vivo, permitiendo que scripts de automatización y agentes IA interactúen con la app en ejecución.
+Cuando la app de escritorio está en ejecución, los comandos CLI se conectan a ella vía el servidor MCP en lugar de requerir un archivo .fig. En macOS y Linux, el servidor MCP escucha en un socket de dominio Unix con TCP opcional en `127.0.0.1:7600` (HTTP + WebSocket). En Windows, el servidor se enlaza solo a TCP en `127.0.0.1:7600`. Los comandos se ejecutan contra el estado del editor en vivo, permitiendo que scripts de automatización y agentes IA interactúen con la app en ejecución.
 
 ## Próximos pasos
 
