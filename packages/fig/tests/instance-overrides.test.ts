@@ -156,6 +156,79 @@ describe('@open-pencil/fig instance interpretation', () => {
     expect(placeholder).toMatchObject({ x: 16, y: 10, text: 'Placeholder' })
   })
 
+  test('scales target-aspect instance geometry through fixed wrappers', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const component = graph.createNode('COMPONENT', pageId, { width: 310, height: 62 })
+    const wrapper = graph.createNode('FRAME', component.id, { width: 310, height: 61.214 })
+    const inset = graph.createNode('RECTANGLE', wrapper.id, {
+      x: 250,
+      y: 10,
+      width: 20,
+      height: 20,
+      horizontalConstraint: 'MAX',
+      verticalConstraint: 'MIN'
+    })
+    const vector = graph.createNode('VECTOR', wrapper.id, {
+      width: 56.392,
+      height: 61.214,
+      horizontalConstraint: 'SCALE',
+      verticalConstraint: 'SCALE'
+    })
+    const instance = graph.createNode('INSTANCE', pageId, {
+      width: 100,
+      height: 20,
+      componentId: component.id
+    })
+    instance.source.fig.rawNodeFields.targetAspectRatio = { value: { x: 310, y: 62 } }
+
+    populateAndApplyOverrides(graph, new Map(), new Map())
+
+    const scaledWrapper = graph.getChildren(instance.id)[0]
+    const scaledShape = graph.getChildren(scaledWrapper.id)[1]
+    const preservedInset = graph.getChildren(scaledWrapper.id)[0]
+    expect(scaledWrapper.width).toBeCloseTo(100)
+    expect(scaledWrapper.height).toBeCloseTo((61.214 * 20) / 62)
+    expect(preservedInset).toMatchObject({
+      x: inset.x,
+      y: inset.y,
+      width: inset.width,
+      height: inset.height
+    })
+    expect(scaledShape.width).toBeCloseTo((vector.width * 100) / 310)
+    expect(scaledShape.height).toBeCloseTo((vector.height * 20) / 62)
+  })
+
+  test('uses target-aspect metadata only to reach scale-constrained descendants', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const component = graph.createNode('COMPONENT', pageId, { width: 24, height: 24 })
+    const vector = graph.createNode('VECTOR', component.id, {
+      x: 9,
+      y: 3,
+      width: 6,
+      height: 6,
+      horizontalConstraint: 'SCALE',
+      verticalConstraint: 'SCALE'
+    })
+    const instance = graph.createNode('INSTANCE', pageId, {
+      width: 14,
+      height: 14,
+      componentId: component.id
+    })
+    instance.source.fig.rawNodeFields.targetAspectRatio = { value: { x: 32, y: 32 } }
+
+    populateAndApplyOverrides(graph, new Map(), new Map())
+
+    const scaledVector = graph.getChildren(instance.id)[0]
+    expect(scaledVector).toMatchObject({
+      x: (vector.x * 14) / 24,
+      y: (vector.y * 14) / 24,
+      width: (vector.width * 14) / 24,
+      height: (vector.height * 14) / 24
+    })
+  })
+
   test('limits lazy population to required global propagation scans', () => {
     const graph = new SceneGraph()
     const activePage = graph.getPages()[0]
@@ -185,6 +258,93 @@ describe('@open-pencil/fig instance interpretation', () => {
 
     expect(graph.getNode(instance.id)?.childIds).toHaveLength(1)
     expect(globalScans).toBe(2)
+  })
+
+  test('restores effective image and thin-clone geometry after final swaps', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const avatarComponent = graph.createNode('COMPONENT', pageId, { width: 100, height: 100 })
+    graph.createNode('ROUNDED_RECTANGLE', avatarComponent.id, {
+      width: 100,
+      height: 100,
+      horizontalConstraint: 'SCALE',
+      verticalConstraint: 'SCALE',
+      fills: [
+        { type: 'IMAGE', imageHash: 'avatar', opacity: 1, visible: true, blendMode: 'NORMAL' }
+      ]
+    })
+    const avatar = graph.createNode('INSTANCE', pageId, {
+      componentId: avatarComponent.id,
+      width: 14,
+      height: 14
+    })
+
+    const dividerComponent = graph.createNode('COMPONENT', pageId, {
+      width: 112,
+      height: 28,
+      layoutMode: 'HORIZONTAL',
+      counterAxisAlign: 'CENTER'
+    })
+    const dividerSource = graph.createNode('RECTANGLE', dividerComponent.id, {
+      x: 0,
+      y: 13.5,
+      width: 112,
+      height: 1,
+      figmaDerivedLayout: { x: 0, y: 13.5, width: 112, height: 1 }
+    })
+    const dividerInstance = graph.createNode('INSTANCE', pageId, {
+      componentId: dividerComponent.id,
+      width: 112,
+      height: 28,
+      layoutMode: 'HORIZONTAL',
+      counterAxisAlign: 'CENTER'
+    })
+
+    populateAndApplyOverrides(graph, new Map(), new Map())
+
+    const avatarLeaf = graph.getChildren(avatar.id)[0]
+    expect(avatarLeaf).toMatchObject({ width: 14, height: 14 })
+    const divider = graph.getChildren(dividerInstance.id)[0]
+    expect(divider.componentId).toBe(dividerSource.id)
+    expect(divider.figmaDerivedLayout).toMatchObject({ x: 0, y: 13.5 })
+  })
+
+  test('leaves unrelated scaled vector and multi-child instance geometry unchanged', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const vectorComponent = graph.createNode('COMPONENT', pageId, { width: 100, height: 100 })
+    graph.createNode('VECTOR', vectorComponent.id, {
+      width: 20,
+      height: 10,
+      horizontalConstraint: 'SCALE',
+      verticalConstraint: 'SCALE'
+    })
+    const vectorInstance = graph.createNode('INSTANCE', pageId, {
+      componentId: vectorComponent.id,
+      width: 50,
+      height: 50
+    })
+    const multiComponent = graph.createNode('COMPONENT', pageId, { width: 100, height: 100 })
+    graph.createNode('ROUNDED_RECTANGLE', multiComponent.id, {
+      width: 100,
+      height: 100,
+      horizontalConstraint: 'SCALE',
+      verticalConstraint: 'SCALE',
+      fills: [
+        { type: 'IMAGE', imageHash: 'avatar', opacity: 1, visible: true, blendMode: 'NORMAL' }
+      ]
+    })
+    graph.createNode('RECTANGLE', multiComponent.id, { width: 10, height: 10 })
+    const multiInstance = graph.createNode('INSTANCE', pageId, {
+      componentId: multiComponent.id,
+      width: 50,
+      height: 50
+    })
+
+    populateAndApplyOverrides(graph, new Map(), new Map())
+
+    expect(graph.getChildren(vectorInstance.id)[0]).toMatchObject({ width: 10, height: 5 })
+    expect(graph.getChildren(multiInstance.id)[0]).toMatchObject({ width: 50, height: 50 })
   })
 
   test('resolves text clone chains to their source values', () => {
