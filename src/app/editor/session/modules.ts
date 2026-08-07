@@ -82,7 +82,10 @@ export function createEditorStoreModules(
     updateSourceIdentity: documentIO.updateSourceIdentity,
     clearSourceIdentity: documentIO.clearSourceIdentity,
     startWatchingCurrentFile: documentIO.startWatchingCurrentFile,
-    dispose: documentIO.disposeDocumentIO,
+    dispose: () => {
+      editor.clearPageViewports()
+      documentIO.disposeDocumentIO()
+    },
 
     // Identity getters for file-open deduplication.
     getSourceHandle: documentIO.getSourceHandle,

@@ -72,6 +72,16 @@ export function computeAllLayouts(
   scopeId?: string,
   options: { preserveImportedInstanceLayout?: boolean } = {}
 ): void {
+  graph.withLayoutMutations(() => {
+    computeAllLayoutsUnscoped(graph, scopeId, options)
+  })
+}
+
+function computeAllLayoutsUnscoped(
+  graph: SceneGraph,
+  scopeId?: string,
+  options: { preserveImportedInstanceLayout?: boolean } = {}
+): void {
   const visited = new Set<string>()
   const rootId = scopeId ?? graph.rootId
   const preserveImportedInstanceLayout = options.preserveImportedInstanceLayout ?? true
