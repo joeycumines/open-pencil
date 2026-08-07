@@ -32,7 +32,7 @@ import {
 import * as Variables from './variables'
 import { normalizeVectorNetwork } from './vector-network'
 
-export type { GUID, Color, Rect, Vector } from './primitives'
+export type { GUID, Color, Rect, Vector, Size } from './primitives'
 export * from './types'
 
 import type { Emitter } from 'nanoevents'
@@ -312,7 +312,6 @@ export class SceneGraph {
     if (parent && !parent.childIds.includes(id)) parent.childIds.push(id)
     return this.registerNode(node, parentId)
   }
-
   static TEXT_PICTURE_KEYS: ReadonlySet<string> = TEXT_PICTURE_KEYS
 
   static FIGMA_DERIVED_TEXT_GLYPH_KEYS: ReadonlySet<string> = FIGMA_DERIVED_TEXT_GLYPH_KEYS
@@ -398,7 +397,15 @@ export class SceneGraph {
 
     const node = this.nodes.get(id)
     if (!node) return
+    let entries = Object.entries(changes) as Array<[string, unknown]>
+    changes = Object.fromEntries(
+      entries.filter(([, value]) => value !== undefined)
+    ) as Partial<SceneNode>
     changes = styleDetachmentChanges(node, changes)
+    entries = Object.entries(changes) as Array<[string, unknown]>
+    changes = Object.fromEntries(
+      entries.filter(([, value]) => value !== undefined)
+    ) as Partial<SceneNode>
 
     // Only clear absPosCache when layout-affecting properties change.
     // Fills, strokes, effects, plugin data changes do NOT affect absolute position.
@@ -422,10 +429,6 @@ export class SceneGraph {
     if (node.type === 'TEXT') {
       clearInvalidatedTextRenderingData(node, changes)
     }
-    const entries = Object.entries(changes) as Array<[string, unknown]>
-    changes = Object.fromEntries(
-      entries.filter(([, value]) => value !== undefined)
-    ) as Partial<SceneNode>
     if (this.sourceMetadataPreservationDepth === 0) {
       markSourceFieldsEdited(node, Object.keys(changes))
     }

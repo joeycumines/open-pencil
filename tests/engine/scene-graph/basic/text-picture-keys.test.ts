@@ -35,6 +35,39 @@ const DECORATION_APPEARANCE_KEYS = [
   'textUnderlineOffset'
 ] as const
 
+// Properties whose change alters imported glyph outlines or per-glyph
+// positioning — the invalidation set for `figmaDerivedTextGlyphs`.
+const GLYPH_SHAPING_KEYS = [
+  'text',
+  'fontSize',
+  'fontFamily',
+  'fontWeight',
+  'italic',
+  'textDirection',
+  'lineHeight',
+  'letterSpacing',
+  'textCase',
+  'textLanguage',
+  'fontVariations',
+  'fontFeatures',
+  'styleRuns'
+] as const
+
+// Layout, alignment, fill, and appearance properties that must NOT destroy
+// authoritative imported glyph outlines (they are handled at render time).
+const PICTURE_ONLY_KEYS = [
+  'textAlignHorizontal',
+  'textAlignVertical',
+  'textAutoResize',
+  'leadingTrim',
+  'maxLines',
+  'textTruncation',
+  'width',
+  'height',
+  ...DECORATION_APPEARANCE_KEYS,
+  'fills'
+] as const
+
 describe('TEXT_PICTURE_KEYS membership', () => {
   test('contains text rendering properties', () => {
     const keys = SceneGraph.TEXT_PICTURE_KEYS
@@ -45,10 +78,10 @@ describe('TEXT_PICTURE_KEYS membership', () => {
 
   test('keeps imported glyph geometry invalidation narrower than text pictures', () => {
     const keys = SceneGraph.FIGMA_DERIVED_TEXT_GLYPH_KEYS
-    for (const k of SHARED_TEXT_KEYS) {
+    for (const k of GLYPH_SHAPING_KEYS) {
       expect(keys.has(k)).toBe(true)
     }
-    for (const k of [...DECORATION_APPEARANCE_KEYS, 'fills', 'opacity', 'visible', 'name']) {
+    for (const k of [...PICTURE_ONLY_KEYS, 'opacity', 'visible', 'name']) {
       expect(keys.has(k)).toBe(false)
     }
   })

@@ -14,21 +14,26 @@ const decorationFill = {
   opacity: 1
 }
 
-const advancedTextInvalidationCases: Array<[string, Partial<SceneNode>]> = [
-  ['textAutoResize', { textAutoResize: 'TRUNCATE' }],
-  ['leadingTrim', { leadingTrim: 'CAP_HEIGHT' }],
-  ['maxLines', { maxLines: 1 }],
+const glyphShapingInvalidationCases: Array<[string, Partial<SceneNode>]> = [
   ['fontVariations', { fontVariations: [{ axis: 'wght', value: 700 }] }],
-  ['fontFeatures', { fontFeatures: [{ tag: 'liga', enabled: false }] }],
-  ['textTruncation', { textTruncation: 'ENDING' }]
+  ['fontFeatures', { fontFeatures: [{ tag: 'liga', enabled: false }] }]
 ]
 
-const decorationAppearanceInvalidationCases: Array<[string, Partial<SceneNode>]> = [
-  ['textDecoration', { textDecoration: 'UNDERLINE' }],
-  ['textDecorationStyle', { textDecorationStyle: 'DOTTED' }],
-  ['textDecorationThickness', { textDecorationThickness: 2 }],
-  ['textDecorationSkipInk', { textDecorationSkipInk: false }],
-  ['textUnderlineOffset', { textUnderlineOffset: 4 }]
+const pictureOnlyChanges: Partial<SceneNode>[] = [
+  { width: 120 },
+  { height: 24 },
+  { fills: [] },
+  { textAutoResize: 'TRUNCATE' },
+  { leadingTrim: 'CAP_HEIGHT' },
+  { maxLines: 1 },
+  { textTruncation: 'ENDING' },
+  { textAlignHorizontal: 'CENTER' },
+  { textAlignVertical: 'CENTER' },
+  { textDecoration: 'UNDERLINE' },
+  { textDecorationStyle: 'DOTTED' },
+  { textDecorationThickness: 2 },
+  { textDecorationSkipInk: false },
+  { textUnderlineOffset: 4 }
 ]
 
 describe('updateNode', () => {
@@ -86,7 +91,6 @@ describe('updateNode', () => {
 
   test('updateNode on nonexistent node is a no-op', () => {
     const graph = new SceneGraph()
-    // Should not throw
     graph.updateNode('nonexistent-id', { x: 100 })
   })
 
@@ -225,17 +229,17 @@ describe('updateNode', () => {
     const textNode = expectDefined(graph.getNode(textId), 'text node')
     textNode.figmaDerivedTextGlyphs = glyphs
 
-    graph.updateNode(textId, { fontFamily: 'Noto Sans SC' })
+    graph.updateNode(textId, { textDirection: 'RTL' })
 
     expect(expectDefined(graph.getNode(textId), 'updated node').figmaDerivedTextGlyphs).toBeNull()
   })
 
-  test('advanced text rendering properties clear both text caches', () => {
-    for (const [label, changes] of advancedTextInvalidationCases) {
+  test('glyph-shaping properties clear both text caches', () => {
+    for (const [label, changes] of glyphShapingInvalidationCases) {
       const graph = new SceneGraph()
       const page = pageId(graph)
       const textId = graph.createNode('TEXT', page, {
-        name: `Advanced ${label}`,
+        name: `Shaping ${label}`,
         x: 0,
         y: 0,
         width: 100,
@@ -248,20 +252,19 @@ describe('updateNode', () => {
       ]
 
       graph.updateNode(textId, changes)
-
       const updated = expectDefined(graph.getNode(textId), `updated ${label} node`)
       expect([label, updated.textPicture]).toEqual([label, null])
       expect([label, updated.figmaDerivedTextGlyphs]).toEqual([label, null])
     }
   })
 
-  test('decoration appearance updates preserve imported glyph geometry', () => {
-    for (const [label, changes] of decorationAppearanceInvalidationCases) {
+  test('figmaDerivedTextGlyphs survive picture-only text property changes', () => {
+    for (const changes of pictureOnlyChanges) {
       const graph = new SceneGraph()
       const page = pageId(graph)
       const textId = graph.createNode('TEXT', page, {
-        name: `Decorated ${label}`,
-        text: 'Import',
+        name: 'T',
+        text: 'Imported text',
         width: 100,
         height: 20
       }).id
@@ -271,10 +274,9 @@ describe('updateNode', () => {
       textNode.figmaDerivedTextGlyphs = glyphs
 
       graph.updateNode(textId, changes)
-
-      const updated = expectDefined(graph.getNode(textId), `updated ${label} node`)
-      expect([label, updated.textPicture]).toEqual([label, null])
-      expect([label, updated.figmaDerivedTextGlyphs]).toEqual([label, glyphs])
+      const updated = expectDefined(graph.getNode(textId), 'updated node')
+      expect(updated.figmaDerivedTextGlyphs).toBe(glyphs)
+      expect(updated.textPicture).toBeNull()
     }
   })
 

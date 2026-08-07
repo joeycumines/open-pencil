@@ -35,9 +35,28 @@ export const TEXT_PICTURE_KEYS: ReadonlySet<string> = new Set([
   'textUnderlineOffset'
 ])
 
-export const FIGMA_DERIVED_TEXT_GLYPH_KEYS: ReadonlySet<string> = new Set(
-  TEXT_RENDERING_GEOMETRY_KEYS
-)
+/**
+ * Node keys whose change alters imported FIG glyph outlines or per-glyph
+ * positioning. This stays narrower than `TEXT_PICTURE_KEYS`: layout, alignment,
+ * fill, and decoration edits are handled at render time and must NOT destroy
+ * authoritative derived glyphs (they are only produced at import and never
+ * re-derived afterwards).
+ */
+export const FIGMA_DERIVED_TEXT_GLYPH_KEYS: ReadonlySet<string> = new Set([
+  'text',
+  'fontSize',
+  'fontFamily',
+  'fontWeight',
+  'italic',
+  'textDirection',
+  'lineHeight',
+  'letterSpacing',
+  'textCase',
+  'textLanguage',
+  'fontVariations',
+  'fontFeatures',
+  'styleRuns'
+])
 
 const STYLE_RUN_GLYPH_GEOMETRY_KEYS = [
   'fontWeight',
