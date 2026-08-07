@@ -130,6 +130,7 @@ function restoreThinCloneCrossPositions(ctx: OverrideContext): void {
     const crossPosition = thinCloneCrossPosition(ctx.graph, clone)
     if (!crossPosition) continue
     ctx.graph.updateNode(clone.id, {
+      [crossPosition.axis]: crossPosition.position,
       figmaDerivedLayout: {
         ...clone.figmaDerivedLayout,
         [crossPosition.axis]: crossPosition.position

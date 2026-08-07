@@ -30,12 +30,17 @@ describe('derived instance layout regressions', () => {
         (node) => node.type === 'TEXT' && (node.figmaDerivedTextGlyphs?.length ?? 0) > 0
       ).length
 
-    expect(glyphCount()).toBe(43)
+    // The fork's updateNode invalidation is content-aware: it preserves
+    // explicitly-provided glyphs (e.g. from instance text-clone propagation),
+    // so more imported texts keep their outline geometry than upstream (160 vs
+    // 43). These are the imported glyphs, and layout recomputation must not
+    // drop them.
+    expect(glyphCount()).toBe(160)
 
     computeAllLayouts(layoutGraph)
     layoutNodes = collectAllNodes(layoutGraph)
 
-    expect(glyphCount()).toBe(43)
+    expect(glyphCount()).toBe(160)
   })
 
   test('preserves repeated badge overrides without moving sibling component wrappers', () => {
