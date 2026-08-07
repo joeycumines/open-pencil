@@ -12,6 +12,7 @@ import {
 
 import { applyYogaLayout } from './layout/apply'
 import { usesDetachedDerivedLayout } from './layout/derived'
+import { applyEffectiveGeneratedTextLayout } from './layout/effective-generated-text'
 import { buildGridTree, createGridChildNode } from './layout/grid'
 import {
   type AxisSizing,
@@ -45,19 +46,15 @@ export function computeLayout(graph: SceneGraph, frameId: string): void {
   if (!frame || frame.layoutMode === 'NONE') return
 
   const rootDirection = resolveComputedLayoutDirection(graph, frame)
+  const yogaDirection = rootDirection === 'RTL' ? Direction.RTL : Direction.LTR
   const yogaRoot =
     frame.layoutMode === 'GRID'
       ? buildGridTree(graph, frame, rootDirection)
       : buildYogaTree(graph, frame, rootDirection)
-  yogaRoot.calculateLayout(
-    undefined,
-    undefined,
-    rootDirection === 'RTL' ? Direction.RTL : Direction.LTR
-  )
+  yogaRoot.calculateLayout(undefined, undefined, yogaDirection)
   applyYogaLayout(graph, frame, yogaRoot, computeLayout)
   freeYogaTree(yogaRoot)
 }
-
 function resolveComputedLayoutDirection(
   graph: SceneGraph,
   node: Pick<SceneNode, 'layoutDirection' | 'parentId'>
@@ -89,6 +86,11 @@ function computeAllLayoutsUnscoped(
   // positions are the ground truth.
   if (preserveImportedInstanceLayout && isInsideImportedFigInstance(graph, rootId)) return
   computeLayoutsBottomUp(graph, rootId, visited, { preserveImportedInstanceLayout })
+  // Applying effective generated-text layout (Font produced by CanvasKit shaping,
+  // e.g. from imported FIG text) may change box sizes, so re-run after it applies.
+  if (applyEffectiveGeneratedTextLayout(graph, rootId)) {
+    computeLayoutsBottomUp(graph, rootId, new Set(), { preserveImportedInstanceLayout })
+  }
 }
 
 function computeLayoutsBottomUp(
