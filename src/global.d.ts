@@ -19,6 +19,7 @@ declare global {
   }
 
   interface Window {
+    Prism?: unknown
     showOpenFilePicker?(options?: FilePickerOptions): Promise<FileSystemFileHandle[]>
     showSaveFilePicker?(options?: FilePickerOptions): Promise<FileSystemFileHandle>
     queryLocalFonts?(): Promise<

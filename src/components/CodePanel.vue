@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Prism from 'prismjs'
+import { Prism } from '@/components/code-panel/prism-setup'
 import 'prismjs/components/prism-jsx'
 import { ScrollAreaRoot, ScrollAreaScrollbar, ScrollAreaThumb, ScrollAreaViewport } from 'reka-ui'
 import { useClipboard } from '@vueuse/core'

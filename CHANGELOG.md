@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- Fix the production build failing to boot in browsers and the desktop app: register the Prism global before the JSX grammar loads so the Code panel can highlight and import code.
 - Preserve Figma’s imported glyph outlines through layout and appearance updates so text keeps its intended weight and shape.
 - Keep swapped image avatars and thin stepper dividers at their effective imported size and position.
 - Scale proportion-constrained `.fig` instance geometry through fixed wrapper layers so imported logos and icons retain their intended size.
