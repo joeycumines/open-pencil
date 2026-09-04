@@ -61,13 +61,11 @@ pub async fn proxy_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRe
     } else {
         reqwest::redirect::Policy::none()
     };
-    let mut client_builder = reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .redirect(redirect_policy)
-        .timeout(Duration::from_secs(30));
-    if let Some(timeout_ms) = request.timeout_ms {
-        client_builder = client_builder.timeout(Duration::from_millis(timeout_ms));
-    }
-    let client = client_builder.build().map_err(|e| e.to_string())?;
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
     let mut builder = client
         .request(request_method(request.method)?, parsed)
         .headers(request_headers(request.headers));

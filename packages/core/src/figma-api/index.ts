@@ -18,10 +18,13 @@ import { canMakeBooleanSourceNode } from '#core/canvas/boolean'
 import { flattenNodesToVectorProps } from '#core/canvas/flatten'
 import { IS_BROWSER } from '#core/constants'
 import type { RasterExportFormat } from '#core/io/formats/raster'
+import { documentFontStatus, type DocumentFontStatus } from '#core/text/font/status'
 
+import { combineComponentsAsVariants } from './components'
 import type {
   FigmaBooleanOperationNode,
   FigmaComponentNode,
+  FigmaComponentSetNode,
   FigmaEllipseNode,
   FigmaFrameNode,
   FigmaGroupNode,
@@ -48,6 +51,7 @@ export { FigmaNodeProxy } from './proxy'
 export type {
   FigmaBooleanOperationNode,
   FigmaComponentNode,
+  FigmaComponentSetNode,
   FigmaEllipseNode,
   FigmaFrameNode,
   FigmaGroupNode,
@@ -262,6 +266,30 @@ export class FigmaAPI implements NodeProxyHost {
     }
     this.graph.deleteNode(node[INTERNAL_ID])
     return this.wrapNode(comp.id)
+  }
+
+  combineAsVariants(
+    nodes: ReadonlyArray<FigmaComponentNode>,
+    parent: FigmaNodeProxy,
+    index?: number
+  ): FigmaComponentSetNode
+  combineAsVariants(
+    nodes: ReadonlyArray<ComponentNode>,
+    parent: BaseNode & ChildrenMixin,
+    index?: number
+  ): ComponentSetNode
+  combineAsVariants(
+    nodes: ReadonlyArray<ComponentNode | FigmaComponentNode>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaComponentSetNode {
+    const componentSet = combineComponentsAsVariants(
+      this.graph,
+      nodes.map((node) => this._nodeId(node)),
+      this._nodeId(parent),
+      index
+    )
+    return this.wrapNode(componentSet.id) as FigmaComponentSetNode
   }
 
   // --- Variables ---
@@ -509,6 +537,10 @@ export class FigmaAPI implements NodeProxyHost {
     // Default: pure browser / test contexts have no enumeration surface.
     // Desktop hosts override this to return system + bundled fonts.
     return []
+  }
+
+  getFontStatus(): DocumentFontStatus {
+    return documentFontStatus(this.graph, this.currentPageId)
   }
 
   base64Encode(data: Uint8Array): string {

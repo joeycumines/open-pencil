@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import AppTextButton from '@/components/ui/AppTextButton.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 
 interface ProviderSettingsFieldProps {
   label: string
+  labelFor?: string
   clearLabel?: string
 }
 
 defineOptions({ inheritAttrs: false })
 
-const { label, clearLabel } = defineProps<ProviderSettingsFieldProps>()
+const { label, labelFor, clearLabel } = defineProps<ProviderSettingsFieldProps>()
 
 const emit = defineEmits<{ clear: [] }>()
 </script>
@@ -16,10 +17,17 @@ const emit = defineEmits<{ clear: [] }>()
 <template>
   <div class="flex flex-col gap-1">
     <div class="flex items-center justify-between">
-      <label class="text-[10px] text-muted">{{ label }}</label>
-      <AppTextButton v-if="clearLabel" v-bind="$attrs" @click="emit('clear')">
+      <label :for="labelFor" class="text-[10px] text-muted">{{ label }}</label>
+      <AppButton
+        v-if="clearLabel"
+        color="neutral"
+        variant="link"
+        size="xs"
+        v-bind="$attrs"
+        @click="emit('clear')"
+      >
         {{ clearLabel }}
-      </AppTextButton>
+      </AppButton>
     </div>
     <slot />
     <slot name="hint" />

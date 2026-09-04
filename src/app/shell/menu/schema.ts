@@ -1,6 +1,7 @@
 import type { EditorCommandId } from '@open-pencil/vue'
 
 export type AppMenuTarget = 'all' | 'browser' | 'native'
+export type AppMenuHandler = 'editor' | 'shell'
 
 export interface AppMenuActionItem {
   type?: 'item'
@@ -11,6 +12,7 @@ export interface AppMenuActionItem {
   command?: EditorCommandId
   checkbox?: boolean
   target?: AppMenuTarget
+  handler?: AppMenuHandler
   sub?: AppMenuEntry[]
 }
 
@@ -33,7 +35,8 @@ export const APP_MENU_SCHEMA = [
     items: [
       { id: 'new', label: 'New', shortcut: 'MOD+N' },
       { id: 'open', label: 'Open…', shortcut: 'MOD+O' },
-      { id: 'open-storage-workspace', label: 'Open Storage Workspace…' },
+      { id: 'open-recent', label: 'Open Recent', target: 'native' },
+      { id: 'open-storage-workspace', label: 'Open Storage Workspace…', handler: 'shell' },
       { type: 'separator' },
       { id: 'save', label: 'Save', shortcut: 'MOD+S' },
       { id: 'save-as', label: 'Save As…', shortcut: 'MOD+SHIFT+S' },
@@ -117,6 +120,9 @@ export const APP_MENU_SCHEMA = [
       { id: 'zoom-in', label: 'Zoom In', shortcut: 'MOD+=' },
       { id: 'zoom-out', label: 'Zoom Out', shortcut: 'MOD+-' },
       { type: 'separator' },
+      { id: 'view-split-right', label: 'Split Right' },
+      { id: 'view-split-down', label: 'Split Down' },
+      { type: 'separator' },
       { id: 'view-rulers', label: 'Rulers', checkbox: true },
       { id: 'view-multiplayer-cursors', label: 'Multiplayer Cursors', checkbox: true },
       { type: 'separator' },
@@ -124,15 +130,47 @@ export const APP_MENU_SCHEMA = [
         id: 'theme',
         label: 'Theme',
         sub: [
-          { id: 'theme-light', label: 'Light', checkbox: true },
-          { id: 'theme-dark', label: 'Dark', checkbox: true },
-          { id: 'theme-auto', label: 'Auto', checkbox: true }
+          { id: 'theme-light', label: 'Light', checkbox: true, handler: 'shell' },
+          { id: 'theme-dark', label: 'Dark', checkbox: true, handler: 'shell' },
+          { id: 'theme-auto', label: 'Auto', checkbox: true, handler: 'shell' }
         ]
       },
       { id: 'language', label: 'Language', target: 'browser' },
       { type: 'separator' },
+      {
+        id: 'preferences',
+        label: 'Preferences',
+        sub: [
+          {
+            id: 'snap-geometry',
+            label: 'Snap to Geometry',
+            checkbox: true,
+            handler: 'shell'
+          },
+          {
+            id: 'snap-objects',
+            label: 'Snap to Objects',
+            checkbox: true,
+            handler: 'shell'
+          },
+          {
+            id: 'snap-pixel-grid',
+            label: 'Snap to Pixel Grid',
+            checkbox: true,
+            handler: 'shell'
+          },
+          { type: 'separator' },
+          {
+            id: 'settings',
+            label: 'Settings…',
+            shortcut: 'MOD+,',
+            accelerator: 'CmdOrCtrl+,',
+            handler: 'shell'
+          }
+        ]
+      },
+      { type: 'separator' },
       { id: 'toggle-ui', label: 'Toggle UI', shortcut: 'MOD+\\' },
-      { id: 'settings', label: 'Settings…' },
       { type: 'separator' },
       { id: 'profiler', label: 'Profiler', checkbox: true, target: 'browser' },
       {

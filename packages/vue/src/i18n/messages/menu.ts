@@ -29,6 +29,10 @@ export const menuMessageDefaults = {
   settings: 'Settings…',
   rulers: 'Rulers',
   multiplayerCursors: 'Multiplayer cursors',
+  preferences: 'Preferences',
+  snapToGeometry: 'Snap to geometry',
+  snapToObjects: 'Snap to objects',
+  snapToPixelGrid: 'Snap to pixel grid',
   checkUpdates: 'Check for updates…',
 
   moveToPage: 'Move to page',
@@ -66,7 +70,11 @@ export const menuMessageDefaults = {
   arrangeAlignMiddle: 'Align middle',
   arrangeAlignBottom: 'Align bottom',
   zoomIn: 'Zoom in',
-  zoomOut: 'Zoom out'
+  zoomOut: 'Zoom out',
+  splitRight: 'Split right',
+  splitDown: 'Split down',
+  closeView: 'Close view',
+  removeGuide: 'Remove guide'
 } as const
 
 export const menuMessages = i18n('menu', menuMessageDefaults)

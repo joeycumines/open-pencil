@@ -11,6 +11,7 @@ import { IS_BROWSER } from '#core/constants'
 import { setTextMeasurer } from '#core/layout'
 import { TextEditor } from '#core/text/editor'
 import { fontManager } from '#core/text/fonts'
+import { fontResolver } from '#core/text/resolver'
 
 import { createAlignmentActions } from './alignment'
 import { createClipboardBridge } from './bridges/clipboard'
@@ -23,6 +24,7 @@ import { createComponentSyncScheduler } from './component-sync'
 import { createComponentActions } from './components'
 import { createGraphEventSubscription } from './graph-events'
 import { createGraphReadActions } from './graph-reads'
+import { createGuideActions } from './guides'
 import { createLayoutRunner } from './layout-runner'
 import { createNodeActions } from './nodes'
 import { createPageActions } from './pages'
@@ -61,6 +63,9 @@ export function createEditor(options?: EditorOptions) {
   const _renderers = new Set<SkiaRenderer>()
   let _textEditor: TextEditor | null = null
   const events: Emitter<EditorEvents> = createNanoEvents()
+  const stopFontResolutionEvents = fontResolver.subscribe((event, snapshot) => {
+    events.emit('font:resolution-changed', event, snapshot)
+  })
 
   void prefetchFigmaSchema()
 
@@ -97,6 +102,7 @@ export function createEditor(options?: EditorOptions) {
   function setSelectedIds(ids: Set<string>) {
     const previous = [...state.selectedIds]
     state.selectedIds = ids
+    if (ids.size === 0) state.measurementMode = 'off'
     const selected = [...ids]
     if (
       previous.length !== selected.length ||
@@ -109,6 +115,7 @@ export function createEditor(options?: EditorOptions) {
   function setActiveTool(tool: EditorState['activeTool']) {
     const previous = state.activeTool
     state.activeTool = tool
+    if (tool !== 'SELECT') state.measurementMode = 'off'
     if (previous !== tool) emitEditorEvent('tool:changed', tool, previous)
   }
 
@@ -157,6 +164,7 @@ export function createEditor(options?: EditorOptions) {
   const viewport = createViewportActions(ctx)
   const selection = createSelectionActions(ctx)
   const pages = createPageActions(ctx)
+  const guides = createGuideActions(ctx)
   const shapes = createShapeActions(ctx)
   const structure = createStructureActions(ctx)
   const components = createComponentActions(ctx)
@@ -199,6 +207,11 @@ export function createEditor(options?: EditorOptions) {
     state.currentPageId = _graph.getPages()[0]?.id ?? _graph.rootId
     setSelectedIds(new Set())
     state.hoveredNodeId = null
+    state.measurementMode = 'off'
+    state.snapGuides = []
+    state.guides = { preview: null, hovered: null, selected: null, redline: null }
+    state.layoutInsertIndicator = null
+    state.dropTargetId = null
     pages.clearPageViewports()
     emitEditorEvent('graph:replaced', _graph)
     if (previousPageId !== state.currentPageId) {
@@ -234,12 +247,16 @@ export function createEditor(options?: EditorOptions) {
     removeCanvasRenderer,
     replaceGraph,
     subscribeToGraph,
+    dispose: stopFontResolutionEvents,
 
     // Selection
     ...selection,
 
     // Pages
     ...pages,
+
+    // Canvas and frame guides
+    ...guides,
 
     // Shapes & tools
     ...shapes,

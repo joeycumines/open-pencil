@@ -7,6 +7,7 @@ import {
   SkiaRenderer as SkiaRendererClass
 } from '@open-pencil/core'
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defaults'
 
 import { initCanvasKit } from '#cli/headless'
 import type { SkiaRenderer } from '#core/canvas/renderer'
@@ -56,13 +57,14 @@ function createMockRenderer(overrides: Partial<Record<string, unknown>> = {}) {
     },
     ck: {
       MakePicture: mock(() => createMockPicture()),
-      Path: class {
-        moveTo = mock(() => undefined)
-        lineTo = mock(() => undefined)
-        cubicTo = mock(() => undefined)
-        quadTo = mock(() => undefined)
-        close = mock(() => undefined)
+      PathBuilder: class {
+        moveTo = mock(() => this)
+        lineTo = mock(() => this)
+        cubicTo = mock(() => this)
+        quadTo = mock(() => this)
+        close = mock(() => this)
         delete = mock(() => undefined)
+        detachAndDelete = mock(() => ({ delete: mock(() => undefined) }))
       },
       LTRBRect: mock((...args: number[]) => args),
       Color4f: mock((...args: number[]) => new Float32Array(args)),
@@ -95,6 +97,7 @@ function textNode(overrides: Partial<SceneNode> = {}): SceneNode {
     textDecoration: 'NONE',
     textDirection: 'AUTO',
     styleRuns: [],
+    source: createDefaultSourceMetadata(),
     ...overrides
   } as SceneNode
 }

@@ -13,10 +13,11 @@ import { useEditorCommands, useI18n } from '@open-pencil/vue'
 import { DEFAULT_COLLAB_STATE, useCollabInjected } from '@/app/collab/use'
 import { useEditorStore } from '@/app/editor/active-store'
 import { toolIcons } from '@/app/editor/icons'
+import { useNotificationMessages } from '@/app/i18n/notifications'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { toast } from '@/app/shell/ui'
 import type { ToolbarActionItem } from '@/components/Toolbar/types'
-import { getShareUrl } from '@/constants'
+import { getShareURL } from '@/constants'
 
 type MenuAction = ToolbarActionItem
 
@@ -26,6 +27,7 @@ function createMobileHudContext() {
   const store = useEditorStore()
   const { copy } = useClipboard()
   const { dialogs } = useI18n()
+  const notifications = useNotificationMessages()
   const { getCommand } = useEditorCommands()
 
   const collabState = computed(() => collab?.state.value ?? DEFAULT_COLLAB_STATE)
@@ -59,8 +61,8 @@ function createMobileHudContext() {
     if (!collab) return
     const roomId = collab.shareCurrentDoc()
     void router.push(`/share/${roomId}`)
-    void copy(getShareUrl(roomId))
-    toast.info('Link copied to clipboard')
+    void copy(getShareURL(roomId))
+    toast.info(notifications.value.linkCopied)
   }
 
   function disconnect() {

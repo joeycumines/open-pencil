@@ -11,7 +11,7 @@ import { createMobileClipboardActions } from '@/app/editor/mobile-clipboard'
 import { createPenActions } from '@/app/editor/pen'
 import { createProfilerActions } from '@/app/editor/profiler'
 import type { AppEditorState } from '@/app/editor/session/types'
-import { createVectorEditActions } from '@/app/editor/vector-edit'
+import { createVectorEditActions } from '@/app/editor/vector'
 
 export function defineEditorStoreAccessors(store: object, editor: Editor) {
   Object.defineProperties(store, {
@@ -76,6 +76,10 @@ export function createEditorStoreModules(
     getDocumentFilePath: documentIO.getDocumentFilePath,
     getSourceIdentity: documentIO.getSourceIdentity,
     getStorageBinding: documentIO.getStorageBinding,
+    getRecoveryId: documentIO.getRecoveryId,
+    adoptRecoverySnapshot: documentIO.adoptRecoverySnapshot,
+    persistRecoveryNow: documentIO.persistRecoveryNow,
+    discardRecovery: documentIO.discardRecovery,
     setDocumentSource: documentIO.setDocumentSource,
     setStorageDocumentSource: documentIO.setStorageDocumentSource,
     setPlannedFilePath: documentIO.setPlannedFilePath,
@@ -83,6 +87,7 @@ export function createEditorStoreModules(
     clearSourceIdentity: documentIO.clearSourceIdentity,
     startWatchingCurrentFile: documentIO.startWatchingCurrentFile,
     dispose: () => {
+      editor.dispose()
       editor.clearPageViewports()
       documentIO.disposeDocumentIO()
     },

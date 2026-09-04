@@ -1,32 +1,40 @@
 ---
 title: Componenti
-description: Componenti riutilizzabili, istanze, override e sincronizzazione live in OpenPencil.
+description: Componenti riutilizzabili, istanze, insiemi, sostituzioni e librerie.
 ---
+
 # Componenti
 
+I componenti sono oggetti riutilizzabili. Le modifiche al componente principale si propagano automaticamente alle istanze.
+
+## Esplorare e inserire
+
+La scheda **Risorse** mostra componenti locali e librerie abilitate. Permette ricerca e viste griglia o elenco. Inserisci un componente con un clic, <kbd>Enter</kbd> o trascinandolo nell’area di lavoro. Le revisioni scaricate restano disponibili offline.
+
 ## Creare un componente
-<kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>K</kbd>) — converte la selezione in un componente riutilizzabile. I componenti mostrano un'etichetta viola con icona a diamante.
 
-## Set di componenti
-<kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> — combina 2+ componenti in un set con bordo tratteggiato viola.
+Seleziona un frame o gruppo e premi <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd>; su Windows e Linux, <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>K</kbd>.
 
-## Creare istanze
-Click destro → **Crea istanza**. Appare 40 px a destra.
+## Creare un’istanza
 
-## Separare un'istanza
-<kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd> — diventa un frame senza collegamento.
+Seleziona il componente e scegli **Crea istanza**, oppure inseriscilo da Risorse. L’istanza mantiene un collegamento al componente principale.
 
-## Sincronizzazione live
-Modificare un componente aggiorna tutte le istanze. Proprietà sincronizzate: dimensioni, riempimenti, contorni, effetti, opacità, raggi angoli, layout.
+## Sostituzioni
 
-## Override
-Le istanze possono sovrascrivere proprietà specifiche senza rompere il collegamento. Proprietà sovrascrivibili: nome, testo, fontSize, fontWeight, fontFamily e proprietà visuali/layout.
+Le proprietà modificate in un’istanza vengono salvate come sostituzioni. Le modifiche successive al componente principale continuano ad arrivare, tranne per le proprietà sostituite.
 
-## Hit testing
-Click seleziona il componente. **Doppio click** per entrare e selezionare i figli.
+## Proprietà del componente
 
-| Azione | Mac | Windows / Linux |
-|--------|-----|-----------------|
-| Crea componente | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>K</kbd> |
-| Crea set | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>K</kbd> |
-| Separa istanza | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd> | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> |
+Sono supportati testo, visibilità booleana, scambio di istanza e varianti. Le proprietà appaiono a destra quando è selezionata un’istanza.
+
+## Insiemi e varianti
+
+Combina i componenti con <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> o <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>K</kbd>. Ogni dimensione, per esempio stato o dimensione, può avere più valori. OpenPencil supporta combinazioni sparse, impedisce duplicati e usa come predefinita la variante in alto a sinistra.
+
+## Sincronizzazione
+
+Le modifiche al componente principale vengono mostrate in una revisione prima dell’applicazione. Le sostituzioni restano intatte. **Vai al componente principale** funziona tra pagine e **Scollega istanza** la converte in un frame indipendente.
+
+## Librerie
+
+Pubblica i componenti locali come libreria e abilita librerie esterne in Risorse. Le revisioni vengono conservate localmente per lavorare offline.

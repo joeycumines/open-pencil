@@ -2,49 +2,49 @@ import type { UIMessage } from 'ai'
 
 import { buildDebugLog } from '@open-pencil/core/tools'
 import type { ToolDebugLog, ToolLogEntry } from '@open-pencil/core/tools'
-import type { JsonObject } from '@open-pencil/scene-graph/primitives'
+import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
-import { getStepUsages, getToolLogEntries } from '@/app/ai/tools'
+import type { AIChatFailure } from '@/app/ai/chat/failure'
+import { getToolLogEntries } from '@/app/ai/tools'
+import { diagnostics } from '@/app/diagnostics'
+
+const MAX_FAILURE_DETAIL_LENGTH = 240
+const SENSITIVE_DETAIL_PATTERN =
+  /(api[-_ ]?key|authorization|token|secret|password)(\s*[:=]\s*|\s+)([^\s,;]+)/gi
+
+export function safeFailureDetail(detail: string): string {
+  const redacted = detail.replace(SENSITIVE_DETAIL_PATTERN, '$1$2[redacted]')
+  return redacted.length <= MAX_FAILURE_DETAIL_LENGTH
+    ? redacted
+    : `${redacted.slice(0, MAX_FAILURE_DETAIL_LENGTH)}…`
+}
 
 export function formatTokenUsage(): string {
-  const steps = getStepUsages()
-  if (steps.length === 0) return '  (no usage data — provider may not report it)'
+  const events = diagnostics.recent().filter((event) => event.name === 'model.step.completed')
+  if (events.length === 0) return '  (no usage data — provider may not report it)'
 
   let totalInput = 0
   let totalOutput = 0
   let totalCacheRead = 0
   let totalCacheWrite = 0
-
-  const lines: string[] = []
-  for (let i = 0; i < steps.length; i++) {
-    const s = steps[i]
-    totalInput += s.inputTokens
-    totalOutput += s.outputTokens
-    totalCacheRead += s.cacheReadTokens
-    totalCacheWrite += s.cacheWriteTokens
-
-    let cacheInfo = ' NO CACHE'
-    if (s.cacheReadTokens > 0) {
-      cacheInfo = ` cache_read=${s.cacheReadTokens}`
-    } else if (s.cacheWriteTokens > 0) {
-      cacheInfo = ` cache_write=${s.cacheWriteTokens}`
-    }
-    lines.push(`  Step ${i + 1}: in=${s.inputTokens} out=${s.outputTokens}${cacheInfo}`)
-  }
-
+  const lines = events.map((event, index) => {
+    const input = event.attributes.inputTokens
+    const output = event.attributes.outputTokens
+    const cacheRead = event.attributes.cacheReadTokens
+    const cacheWrite = event.attributes.cacheWriteTokens
+    if (typeof input === 'number') totalInput += input
+    if (typeof output === 'number') totalOutput += output
+    if (typeof cacheRead === 'number') totalCacheRead += cacheRead
+    if (typeof cacheWrite === 'number') totalCacheWrite += cacheWrite
+    return `  Step ${events.length - index}: in=${input ?? 'not reported'} out=${output ?? 'not reported'} cache_read=${cacheRead ?? 'not reported'} cache_write=${cacheWrite ?? 'not reported'}`
+  })
   const cacheHitRate = totalInput > 0 ? ((totalCacheRead / totalInput) * 100).toFixed(1) : '0.0'
-  const savedTokens = totalCacheRead > 0 ? totalCacheRead - Math.round(totalCacheRead * 0.1) : 0
-
   lines.unshift(
     `Total: in=${totalInput} out=${totalOutput} cache_read=${totalCacheRead} cache_write=${totalCacheWrite}`,
-    `Cache hit rate: ${cacheHitRate}% (saved ~${savedTokens} uncached input tokens, 90% cost reduction on cached)`,
-    `Steps: ${steps.length}`,
-    totalCacheRead === 0 && totalCacheWrite === 0
-      ? '⚠ NO CACHING DETECTED — system prompt + tools are re-processed every step'
-      : ''
+    `Cache hit rate: ${cacheHitRate}%`,
+    `Steps: ${events.length}`
   )
-
-  return lines.filter(Boolean).join('\n')
+  return lines.join('\n')
 }
 
 export function formatLogEntry(entry: ToolLogEntry, index: number): string {
@@ -155,7 +155,7 @@ export function formatDiagnostics(log: ToolDebugLog): string {
 }
 
 function formatToolPart(part: Record<string, unknown>): string {
-  const inv = part.toolInvocation as JsonObject | undefined
+  const inv = part.toolInvocation as JSONObject | undefined
   if (inv) {
     const lines = [`  [tool] ${String(inv.toolName)} (${String(inv.state)})`]
     if (inv.args) lines.push(`    args: ${JSON.stringify(inv.args)}`)
@@ -182,7 +182,7 @@ function formatMessageStats(messages: UIMessage[]): string {
     if (msg.role === 'user') userMessages++
     else if (msg.role === 'assistant') assistantMessages++
     for (const part of msg.parts) {
-      const p = part as JsonObject
+      const p = part as JSONObject
       if (p.type === 'text') {
         totalTextLength += typeof p.text === 'string' ? p.text.length : 0
       } else if (
@@ -205,7 +205,7 @@ function formatMessageStats(messages: UIMessage[]): string {
   return lines.join('\n')
 }
 
-export function serializeChatLog(messages: UIMessage[]): string {
+export function serializeChatLog(messages: UIMessage[], failure?: AIChatFailure | null): string {
   const sections: string[] = []
 
   const toolLog = getToolLogEntries()
@@ -223,6 +223,15 @@ export function serializeChatLog(messages: UIMessage[]): string {
 
   sections.push('=== DIAGNOSTICS ===')
   sections.push(formatDiagnostics(debugLog))
+  sections.push('')
+
+  sections.push('=== ERRORS ===')
+  if (failure) {
+    const detail = failure.detail ? `: ${safeFailureDetail(failure.detail)}` : ''
+    sections.push(`  ${failure.reason}${detail}`)
+  } else {
+    sections.push('  (none recorded)')
+  }
   sections.push('')
 
   sections.push('=== MESSAGE STATS ===')
@@ -245,7 +254,7 @@ export function serializeChatLog(messages: UIMessage[]): string {
     const parts: string[] = []
 
     for (const part of msg.parts) {
-      const p = part as JsonObject
+      const p = part as JSONObject
       if (p.type === 'text') {
         parts.push(`  ${p.text as string}`)
       } else if (p.type === 'reasoning') {
@@ -270,7 +279,7 @@ export function serializeChatLog(messages: UIMessage[]): string {
   return sections.join('\n\n')
 }
 
-export function copyChatLog(messages: UIMessage[]): Promise<void> {
-  const text = serializeChatLog(messages)
+export function copyChatLog(messages: UIMessage[], failure?: AIChatFailure | null): Promise<void> {
+  const text = serializeChatLog(messages, failure)
   return navigator.clipboard.writeText(text)
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'bun:test'
 
 import { ref } from 'vue'
 
-import { spawnAcpProcess } from '@/app/ai/acp/process'
+import { spawnACPProcess } from '@/app/ai/acp/process'
 import { checkForAppUpdate } from '@/app/shell/updater'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'
@@ -32,7 +32,7 @@ describe('Tauri process helpers', () => {
       return null
     })
 
-    const process = await spawnAcpProcess({
+    const process = await spawnACPProcess({
       command: 'agent-cli',
       args: ['--stdio'],
       logId: 'test',
@@ -74,7 +74,7 @@ describe('Tauri process helpers', () => {
       return null
     })
 
-    const process = await spawnAcpProcess({
+    const process = await spawnACPProcess({
       command: 'agent-cli',
       args: ['--stdio'],
       logId: 'test',
@@ -95,7 +95,7 @@ describe('Tauri process helpers', () => {
       return null
     })
 
-    const process = await spawnAcpProcess({
+    const process = await spawnACPProcess({
       command: 'agent-cli',
       args: [],
       logId: 'test',
@@ -152,7 +152,10 @@ describe('Tauri updater helper', () => {
           rawJson: '{}'
         }
       }
-      if (cmd === 'plugin:dialog|confirm') return true
+      if (cmd === 'plugin:dialog|message') {
+        const options = args as { buttons?: string }
+        if (options.buttons === 'OkCancel') return 'Ok'
+      }
       if (cmd === 'plugin:updater|download_and_install') {
         const onEvent = (args as { onEvent: { onmessage: (event: unknown) => void } }).onEvent
         onEvent.onmessage({ event: 'Started', data: { contentLength: 10 } })
@@ -165,14 +168,15 @@ describe('Tauri updater helper', () => {
 
     expect(calls.map((call) => call.cmd)).toEqual([
       'plugin:updater|check',
-      'plugin:dialog|confirm',
+      'plugin:dialog|message',
       'plugin:updater|download_and_install',
       'plugin:dialog|message',
       'plugin:process|restart'
     ])
     expect(calls[1]?.args).toMatchObject({
       title: 'Update available',
-      kind: 'info'
+      kind: 'info',
+      buttons: 'OkCancel'
     })
     expect(calls[2]?.args).toMatchObject({ rid: 9 })
   })

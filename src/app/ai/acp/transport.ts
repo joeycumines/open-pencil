@@ -8,14 +8,16 @@ import type {
 } from '@agentclientprotocol/sdk'
 import type { ChatTransport, UIMessage, UIMessageChunk } from 'ai'
 
-import { AUTOMATION_HTTP_PORT, type ACPAgentDef } from '@open-pencil/core/constants'
+import type { ACPAgentDef } from '@open-pencil/core/constants'
 
 import SYSTEM_PROMPT from '@/app/ai/chat/system-prompt.md?raw'
+import { describeDiagnosticError, recordACPTransportFailure } from '@/app/diagnostics'
+import { buildACPMCPServers } from '@/app/integrations/mcp'
 
 import { mapUpdate } from './map-update'
-import { spawnAcpProcess } from './process'
+import { spawnACPProcess } from './process'
 
-type TauriChild = Awaited<ReturnType<typeof spawnAcpProcess>>['child']
+type TauriChild = Awaited<ReturnType<typeof spawnACPProcess>>['child']
 
 interface ACPDebugEntry {
   ts: number
@@ -43,18 +45,18 @@ function pruneOldEntries() {
   }
 }
 
-export function getAcpDebugText(): string {
+export function getACPDebugText(): string {
   pruneOldEntries()
   return acpDebugLog
     .map((e) => `[${new Date(e.ts).toISOString()}] ${e.type}\n${JSON.stringify(e.data, null, 2)}`)
     .join('\n\n---\n\n')
 }
 
-export function clearAcpDebugLog() {
+export function clearACPDebugLog() {
   acpDebugLog.length = 0
 }
 
-export function hasAcpDebugEntries(): boolean {
+export function hasACPDebugEntries(): boolean {
   pruneOldEntries()
   return acpDebugLog.length > 0
 }
@@ -88,6 +90,11 @@ export function formatConnectionError(e: unknown, agentDef?: ACPAgentDef): strin
     return missingCommandMessage(agentDef)
   }
   return msg
+}
+
+function startupError(error: unknown, agentDef: ACPAgentDef): Error {
+  recordACPTransportFailure({ operation: 'start', ...describeDiagnosticError(error) })
+  return new Error(formatConnectionError(error, agentDef))
 }
 
 export function buildCrashChunks(
@@ -189,11 +196,11 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
             sessionId,
             prompt: [{ type: 'text', text: promptText }]
           })
-          .then((result) => {
-            finish(result.stopReason === 'end_turn' ? 'stop' : 'other')
-            return undefined
-          })
           .catch((e) => {
+            recordACPTransportFailure({
+              operation: 'message',
+              ...describeDiagnosticError(e)
+            })
             finish('error', formatConnectionError(e, this.agentDef))
           })
       }
@@ -213,9 +220,9 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
   }
 
   private async spawnAgent(): Promise<ACPSession> {
-    let process: Awaited<ReturnType<typeof spawnAcpProcess>>
+    let process: Awaited<ReturnType<typeof spawnACPProcess>>
     try {
-      process = await spawnAcpProcess({
+      process = await spawnACPProcess({
         command: this.agentDef.command,
         args: this.agentDef.args,
         logId: this.agentDef.id,
@@ -227,9 +234,9 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
         }
       })
     } catch (e) {
+      recordACPTransportFailure({ operation: 'start', ...describeDiagnosticError(e) })
       throw new Error(formatConnectionError(e, this.agentDef))
     }
-
     const { child, input, output } = process
     const stream = ndJsonStream(input, output)
     let onUpdate: ACPSession['onUpdate'] = null
@@ -254,7 +261,7 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
       automationAuthToken = await getAutomationAuthToken()
     } catch (e) {
       await child.kill().catch(() => undefined)
-      throw new Error(formatConnectionError(e, this.agentDef))
+      throw startupError(e, this.agentDef)
     }
 
     try {
@@ -264,27 +271,18 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
       })
     } catch (e) {
       await child.kill().catch(() => undefined)
-      throw new Error(formatConnectionError(e, this.agentDef))
+      throw startupError(e, this.agentDef)
     }
 
     let sessionResult
     try {
       sessionResult = await connection.newSession({
         cwd: this.cwd,
-        mcpServers: [
-          {
-            type: 'http' as const,
-            name: 'open-pencil',
-            url: `http://127.0.0.1:${AUTOMATION_HTTP_PORT}/mcp`,
-            headers: automationAuthToken
-              ? [{ name: 'Authorization', value: `Bearer ${automationAuthToken}` }]
-              : []
-          }
-        ]
+        mcpServers: await buildACPMCPServers({ authorizationToken: automationAuthToken })
       })
     } catch (e) {
       await child.kill().catch(() => undefined)
-      throw new Error(formatConnectionError(e, this.agentDef))
+      throw startupError(e, this.agentDef)
     }
 
     const session: ACPSession = {

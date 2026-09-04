@@ -7,13 +7,15 @@ import {
   ALL_TOOLS,
   FigmaAPI,
   computeAllLayouts,
-  executeRpcCommand
+  executeRPCCommand
 } from '@open-pencil/core'
+import type { ToolDescriptor } from '@open-pencil/mcp/tools'
 
 export interface HealthResponse {
   status: string
   version: string
   authRequired: boolean
+  tools?: ToolDescriptor[]
   discoveryPath?: string
 }
 
@@ -30,7 +32,7 @@ export interface MockBrowser {
 }
 
 /** Read the next WebSocket JSON message with a timeout. */
-export function readWsJson<T>(ws: WebSocket, timeoutMs = 1000): Promise<T> {
+export function readWsJSON<T>(ws: WebSocket, timeoutMs = 1000): Promise<T> {
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timer)
@@ -81,7 +83,7 @@ export async function readNextResponse<T>(ws: WebSocket, timeoutMs = 5000): Prom
   for (let i = 0; ; i++) {
     const remaining = timeoutMs - (Date.now() - start)
     if (remaining <= 0) throw new Error(`Timed out after reading ${i} register messages`)
-    const msg = await readWsJson<T & { type: string }>(ws, remaining)
+    const msg = await readWsJSON<T & { type: string }>(ws, remaining)
     if (msg.type !== 'register') return msg
   }
 }
@@ -89,7 +91,7 @@ export async function readNextResponse<T>(ws: WebSocket, timeoutMs = 5000): Prom
 /** Low-level HTTP request via Node's http module, with timeout. */
 export function nodeHttpRequest(
   opts: RequestOptions,
-  bodyJson?: string,
+  bodyJSON?: string,
   timeoutMs = 5_000
 ): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
@@ -126,7 +128,7 @@ export function nodeHttpRequest(
     req.setTimeout(timeoutMs, () => {
       req.destroy(new Error(`nodeHttpRequest connection timed out after ${timeoutMs / 1000}s`))
     })
-    if (bodyJson) req.write(bodyJson)
+    if (bodyJSON) req.write(bodyJSON)
     req.end()
   })
 }
@@ -140,16 +142,16 @@ export function tcpRequest(
   headers?: Record<string, string>
 ): Promise<{ status: number; data: unknown }> {
   if (!port) throw new Error('tcpRequest: port not initialized — beforeAll must run first')
-  const bodyJson = body ? JSON.stringify(body) : undefined
+  const bodyJSON = body ? JSON.stringify(body) : undefined
   return nodeHttpRequest(
     {
       hostname: '127.0.0.1',
       port,
       path,
       method,
-      headers: { ...(bodyJson ? { 'Content-Type': 'application/json' } : {}), ...headers }
+      headers: { ...(bodyJSON ? { 'Content-Type': 'application/json' } : {}), ...headers }
     },
-    bodyJson
+    bodyJSON
   )
 }
 
@@ -212,7 +214,7 @@ async function handleMockCommand(
     return {}
   }
 
-  return executeRpcCommand(graph, command, args ?? {})
+  return executeRPCCommand(graph, command, args ?? {})
 }
 
 export function connectMockBrowser(

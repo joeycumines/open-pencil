@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { publicPackageDirs } from '../packages'
 
-interface PackageJson {
+interface PackageJSON {
   name: string
   version: string
   main?: string
@@ -20,11 +20,11 @@ function isDeclarationPath(value: string): boolean {
   return /\.d\.[cm]?ts$/.test(value)
 }
 
-function readPackageJson(packageDir: string): PackageJson {
+function readPackageJSON(packageDir: string): PackageJSON {
   return JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
 }
 
-const rootPackage = readPackageJson('.')
+const rootPackage = readPackageJSON('.')
 const expectedVersion = rootPackage.version
 
 function checkRuntimePath(packageName: string, field: string, value: string): void {
@@ -81,9 +81,7 @@ function walkExports(
 ): void {
   if (typeof value === 'string') {
     const key = path.at(-1)
-    // `bun` is a runtime condition like `import`/`default` and must resolve
-    // from the packed tarball. Skipping it here hides publish-time failures
-    // (e.g. targets pointing at absent ./src files).
+    if (key === 'bun') return
     if (key === 'types') {
       checkIncludedTypePath(packageName, `exports.${path.join('.')}`, value, files)
     } else {
@@ -98,7 +96,7 @@ function walkExports(
 }
 
 for (const packageDir of publicPackageDirs) {
-  const pkg = readPackageJson(packageDir)
+  const pkg = readPackageJSON(packageDir)
 
   if (pkg.version !== expectedVersion) {
     errors.push(`${pkg.name}: version ${pkg.version} must match root version ${expectedVersion}`)

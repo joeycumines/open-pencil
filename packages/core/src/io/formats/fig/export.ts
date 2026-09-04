@@ -3,7 +3,12 @@ import type { CanvasKit } from 'canvaskit-wasm'
 import { deflateSync, inflateSync } from 'fflate'
 
 import { compressFigDataSync } from '@open-pencil/fig'
-import { buildComponentPropIndex, stringToGuid } from '@open-pencil/fig/node-change'
+import {
+  buildComponentPropIndex,
+  exportCanvasGuides,
+  importCanvasGuides,
+  stringToGuid
+} from '@open-pencil/fig/node-change'
 import { initCodec, getCompiledSchema, getSchemaBytes } from '@open-pencil/kiwi/fig/codec'
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import { decodeBinarySchema, compileSchema, ByteBuffer } from '@open-pencil/kiwi/schema-runtime'
@@ -13,6 +18,8 @@ import type { GUID } from '@open-pencil/scene-graph/primitives'
 import { decodeBase64 } from '#core/bytes'
 import type { SkiaRenderer } from '#core/canvas'
 import { CANVAS_BG_COLOR, IS_BROWSER, IS_TAURI } from '#core/constants'
+import { applyEnabledLibrariesPluginData } from '#core/io/formats/fig/library-metadata'
+import { findFigThumbnailPageId } from '#core/io/formats/fig/thumbnail-page'
 import { renderThumbnail } from '#core/io/formats/raster'
 import { populateAllLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
 import {
@@ -23,6 +30,7 @@ import {
   makeDocumentNodeChange,
   makeCanvasNodeChange
 } from '#core/kiwi/fig/node-change/serialize'
+import { cloneSceneGraphForFigExport } from '#core/kiwi/fig/parse/transfer'
 
 const THUMBNAIL_1X1 = decodeBase64(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
@@ -78,8 +86,8 @@ function collectImageEntries(graph: SceneGraph): Array<{ name: string; data: Uin
   return entries
 }
 
-const THUMBNAIL_WIDTH = 400
-const THUMBNAIL_HEIGHT = 225
+const THUMBNAIL_WIDTH = 512
+const THUMBNAIL_HEIGHT = 512
 
 async function renderFigThumbnail(
   graph: SceneGraph,
@@ -153,6 +161,51 @@ function assignVariableGuids(
       )
       varIdToGuid.set(varId, varGuid)
     }
+  }
+}
+
+interface ComponentPropertyGuidState {
+  ids: string[]
+  maxLocalId0: number
+  maxLocalId1: number
+}
+
+function collectComponentPropertyGuidState(graph: SceneGraph): ComponentPropertyGuidState {
+  const ids = new Set<string>()
+  let maxLocalId0 = 0
+  let maxLocalId1 = 0
+  for (const node of graph.getAllNodes()) {
+    for (const definition of node.componentPropertyDefinitions) ids.add(definition.id)
+    for (const reference of node.componentPropertyReferences) ids.add(reference.propertyId)
+    for (const propertyId of Object.keys(node.componentPropertyAssignments)) ids.add(propertyId)
+    for (const spec of node.variantPropSpecs) ids.add(spec.propDefId)
+  }
+  for (const propertyId of ids) {
+    const match = /^(\d+):(\d+)$/.exec(propertyId)
+    if (!match) continue
+    const sessionID = Number.parseInt(match[1], 10)
+    const localID = Number.parseInt(match[2], 10)
+    if (sessionID === 0) maxLocalId0 = Math.max(maxLocalId0, localID)
+    if (sessionID === 1) maxLocalId1 = Math.max(maxLocalId1, localID)
+  }
+  return { ids: [...ids], maxLocalId0, maxLocalId1 }
+}
+
+function assignComponentPropertyGuids(
+  propertyIds: readonly string[],
+  localIdCounter: { value: number },
+  propertyIdToGuid: Map<string, GUID>,
+  assignedGuidValues: Set<string>,
+  nodeSourceGuidValues: Set<string>
+): void {
+  for (const propertyId of propertyIds) {
+    const guid = assignVariableGuid(
+      propertyId,
+      localIdCounter,
+      assignedGuidValues,
+      nodeSourceGuidValues
+    )
+    propertyIdToGuid.set(propertyId, guid)
   }
 }
 
@@ -251,8 +304,13 @@ function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange
       page.source.fig.rawNodeFields.backgroundPaints
     ) as NodeChange['backgroundPaints']
   }
-  if ('guides' in page.source.fig.rawNodeFields) {
-    canvasNc.guides = structuredClone(page.source.fig.rawNodeFields.guides)
+  if (page.guides.length > 0) {
+    const normalized = exportCanvasGuides(page.guides)
+    const raw = page.source.fig.rawNodeFields.guides
+    canvasNc.guides =
+      Array.isArray(raw) && JSON.stringify(importCanvasGuides(raw)) === JSON.stringify(page.guides)
+        ? structuredClone(raw)
+        : normalized
   }
   const strokeJoin = page.source.fig.rawNodeFields.strokeJoin
   if (typeof strokeJoin === 'string') canvasNc.strokeJoin = strokeJoin
@@ -341,6 +399,7 @@ interface InternalResourceContext {
   blobIndexByHex: Map<string, number>
   assignedGuidValues: Set<string>
   componentPropertyDefinitionsById: ReturnType<typeof buildComponentPropIndex>
+  propertyIdToGuid: Map<string, GUID>
 }
 
 function appendInternalResources(context: InternalResourceContext): void {
@@ -363,7 +422,8 @@ function appendInternalResources(context: InternalResourceContext): void {
         context.blobIndexByHex,
         context.assignedGuidValues,
         context.componentPropertyDefinitionsById,
-        context.modeIdToGuid
+        context.modeIdToGuid,
+        context.propertyIdToGuid
       )
     )
   }
@@ -379,12 +439,15 @@ function appendInternalResources(context: InternalResourceContext): void {
 }
 
 export async function exportFigFile(
-  graph: SceneGraph,
+  sourceGraph: SceneGraph,
   ck?: CanvasKit,
   renderer?: SkiaRenderer,
   pageId?: string,
   renderHeadlessThumbnail = false
 ): Promise<Uint8Array> {
+  // Lazy population synchronizes component trees and therefore mutates its graph. Saving must not
+  // rewrite the live editor document or restore component values over edits made by the user.
+  const graph = cloneSceneGraphForFigExport(sourceGraph)
   populateAllLazyFigImportRoots(graph)
   await initCodec()
 
@@ -412,6 +475,7 @@ export async function exportFigFile(
   const documentNc = makeDocumentNodeChange(docGuid, graph.documentColorSpace)
   const rootNode = graph.getNode(graph.rootId)
   if (rootNode) Object.assign(documentNc, rootNode.source.fig.rawNodeFields)
+  applyEnabledLibrariesPluginData(documentNc, graph)
   const nodeChanges: KiwiNodeChange[] = [documentNc]
 
   const blobs: Uint8Array[] = []
@@ -423,6 +487,7 @@ export async function exportFigFile(
   assignedGuidValues.add(`${docGuid.sessionID}:${docGuid.localID}`)
   const varIdToGuid = new Map<string, GUID>()
   const modeIdToGuid = new Map<string, GUID>()
+  const propertyIdToGuid = new Map<string, GUID>()
   const fontDigestMap = await buildFontDigestMap(graph)
   const glyphBlobMap = new Map<string, number>()
   const blobIndexByHex = new Map<string, number>()
@@ -447,6 +512,9 @@ export async function exportFigFile(
       }
     }
   }
+  const propertyGuidState = collectComponentPropertyGuidState(graph)
+  maxLocalId0 = Math.max(maxLocalId0, propertyGuidState.maxLocalId0)
+  maxLocalId1 = Math.max(maxLocalId1, propertyGuidState.maxLocalId1)
   localIdCounter.value = Math.max(localIdCounter.value, maxLocalId0 + 1, maxLocalId1 + 1)
 
   const { canvasEntries, internalCanvasGuid } = buildCanvasEntries(
@@ -465,6 +533,14 @@ export async function exportFigFile(
     localIdCounter,
     varIdToGuid,
     modeIdToGuid,
+    assignedGuidValues,
+    nodeSourceGuidValues
+  )
+
+  assignComponentPropertyGuids(
+    propertyGuidState.ids,
+    localIdCounter,
+    propertyIdToGuid,
     assignedGuidValues,
     nodeSourceGuidValues
   )
@@ -493,7 +569,8 @@ export async function exportFigFile(
           blobIndexByHex,
           assignedGuidValues,
           componentPropertyDefinitionsById,
-          modeIdToGuid
+          modeIdToGuid,
+          propertyIdToGuid
         )
       )
     }
@@ -512,7 +589,8 @@ export async function exportFigFile(
     glyphBlobMap,
     blobIndexByHex,
     assignedGuidValues,
-    componentPropertyDefinitionsById
+    componentPropertyDefinitionsById,
+    propertyIdToGuid
   })
 
   const msg: Record<string, unknown> = {
@@ -528,8 +606,8 @@ export async function exportFigFile(
 
   const kiwiData = compiled.encodeMessage(msg)
 
-  const currentPageId = pageId ?? pages[0]?.id
-  const thumbnailPng = await renderFigThumbnail(
+  const currentPageId = pageId ?? findFigThumbnailPageId(pages)
+  const thumbnailPNG = await renderFigThumbnail(
     graph,
     currentPageId,
     ck,
@@ -537,7 +615,7 @@ export async function exportFigFile(
     renderHeadlessThumbnail
   )
 
-  const metaJson = JSON.stringify({
+  const metaJSON = JSON.stringify({
     version: 1,
     app: 'OpenPencil',
     createdAt: new Date().toISOString()
@@ -550,18 +628,18 @@ export async function exportFigFile(
   if (IS_TAURI) {
     const { invoke } = await import('@tauri-apps/api/core')
     return new Uint8Array(
-      await invoke<number[]>('build_fig_file', {
+      await invoke<ArrayBuffer>('build_fig_file', {
         schemaDeflated: Array.from(schemaDeflated),
         kiwiData: Array.from(kiwiData),
-        thumbnailPng: Array.from(thumbnailPng),
-        metaJson,
+        thumbnailPng: Array.from(thumbnailPNG),
+        metaJson: metaJSON,
         images: imageEntries.map((e) => ({ name: e.name, data: Array.from(e.data) })),
         figKiwiVersion: version
       })
     )
   }
 
-  return compressFigData(schemaDeflated, kiwiData, thumbnailPng, metaJson, imageEntries, version)
+  return compressFigData(schemaDeflated, kiwiData, thumbnailPNG, metaJSON, imageEntries, version)
 }
 
 export { compressFigDataSync } from '@open-pencil/fig'
@@ -573,8 +651,8 @@ function canUseWorker(): boolean {
 function compressViaWorker(
   schemaDeflated: Uint8Array,
   kiwiData: Uint8Array,
-  thumbnailPng: Uint8Array,
-  metaJson: string,
+  thumbnailPNG: Uint8Array,
+  metaJSON: string,
   imageEntries: Array<{ name: string; data: Uint8Array }>,
   figKiwiVersion?: number
 ): Promise<Uint8Array> {
@@ -599,8 +677,8 @@ function compressViaWorker(
     worker.postMessage({
       schemaDeflated,
       kiwiData,
-      thumbnailPng,
-      metaJson,
+      thumbnailPNG,
+      metaJSON,
       images: imageEntries,
       figKiwiVersion
     })
@@ -610,8 +688,8 @@ function compressViaWorker(
 export function compressFigData(
   schemaDeflated: Uint8Array,
   kiwiData: Uint8Array,
-  thumbnailPng: Uint8Array,
-  metaJson: string,
+  thumbnailPNG: Uint8Array,
+  metaJSON: string,
   imageEntries: Array<{ name: string; data: Uint8Array }>,
   figKiwiVersion?: number
 ): Promise<Uint8Array> {
@@ -619,8 +697,8 @@ export function compressFigData(
     return compressViaWorker(
       schemaDeflated,
       kiwiData,
-      thumbnailPng,
-      metaJson,
+      thumbnailPNG,
+      metaJSON,
       imageEntries,
       figKiwiVersion
     )
@@ -629,8 +707,8 @@ export function compressFigData(
     compressFigDataSync(
       schemaDeflated,
       kiwiData,
-      thumbnailPng,
-      metaJson,
+      thumbnailPNG,
+      metaJSON,
       imageEntries,
       figKiwiVersion
     )

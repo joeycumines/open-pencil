@@ -6,7 +6,7 @@ import {
   propagateDsdChanges,
   type OverrideContext
 } from '@open-pencil/fig/instance-overrides'
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { getNodeLocalMatrix, SceneGraph } from '@open-pencil/scene-graph'
 
 function pageId(graph: SceneGraph): string {
   return graph.getPages()[0].id
@@ -17,8 +17,8 @@ describe('fig import derived symbol data', () => {
     const graph = new SceneGraph()
     const source = graph.createNode('TEXT', pageId(graph), {
       text: 'Account',
-      figmaDerivedTextGlyphs: [{ commandsBlob: new Uint8Array([0]), x: 0, y: 10, fontSize: 14 }],
-      figmaDerivedLayout: { width: 56, height: 20 }
+      derivedTextGlyphs: [{ commandsBlob: new Uint8Array([0]), x: 0, y: 10, fontSize: 14 }],
+      derivedLayout: { width: 56, height: 20 }
     })
     const clone = graph.createNode('TEXT', pageId(graph), {
       text: 'Account',
@@ -32,8 +32,8 @@ describe('fig import derived symbol data', () => {
 
     propagateDsdChanges(ctx, new Set([source.id]), new Set())
 
-    expect(clone.figmaDerivedTextGlyphs).toEqual(source.figmaDerivedTextGlyphs)
-    expect(clone.figmaDerivedLayout).toEqual(source.figmaDerivedLayout)
+    expect(clone.derivedTextGlyphs).toEqual(source.derivedTextGlyphs)
+    expect(clone.derivedLayout).toEqual(source.derivedLayout)
   })
 
   test('inherits derived positions when a clone has an explicit derived size', () => {
@@ -43,7 +43,7 @@ describe('fig import derived symbol data', () => {
       y: 0,
       width: 136,
       height: 40,
-      figmaDerivedLayout: { x: 152, y: 0, width: 136, height: 40 }
+      derivedLayout: { x: 152, y: 0, width: 136, height: 40 }
     })
     const clone = graph.createNode('INSTANCE', pageId(graph), {
       x: 136,
@@ -51,7 +51,7 @@ describe('fig import derived symbol data', () => {
       width: 144,
       height: 48,
       componentId: source.id,
-      figmaDerivedLayout: { x: 136, y: 4, width: 144, height: 48 }
+      derivedLayout: { x: 136, y: 4, width: 144, height: 48 }
     })
     const ctx = {
       graph,
@@ -64,7 +64,7 @@ describe('fig import derived symbol data', () => {
     expect(graph.getNode(clone.id)).toMatchObject({
       x: 152,
       y: 0,
-      figmaDerivedLayout: {
+      derivedLayout: {
         x: 152,
         y: 0,
         width: 144,
@@ -79,13 +79,13 @@ describe('fig import derived symbol data', () => {
       width: 232,
       height: 24,
       layoutMode: 'NONE',
-      figmaDerivedLayout: { width: 232, height: 24 }
+      derivedLayout: { width: 232, height: 24 }
     })
     const text = graph.createNode('TEXT', parent.id, {
       width: 256,
       height: 20,
       horizontalConstraint: 'STRETCH',
-      figmaDerivedLayout: { width: 232, height: 20 }
+      derivedLayout: { width: 232, height: 20 }
     })
     const ctx = {
       graph,
@@ -103,14 +103,14 @@ describe('fig import derived symbol data', () => {
       width: 232,
       height: 24,
       layoutMode: 'NONE',
-      figmaDerivedLayout: { width: 232 }
+      derivedLayout: { width: 232 }
     })
     const child = graph.createNode('FRAME', parent.id, {
       width: 100,
       height: 20,
       horizontalConstraint: 'STRETCH',
       verticalConstraint: 'STRETCH',
-      figmaDerivedLayout: { height: 20 }
+      derivedLayout: { height: 20 }
     })
     const ctx = { graph, activeNodeIds: new Set([parent.id, child.id]) } as OverrideContext
 
@@ -134,6 +134,50 @@ describe('fig import derived symbol data', () => {
     expect(updates).toMatchObject({ width: 184, height: 36 })
     expect(updates.x).toBeUndefined()
     expect(updates.y).toBeUndefined()
+  })
+
+  test('preserves a reflected rotated transform when derived data only changes size', () => {
+    const graph = new SceneGraph()
+    const target = graph.createNode('VECTOR', pageId(graph), {
+      x: 13.5,
+      y: 30.5,
+      width: 73,
+      height: 68,
+      rotation: 90,
+      flipX: true
+    })
+    const ctx = { graph, blobs: [] } as OverrideContext
+    const before = getNodeLocalMatrix(target)
+
+    const { updates } = buildDsdLayoutUpdates(ctx, new Map(), { size: { x: 762, y: 50 } }, target)
+    const after = getNodeLocalMatrix({ ...target, ...updates })
+
+    expect(updates).toMatchObject({ width: 762, height: 50, x: -340, y: 384 })
+    for (let i = 0; i < before.length; i++) expect(after[i]).toBeCloseTo(before[i], 10)
+  })
+
+  test('decomposes a complete reflected transform override around the node center', () => {
+    const graph = new SceneGraph()
+    const target = graph.createNode('INSTANCE', pageId(graph), {
+      width: 24,
+      height: 24
+    })
+    const ctx = { graph, blobs: [] } as OverrideContext
+    const transform = {
+      m00: 0,
+      m01: -1,
+      m02: 78,
+      m10: -1,
+      m11: 0,
+      m12: 790
+    }
+
+    const { updates } = buildDsdLayoutUpdates(ctx, new Map(), { transform }, target)
+    const matrix = getNodeLocalMatrix({ ...target, ...updates })
+
+    expect(updates).toMatchObject({ x: 54, y: 766, rotation: -90, flipX: true, flipY: false })
+    const expected = [0, -1, 78, -1, 0, 790]
+    for (let i = 0; i < expected.length; i++) expect(matrix[i]).toBeCloseTo(expected[i], 10)
   })
 
   test('routes derived text glyphs through layout patch updates', () => {
@@ -166,12 +210,15 @@ describe('fig import derived symbol data', () => {
       target
     )
 
-    expect(updates.figmaDerivedTextGlyphs).toEqual([
+    expect(updates.derivedTextGlyphs).toEqual([
       {
         commandsBlob: glyphBlob,
         x: 4,
         y: 15,
-        fontSize: 14
+        fontSize: 14,
+        // Path text needs per-glyph rotation preserved through import (#396);
+        // plain text imports it as 0 rather than dropping the field.
+        rotation: 0
       }
     ])
   })

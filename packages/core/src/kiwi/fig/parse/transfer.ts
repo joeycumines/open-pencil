@@ -1,13 +1,9 @@
 import type { InstanceNodeChange } from '@open-pencil/fig/instance-overrides'
 import { SceneGraph } from '@open-pencil/scene-graph'
-import type {
-  SceneNode,
-  Variable,
-  VariableCollection,
-  DocumentColorSpace
-} from '@open-pencil/scene-graph'
+import type { EnabledLibraryBinding, SceneNode } from '@open-pencil/scene-graph'
 
 import { getLazyFigImportContext, setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
+import type { PortableSceneGraphData } from '#core/kiwi/fig/parse/portable-data'
 
 export interface SerializedLazyFigImportContext {
   changeMap: Array<[string, InstanceNodeChange]>
@@ -16,17 +12,11 @@ export interface SerializedLazyFigImportContext {
   populatedRootIds: string[]
 }
 
-export interface SerializedSceneGraph {
-  rootId: string
-  nodes: Array<[string, SceneNode]>
-  images: Array<[string, Uint8Array]>
-  variables: Array<[string, Variable]>
-  variableCollections: Array<[string, VariableCollection]>
-  activeMode: Array<[string, string]>
+export interface SerializedSceneGraph extends PortableSceneGraphData {
   instanceIndex: Array<[string, string[]]>
   figKiwiVersion: number | null
   figSchemaDeflated: Uint8Array | null
-  documentColorSpace: DocumentColorSpace
+  enabledLibraries?: Array<[string, EnabledLibraryBinding]>
   lazyFigImport?: SerializedLazyFigImportContext
 }
 
@@ -43,6 +33,7 @@ export function serializeSceneGraph(graph: SceneGraph): SerializedSceneGraph {
     figKiwiVersion: graph.figKiwiVersion,
     figSchemaDeflated: graph.figSchemaDeflated,
     documentColorSpace: graph.documentColorSpace,
+    enabledLibraries: [...graph.enabledLibraries],
     lazyFigImport: lazyFigImport
       ? {
           changeMap: [...lazyFigImport.changeMap],
@@ -86,10 +77,49 @@ export function serializedSceneGraphTransferList(data: SerializedSceneGraph): Tr
   return [...buffers]
 }
 
+/**
+ * Clone the graph state that lazy FIG population may mutate while retaining immutable imported
+ * resources by reference. Population replaces node fields and mutates child ID arrays, but only
+ * reads image bytes, variables, source changes, GUID mappings, blobs, and schema bytes.
+ */
+export function cloneSceneGraphForFigExport(graph: SceneGraph): SceneGraph {
+  const cloned = new SceneGraph()
+  cloned.rootId = graph.rootId
+  cloned.nodes = new Map(
+    [...graph.nodes].map(([id, node]) => [id, { ...node, childIds: [...node.childIds] }])
+  )
+  cloned.images = new Map(graph.images)
+  cloned.variables = new Map(graph.variables)
+  cloned.variableCollections = new Map(graph.variableCollections)
+  cloned.activeMode = new Map(graph.activeMode)
+  cloned.instanceIndex = new Map(
+    [...graph.instanceIndex].map(([id, nodeIds]) => [id, new Set(nodeIds)])
+  )
+  cloned.figKiwiVersion = graph.figKiwiVersion
+  cloned.figSchemaDeflated = graph.figSchemaDeflated
+  cloned.documentColorSpace = graph.documentColorSpace
+  cloned.enabledLibraries = new Map(graph.enabledLibraries)
+
+  const lazyFigImport = getLazyFigImportContext(graph)
+  if (lazyFigImport) {
+    setLazyFigImportContext(cloned, {
+      changeMap: lazyFigImport.changeMap,
+      guidToNodeId: lazyFigImport.guidToNodeId,
+      blobs: lazyFigImport.blobs,
+      populatedRootIds: new Set(lazyFigImport.populatedRootIds)
+    })
+  }
+  return cloned
+}
+
+function normalizeNodeGuides(node: SceneNode): SceneNode {
+  return Array.isArray(node.guides) ? node : { ...node, guides: [] }
+}
+
 export function deserializeSceneGraph(data: SerializedSceneGraph): SceneGraph {
   const graph = new SceneGraph()
   graph.rootId = data.rootId
-  graph.nodes = new Map(data.nodes)
+  graph.nodes = new Map(data.nodes.map(([id, node]) => [id, normalizeNodeGuides(node)]))
   graph.images = new Map(data.images)
   graph.variables = new Map(data.variables)
   graph.variableCollections = new Map(data.variableCollections)
@@ -98,6 +128,7 @@ export function deserializeSceneGraph(data: SerializedSceneGraph): SceneGraph {
   graph.figKiwiVersion = data.figKiwiVersion
   graph.figSchemaDeflated = data.figSchemaDeflated
   graph.documentColorSpace = data.documentColorSpace
+  graph.enabledLibraries = data.enabledLibraries ? new Map(data.enabledLibraries) : new Map()
   if (data.lazyFigImport) {
     setLazyFigImportContext(graph, {
       changeMap: new Map(data.lazyFigImport.changeMap),

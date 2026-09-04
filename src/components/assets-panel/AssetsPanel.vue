@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useObjectUrl } from '@vueuse/core'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -12,16 +12,20 @@ import {
 } from 'reka-ui'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 import { useI18n } from '@open-pencil/vue'
 
 import { nodeIcon } from '@/app/editor/icons'
 import { useEditorStore } from '@/app/editor/active-store'
+import { useLibraryService } from '@/app/libraries'
 import { openExternalLink } from '@/app/shell/ui'
+import LibraryManagerDialog from '@/components/libraries/LibraryManagerDialog.vue'
+import { useLibraryEntry } from '@/components/libraries/useLibraryEntry'
 import AssetThumbnail from '@/components/assets-panel/AssetThumbnail.vue'
 import { findAssetPage } from '@/components/assets-panel/page'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
-import { useButtonUI } from '@/components/ui/button'
+import AppButton from '@/components/ui/AppButton.vue'
 import { AppDialogRoot, useDialogUI } from '@/components/ui/dialog'
 import { useMenuUI } from '@/components/ui/menu'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
@@ -40,7 +44,11 @@ type LocalAsset = {
   hasConflicts: boolean
   sourceLibraryKey: string | null
   description: string
-  docsUrl: string | null
+  docsURL: string | null
+  libraryId: string | null
+  revisionId: string | null
+  assetKey: string | null
+  libraryName: string | null
   pageId: string
   pageName: string
 }
@@ -52,17 +60,31 @@ type AssetGroup = {
 }
 
 const editor = useEditorStore()
+const libraryService = useLibraryService()
+const remoteAssets = libraryService.enabledAssets
 const { panels, commands } = useI18n()
 const query = ref('')
 const assetView = ref<AssetView>('grid')
 const detailsOpen = ref(false)
+const {
+  open: librariesOpen,
+  initialSection: libraryInitialSection,
+  updateCount: libraryUpdateCount,
+  openManager: openLibraries
+} = useLibraryEntry(editor, libraryService)
 const selectedAssetId = ref<string | null>(null)
 const previewBlob = shallowRef<Blob | null>(null)
-const previewUrl = useObjectUrl(previewBlob)
+const previewURL = useObjectUrl(previewBlob)
 const previewLoading = ref(false)
+const insertingAssetId = ref<string | null>(null)
 let previewRequestId = 0
-const insertButton = useButtonUI({ tone: 'ghost', size: 'iconSm' })
-const primaryButton = useButtonUI({ tone: 'accent', size: 'md' })
+const insertButton = {
+  color: 'neutral' as const,
+  variant: 'ghost' as const,
+  size: 'sm' as const,
+  shape: 'square' as const
+}
+const primaryButton = { color: 'primary' as const, variant: 'solid' as const, size: 'md' as const }
 const dialog = useDialogUI()
 const contextMenu = useMenuUI({ content: 'min-w-44' })
 const viewOptions = computed(() => [
@@ -99,7 +121,8 @@ const pageByNodeId = computed(() => {
 })
 
 const assets = computed<LocalAsset[]>(() => {
-  return assetNodes.value
+  const local = assetNodes.value
+    .filter((node) => !node.librarySource?.readOnly)
     .filter((node) => {
       if (node.type === 'COMPONENT_SET') return true
       const parent = node.parentId ? editor.graph.getNode(node.parentId) : null
@@ -122,12 +145,39 @@ const assets = computed<LocalAsset[]>(() => {
         hasConflicts: conflicts.length > 0,
         sourceLibraryKey: node.sourceLibraryKey,
         description: node.symbolDescription,
-        docsUrl: node.symbolLinks[0]?.uri ?? null,
+        docsURL: node.symbolLinks[0]?.uri ?? null,
+        libraryId: null,
+        revisionId: null,
+        assetKey: null,
+        libraryName: null,
         pageId: page?.id ?? editor.state.currentPageId,
         pageName: page?.name ?? panels.value.page
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
+  const remote = remoteAssets.value.map(({ libraryId, libraryName, revisionId, asset }) => ({
+    id: `${libraryId}:${asset.key}`,
+    name: asset.name,
+    node: createDefaultNode(() => asset.sourceNodeId, asset.type, {
+      name: asset.name,
+      symbolDescription: asset.description,
+      sourceLibraryKey: asset.key
+    }),
+    componentId: null,
+    variants: [],
+    variantCount: 0,
+    hasConflicts: false,
+    sourceLibraryKey: asset.key,
+    description: asset.description,
+    docsURL: null,
+    libraryId,
+    revisionId,
+    assetKey: asset.key,
+    libraryName,
+    pageId: `library:${libraryId}`,
+    pageName: libraryName
+  }))
+  return [...local, ...remote]
 })
 
 const filteredAssets = computed(() => {
@@ -154,6 +204,10 @@ const selectedAsset = computed(
   () => assets.value.find((asset) => asset.id === selectedAssetId.value) ?? null
 )
 const selectedPreviewNodeId = computed(() => selectedAsset.value?.componentId ?? null)
+
+onMounted(() => {
+  void libraryService.refresh(editor)
+})
 
 function clearPreview() {
   previewBlob.value = null
@@ -209,13 +263,31 @@ function insertionPoint(component: SceneNode, parentId: string) {
   }
 }
 
-function insertAsset(asset: LocalAsset) {
-  if (!asset.componentId) return
-  const component = editor.graph.getNode(asset.componentId)
+async function resolveAssetComponent(asset: LocalAsset): Promise<string | null> {
+  if (asset.componentId) return asset.componentId
+  if (!asset.libraryId || !asset.revisionId || !asset.assetKey) return null
+  insertingAssetId.value = asset.id
+  try {
+    const result = await libraryService.materialize(
+      editor,
+      asset.libraryId,
+      asset.revisionId,
+      asset.assetKey
+    )
+    return result.componentId
+  } finally {
+    insertingAssetId.value = null
+  }
+}
+
+async function insertAsset(asset: LocalAsset) {
+  const componentId = await resolveAssetComponent(asset)
+  if (!componentId) return
+  const component = editor.graph.getNode(componentId)
   if (!component) return
   const parentId = editor.state.enteredContainerId ?? editor.state.currentPageId
   const point = insertionPoint(component, parentId)
-  editor.createInstanceFromComponent(asset.componentId, point.x, point.y, parentId)
+  editor.createInstanceFromComponent(componentId, point.x, point.y, parentId)
   editor.requestRender()
 }
 
@@ -226,6 +298,7 @@ function onDragStart(event: DragEvent, asset: LocalAsset) {
 }
 
 function focusAsset(asset: LocalAsset) {
+  if (asset.libraryId) return
   void editor.focusComponent(asset.id)
 }
 
@@ -237,13 +310,13 @@ function onAssetKeydown(event: KeyboardEvent, asset: LocalAsset) {
   }
   if (event.code === 'Enter' || event.code === 'Space') {
     event.preventDefault()
-    insertAsset(asset)
+    void insertAsset(asset)
   }
 }
 
-function insertSelectedAsset() {
+async function insertSelectedAsset() {
   if (!selectedAsset.value) return
-  insertAsset(selectedAsset.value)
+  await insertAsset(selectedAsset.value)
   detailsOpen.value = false
 }
 </script>
@@ -259,6 +332,20 @@ function insertSelectedAsset() {
         class="min-w-0 flex-1"
         :placeholder="panels.searchLocalComponents"
       />
+      <AppButton
+        v-bind="insertButton"
+        class="relative"
+        :aria-label="libraryUpdateCount > 0 ? panels.reviewLibraryUpdates : panels.manageLibraries"
+        @click="openLibraries"
+      >
+        <icon-lucide-library class="size-3.5" />
+        <span
+          v-if="libraryUpdateCount > 0"
+          class="absolute top-0.5 right-0.5 min-w-2.5 rounded-full bg-accent px-0.5 text-center text-[8px] leading-2.5 text-white"
+        >
+          {{ libraryUpdateCount }}
+        </span>
+      </AppButton>
       <SegmentedControl
         v-model="assetView"
         data-test-id="assets-view-toggle"
@@ -287,6 +374,7 @@ function insertSelectedAsset() {
                 data-test-id="asset-item"
                 :data-asset-id="asset.id"
                 :draggable="!!asset.componentId"
+                :aria-busy="insertingAssetId === asset.id"
                 :class="[
                   'group/asset rounded text-left text-xs text-surface outline-none hover:bg-hover focus-visible:ring-1 focus-visible:ring-accent',
                   assetView === 'grid'
@@ -350,27 +438,26 @@ function insertSelectedAsset() {
                   </span>
                 </span>
                 <div v-if="assetView === 'list'" class="flex shrink-0 items-center">
-                  <Tip v-if="asset.docsUrl" :label="panels.openDocumentation">
-                    <button
-                      type="button"
-                      :class="insertButton.base"
+                  <Tip v-if="asset.docsURL" :label="panels.openDocumentation">
+                    <AppButton
+                      v-bind="insertButton"
                       data-test-id="asset-docs"
                       @pointerdown.stop
-                      @click.stop="asset.docsUrl ? openExternalLink(asset.docsUrl) : undefined"
+                      @click.stop="asset.docsURL ? openExternalLink(asset.docsURL) : undefined"
                     >
                       <icon-lucide-book-open class="size-3" />
-                    </button>
+                    </AppButton>
                   </Tip>
                   <Tip :label="commands.createInstance">
-                    <button
-                      type="button"
-                      :class="insertButton.base"
+                    <AppButton
+                      v-bind="insertButton"
                       data-test-id="asset-insert"
+                      :disabled="insertingAssetId === asset.id"
                       @pointerdown.stop
                       @click.stop="insertAsset(asset)"
                     >
                       <icon-lucide-plus class="size-3" />
-                    </button>
+                    </AppButton>
                   </Tip>
                 </div>
               </div>
@@ -378,6 +465,7 @@ function insertSelectedAsset() {
             <ContextMenuPortal>
               <ContextMenuContent :class="contextMenu.content">
                 <ContextMenuItem
+                  v-if="!asset.libraryId"
                   data-test-id="asset-context-go-to-main"
                   :class="contextMenu.item"
                   @select="focusAsset(asset)"
@@ -408,6 +496,8 @@ function insertSelectedAsset() {
         </template>
       </AppPlaceholder>
     </div>
+
+    <LibraryManagerDialog v-model="librariesOpen" :initial-section="libraryInitialSection" />
 
     <AppDialogRoot
       v-if="selectedAsset"
@@ -447,9 +537,9 @@ function insertSelectedAsset() {
             class="flex h-36 items-center justify-center overflow-hidden rounded-lg border border-border bg-canvas/60"
           >
             <img
-              v-if="previewUrl"
+              v-if="previewURL"
               data-test-id="asset-details-preview-image"
-              :src="previewUrl"
+              :src="previewURL"
               :alt="`${selectedAsset.name} preview`"
               class="max-h-[120px] max-w-[210px] object-contain"
             />
@@ -468,14 +558,14 @@ function insertSelectedAsset() {
               </p>
             </div>
           </div>
-          <button
+          <AppButton
+            v-bind="primaryButton"
             data-test-id="asset-details-insert"
-            :class="primaryButton.base"
             class="mt-3 w-full"
             @click="insertSelectedAsset"
           >
             {{ panels.insertInstance }}
-          </button>
+          </AppButton>
         </div>
 
         <div class="min-w-0 p-4">
@@ -497,18 +587,21 @@ function insertSelectedAsset() {
             </p>
           </section>
 
-          <section v-if="selectedAsset.docsUrl" class="mb-4">
+          <section v-if="selectedAsset.docsURL" class="mb-4">
             <h3 class="text-[11px] font-medium tracking-wider text-muted uppercase">
               {{ panels.documentation }}
             </h3>
-            <button
+            <AppButton
+              color="primary"
+              variant="link"
+              size="xs"
               data-test-id="asset-details-docs"
-              class="mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-component hover:bg-component/10"
-              @click="selectedAsset.docsUrl ? openExternalLink(selectedAsset.docsUrl) : undefined"
+              class="mt-1"
+              @click="selectedAsset.docsURL ? openExternalLink(selectedAsset.docsURL) : undefined"
             >
               <icon-lucide-book-open class="size-3" />
               {{ panels.openDocs }}
-            </button>
+            </AppButton>
           </section>
 
           <section v-if="selectedAsset.variants.length > 0">

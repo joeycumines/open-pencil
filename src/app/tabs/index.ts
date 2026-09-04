@@ -1,12 +1,17 @@
+import { promiseTimeout } from '@vueuse/core'
 import { shallowRef, computed, triggerRef } from 'vue'
 
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
-import { readFigFile } from '@open-pencil/core/io/formats/fig'
+import { findFigThumbnailPageId } from '@open-pencil/core/io/formats/fig'
+import { renderThumbnail } from '@open-pencil/core/io/formats/raster'
+import { populateLazyFigImportRoots } from '@open-pencil/core/kiwi'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { setOpenPencilStore } from '@/app/browser-bridge'
-import { yieldToUI } from '@/app/document/io/browser'
+import { readFigDocument } from '@/app/document/io/fig'
+import type { DocumentSourceIdentity } from '@/app/document/io/types'
+import { getRecoveryStore, type RecoverySnapshotMeta } from '@/app/document/recovery'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import { createEditorStore } from '@/app/editor/session'
 import type { EditorStore } from '@/app/editor/session'
@@ -15,81 +20,28 @@ import {
   createActiveStorageAdapter,
   type StorageDocument
 } from '@/app/integrations/storage'
+import {
+  cacheRecentFileThumbnail,
+  loadCachedRecentFileThumbnail,
+  rememberRecentStorageDocument
+} from '@/app/recent-files'
 import { getLocalCanvasStore } from '@/app/storage/local-store'
 import { seedStorageCanvasFromRemote } from '@/app/storage/sync/persist'
-import { createFileOpenLock, normalizeFilePath } from '@/app/tabs/identity'
+import { createFileOpenCoordinator } from '@/app/tabs/open/coordinator'
+import { findTabByFileIdentity } from '@/app/tabs/open/identity'
+
+export type TabKind = 'home' | 'document'
 
 export interface Tab {
   id: string
   store: EditorStore
+  kind: TabKind
 }
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
-
-const fileOpenLock = createFileOpenLock(() => tabsRef.value)
-type FileOpenOutcome = {
-  handle: FileSystemFileHandle | undefined
-  path: string | undefined
-  promise: Promise<void>
-}
-type FileOpenClaim = {
-  tab: Tab
-  entry: FileOpenOutcome
-}
-const fileOpenOutcomes = new WeakMap<EditorStore, FileOpenOutcome>()
-const fileOpenClaims = new Set<FileOpenClaim>()
-
-type OpenContext = {
-  tab: Tab
-  isUntouched: boolean
-  previousDocumentName: string | undefined
-}
-
-type OpenDecision = {
-  tab: Tab
-  existing: boolean
-  outcome?: Promise<void>
-}
-
-function hasSourceIdentity(store: EditorStore): boolean {
-  return !!(store.getSourcePath() || store.getSourceHandle() || store.getSourceFileName())
-}
-
-async function getMatchingFileOpenOutcome(
-  store: EditorStore,
-  handle: FileSystemFileHandle | undefined,
-  path: string | undefined
-): Promise<FileOpenOutcome | undefined> {
-  const entry = fileOpenOutcomes.get(store)
-  return entry && (await matchesFileOpenOutcome(entry, handle, path)) ? entry : undefined
-}
-
-async function matchesFileOpenOutcome(
-  entry: FileOpenOutcome,
-  handle: FileSystemFileHandle | undefined,
-  path: string | undefined
-): Promise<boolean> {
-  if (path && entry.path && normalizeFilePath(path) === normalizeFilePath(entry.path)) {
-    return true
-  }
-  if (!handle || !entry.handle) return false
-
-  try {
-    return await handle.isSameEntry(entry.handle)
-  } catch {
-    return false
-  }
-}
-
-async function findClaimedFileOpenOutcome(
-  handle: FileSystemFileHandle | undefined,
-  path: string | undefined
-): Promise<{ tab: Tab; entry: FileOpenOutcome } | undefined> {
-  for (const claim of fileOpenClaims) {
-    if (await matchesFileOpenOutcome(claim.entry, handle, path)) return claim
-  }
-  return undefined
-}
+const fileOpenCoordinator = createFileOpenCoordinator()
+const RECENT_FILE_THUMBNAIL_SIZE = 512
+const coverThumbnailListeners = new WeakMap<EditorStore, () => void>()
 
 let nextTabId = 1
 
@@ -106,6 +58,7 @@ export const allTabs = computed(() =>
   tabsRef.value.map((t) => ({
     id: t.id,
     name: t.store.state.documentName,
+    isHome: t.kind === 'home',
     isActive: t.id === activeTabId.value
   }))
 )
@@ -134,13 +87,48 @@ export function getTabsSnapshot(): Tab[] {
 
 export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
   const s = store ?? createEditorStore(initialGraph)
-  const tab: Tab = { id: generateTabId(), store: s }
+  const tab: Tab = { id: generateTabId(), store: s, kind: 'document' }
   tabsRef.value = [...tabsRef.value, tab]
   activateTab(tab)
   return tab
 }
 
+export function createHomeTab(): Tab {
+  const tab: Tab = { id: generateTabId(), store: createEditorStore(), kind: 'home' }
+  tabsRef.value = [...tabsRef.value, tab]
+  activateTab(tab)
+  return tab
+}
+
+export function leaveHome(tabId: string): void {
+  const tabIndex = tabsRef.value.findIndex((candidate) => candidate.id === tabId)
+  if (tabIndex === -1) return
+  const tab = tabsRef.value[tabIndex]
+  if (tab.kind !== 'home') return
+  tabsRef.value = tabsRef.value.with(tabIndex, { ...tab, kind: 'document' })
+}
+
+export function createDocumentInCurrentTab(): Tab {
+  const current = activeTab.value
+  if (current?.kind !== 'home') return createTab()
+  leaveHome(current.id)
+  return getTabById(current.id) ?? current
+}
+
+export function showNewTab(): void {
+  const homeTab = tabsRef.value.find((tab) => tab.kind === 'home')
+  if (homeTab) {
+    switchTab(homeTab.id)
+    return
+  }
+  createHomeTab()
+}
+
 function activateTab(tab: Tab) {
+  const previous = tabsRef.value.find((candidate) => candidate.id === activeTabId.value)
+  previous?.store.setSnapGuides([])
+  previous?.store.setLayoutInsertIndicator(null)
+  previous?.store.setDropTarget(null)
   activeTabId.value = tab.id
   setActiveEditorStore(tab.store)
   triggerRef(tabsRef)
@@ -153,17 +141,21 @@ export function switchTab(tabId: string) {
   activateTab(tab)
 }
 
-export function closeTab(tabId: string) {
+export async function closeTab(tabId: string): Promise<void> {
   const idx = tabsRef.value.findIndex((t) => t.id === tabId)
   if (idx === -1) return
 
   const closingTab = tabsRef.value[idx]
+  if (closingTab.kind === 'home' && tabsRef.value.length === 1) return
   const wasActive = activeTabId.value === tabId
+  coverThumbnailListeners.get(closingTab.store)?.()
+  coverThumbnailListeners.delete(closingTab.store)
+  await closingTab.store.persistRecoveryNow()
+  closingTab.store.dispose()
   tabsRef.value = tabsRef.value.filter((t) => t.id !== tabId)
 
   if (tabsRef.value.length === 0) {
-    createTab()
-    closingTab.store.dispose()
+    createHomeTab()
     return
   }
 
@@ -171,171 +163,99 @@ export function closeTab(tabId: string) {
     const newIdx = Math.min(idx, tabsRef.value.length - 1)
     activateTab(tabsRef.value[newIdx])
   }
+}
 
-  closingTab.store.dispose()
+function yieldToUI(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
 }
 
 function isDOMImportFile(file: File): boolean {
   return /\.(html?|xhtml)$/i.test(file.name)
 }
 
-async function loadClaimedFile(
-  file: File,
-  handle: FileSystemFileHandle | undefined,
-  path: string | undefined,
-  context: OpenContext
-): Promise<void> {
-  const { tab, isUntouched, previousDocumentName } = context
-  const store = tab.store
-  if (isDOMImportFile(file)) {
-    try {
-      await store.openDOMFile(file, { handle, path })
-    } catch (error) {
-      store.clearSourceIdentity()
-      if (isUntouched && previousDocumentName !== undefined) {
-        store.state.documentName = previousDocumentName
-      }
-      if (!isUntouched) {
-        closeTab(tab.id)
-      }
-      throw error
-    }
-    if (isUntouched) {
-      activateTab(tab)
-    }
-    return
-  }
-  const documentName = file.name.replace(/\.[^.]+$/i, '')
-
-  store.state.documentName = documentName
-  store.state.loading = true
-  await yieldToUI()
-
-  try {
-    const isFig = file.name.toLowerCase().endsWith('.fig')
-    const { graph: imported, sourceFormat } = isFig
-      ? { graph: await readFigFile(file, { populate: 'first-page' }), sourceFormat: 'fig' }
-      : await io.readDocument({
-          name: file.name,
-          mimeType: file.type || undefined,
-          data: new Uint8Array(await file.arrayBuffer())
-        })
-
-    const firstPageId = imported.getPages()[0]?.id
-    if (firstPageId) computeAllLayouts(imported, firstPageId)
-    store.replaceGraph(imported)
-    store.undo.clear()
-    store.setDocumentSource(file.name, sourceFormat, handle, path)
-    store.clearSelection()
-    const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
-    await store.switchPage(pageId)
-    await store.fitCurrentPageToViewport()
-  } catch (error) {
-    // A failed read must not permanently taint the tab with a source identity
-    // that would block future attempts to open the same file.
-    store.clearSourceIdentity()
-    if (isUntouched && previousDocumentName !== undefined) {
-      store.state.documentName = previousDocumentName
-    }
-    store.state.loading = false
-    if (!isUntouched) {
-      closeTab(tab.id)
-    }
-    throw error
-  }
-
-  store.state.loading = false
-
-  // When reusing an untouched existing tab we must explicitly activate it,
-  // because the active tab may have changed while we were loading.
-  if (isUntouched) {
-    activateTab(tab)
-  }
-}
-
-export async function openFileInNewTab(
-  file: File,
-  handle?: FileSystemFileHandle,
-  path?: string
-): Promise<void> {
-  // The global lock protects only identity/tab-reuse decisions. A new load is
-  // started and published while holding the lock, but its promise is carried
-  // out without being awaited so different files can still load concurrently.
-  const decision = await fileOpenLock.run<OpenDecision>(handle, path, async (existingTab) => {
-    if (existingTab) {
-      return {
-        tab: existingTab,
-        existing: true,
-        outcome: (await getMatchingFileOpenOutcome(existingTab.store, handle, path))?.promise
-      }
-    }
-
-    // A failed owner clears its store identity before rejecting. Requests
-    // already queued behind a slower identity comparison must still find the
-    // retained, identity-tagged outcome instead of starting a second load.
-    const claimed = await findClaimedFileOpenOutcome(handle, path)
-    if (claimed) {
-      return {
-        tab: claimed.tab,
-        existing: true,
-        outcome: claimed.entry.promise
-      }
-    }
-
-    // Capture the current tab only after acquiring the global open lock so
-    // that the file loads into the tab the user is currently looking at.
-    const current = activeTab.value
-    const previousDocumentName = current?.store.state.documentName
-    const isUntouched =
-      current?.store.state.documentName === 'Untitled' &&
-      !current.store.undo.canUndo &&
-      // A tab with a redo stack is not "untouched" — overwriting it would
-      // destroy recoverable user work.
-      !current.store.undo.canRedo &&
-      !hasSourceIdentity(current.store)
-
-    const tab = isUntouched ? current : createTab()
-
-    // Claim the source identity and publish the owning load promise before
-    // releasing the decision lock, so duplicates share its exact outcome.
-    tab.store.updateSourceIdentity(file.name, handle, path)
-    const outcome = loadClaimedFile(file, handle, path, {
-      tab,
-      isUntouched,
-      previousDocumentName
-    })
-    void outcome.catch(() => undefined)
-    const entry: FileOpenOutcome = { handle, path, promise: outcome }
-    fileOpenOutcomes.set(tab.store, entry)
-    const claim: FileOpenClaim = { tab, entry }
-    fileOpenClaims.add(claim)
-    const clearOutcome = () => {
-      // Queue cleanup behind identity decisions that were already registered
-      // when the load settled, so those callers still observe its outcome.
-      void fileOpenLock.run(undefined, undefined, async () => {
-        fileOpenClaims.delete(claim)
-        if (fileOpenOutcomes.get(tab.store) === entry) {
-          fileOpenOutcomes.delete(tab.store)
-        }
-      })
-    }
-    void outcome.then(clearOutcome, clearOutcome)
-    return { tab, existing: false, outcome }
-  })
-
-  if (decision.outcome) await decision.outcome
-  if (decision.existing) switchTab(decision.tab.id)
-}
-
-export function tabCount(): number {
-  return tabsRef.value.length
-}
-
-function reusableTabStore(): EditorStore {
+function reusableTabStore(): { store: EditorStore; created: boolean } {
   const current = activeTab.value
+  if (current?.kind === 'home') {
+    leaveHome(current.id)
+    return { store: current.store, created: false }
+  }
   const isUntouched =
     current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
-  return isUntouched ? current.store : createTab().store
+  if (isUntouched) {
+    leaveHome(current.id)
+    return { store: current.store, created: false }
+  }
+  return { store: createTab().store, created: true }
+}
+
+async function readFigForTab(file: File, store: EditorStore): Promise<SceneGraph> {
+  const imported = await readFigDocument(file, store)
+  const firstPageId = imported.getPages()[0]?.id
+  if (firstPageId) computeAllLayouts(imported, firstPageId)
+  const coverPageId = findFigThumbnailPageId(imported.getPages())
+  if (coverPageId && coverPageId !== firstPageId) {
+    populateLazyFigImportRoots(imported, [coverPageId])
+    computeAllLayouts(imported, coverPageId)
+  }
+  return imported
+}
+
+async function showImportedGraph(
+  store: EditorStore,
+  graph: SceneGraph,
+  prepare?: () => void | Promise<void>
+): Promise<void> {
+  store.replaceGraph(graph)
+  store.undo.clear()
+  await prepare?.()
+  store.clearSelection()
+  const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
+  await store.switchPage(pageId)
+  await store.fitCurrentPageToViewport()
+}
+
+async function cacheOpenedFigCover(path: string, store: EditorStore): Promise<void> {
+  if (await loadCachedRecentFileThumbnail(path)) return
+  const coverPageId = findFigThumbnailPageId(store.graph.getPages())
+  if (!coverPageId) return
+  for (let attempt = 0; attempt < 240 && !store.renderer; attempt++) {
+    await promiseTimeout(250)
+  }
+  const renderer = store.renderer
+  if (!renderer) {
+    console.warn('[Recent files] Cover thumbnail skipped because the renderer was unavailable')
+    return
+  }
+  const bytes = renderThumbnail(
+    renderer.ck,
+    renderer,
+    store.graph,
+    coverPageId,
+    RECENT_FILE_THUMBNAIL_SIZE,
+    RECENT_FILE_THUMBNAIL_SIZE
+  )
+  if (!bytes) {
+    console.warn('[Recent files] Cover thumbnail skipped because the Cover page was empty')
+    return
+  }
+  await cacheRecentFileThumbnail(path, bytes)
+}
+
+function watchOpenedFigCover(path: string, store: EditorStore): void {
+  coverThumbnailListeners.get(store)?.()
+  const coverPageId = findFigThumbnailPageId(store.graph.getPages())
+  if (!coverPageId) return
+  coverThumbnailListeners.set(
+    store,
+    store.onEditorEvent('page:changed', (pageId) => {
+      if (pageId !== coverPageId) return
+      void cacheOpenedFigCover(path, store).catch((error) => {
+        console.warn('[Recent files] Failed to cache the Cover thumbnail', error)
+      })
+    })
+  )
 }
 
 function findStorageTab(providerId: string, documentId: string): Tab | undefined {
@@ -350,10 +270,11 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
   const existing = findStorageTab(providerId, document.id)
   if (existing) {
     switchTab(existing.id)
+    rememberRecentStorageDocument(providerId, document.id, document.name)
     return
   }
 
-  const store = reusableTabStore()
+  const { store, created } = reusableTabStore()
   store.state.documentName = document.name
   store.state.loading = true
   try {
@@ -382,26 +303,160 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
     const file = new File([fileBytes.buffer], `${document.name}.fig`, {
       type: 'application/octet-stream'
     })
-    const imported = await readFigFile(file, { populate: 'first-page' })
-    const firstPageId = imported.getPages()[0]?.id
-    if (firstPageId) computeAllLayouts(imported, firstPageId)
-    store.replaceGraph(imported)
-    store.undo.clear()
-    store.setStorageDocumentSource({ providerId, documentId: document.id }, document.name)
-    store.clearSelection()
-    const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
-    await store.switchPage(pageId)
-    await store.fitCurrentPageToViewport()
+    const imported = await readFigForTab(file, store)
+    await showImportedGraph(store, imported, () =>
+      store.setStorageDocumentSource({ providerId, documentId: document.id }, document.name)
+    )
+    rememberRecentStorageDocument(providerId, document.id, document.name)
+  } catch (error) {
+    if (created) {
+      const tab = getTabForStore(store)
+      if (tab) await closeTab(tab.id)
+    }
+    throw error
   } finally {
     store.state.loading = false
   }
+}
+
+export async function openFileInNewTab(
+  file: File,
+  handle?: FileSystemFileHandle,
+  path?: string
+): Promise<void> {
+  const identity: DocumentSourceIdentity = {
+    handle: handle ?? null,
+    path: path ?? null
+  }
+  const decision = await fileOpenCoordinator.decide(async () => {
+    const pending = await fileOpenCoordinator.findPending(identity)
+    if (pending) {
+      const tab = getTabForStore(pending.store)
+      if (tab) switchTab(tab.id)
+      return { kind: 'pending' as const, completion: pending.completion }
+    }
+
+    const existing = await findTabByFileIdentity(tabsRef.value, identity)
+    if (existing) {
+      switchTab(existing.id)
+      if (path?.toLowerCase().endsWith('.fig')) {
+        watchOpenedFigCover(path, existing.store)
+        void cacheOpenedFigCover(path, existing.store).catch((error) => {
+          console.warn('[Recent files] Failed to cache the Cover thumbnail', error)
+        })
+      }
+      return { kind: 'existing' as const }
+    }
+
+    const { store, created } = reusableTabStore()
+    store.state.documentName = file.name.replace(/\.[^.]+$/i, '')
+    store.state.loading = true
+
+    const completion = Promise.withResolvers<undefined>()
+    void completion.promise.catch(() => undefined)
+    const pendingOpen = { completion: completion.promise, identity, store }
+    fileOpenCoordinator.add(pendingOpen)
+    return { kind: 'owner' as const, completion, pendingOpen, store, created }
+  })
+
+  if (decision.kind === 'existing') return
+  if (decision.kind === 'pending') {
+    await decision.completion
+    return
+  }
+
+  const { completion, pendingOpen, store, created } = decision
+  try {
+    if (isDOMImportFile(file)) {
+      await store.openDOMFile(file, { handle, path })
+      completion.resolve(undefined)
+      return
+    }
+
+    await yieldToUI()
+    const isFig = file.name.toLowerCase().endsWith('.fig')
+    const { graph: imported, sourceFormat } = isFig
+      ? {
+          graph: await readFigForTab(file, store),
+          sourceFormat: 'fig'
+        }
+      : await io.readDocument({
+          name: file.name,
+          mimeType: file.type || undefined,
+          data: new Uint8Array(await file.arrayBuffer())
+        })
+
+    const firstPageId = imported.getPages()[0]?.id
+    if (!isFig && firstPageId) computeAllLayouts(imported, firstPageId)
+    await showImportedGraph(store, imported, () => {
+      store.setDocumentSource(file.name, sourceFormat, handle, path)
+      if (isFig && path) watchOpenedFigCover(path, store)
+    })
+    if (isFig && path) {
+      void cacheOpenedFigCover(path, store).catch((error) => {
+        console.warn('[Recent files] Failed to cache the Cover thumbnail', error)
+      })
+    }
+    completion.resolve(undefined)
+  } catch (error) {
+    completion.reject(error)
+    if (created) {
+      const tab = getTabForStore(store)
+      if (tab) await closeTab(tab.id)
+    }
+    throw error
+  } finally {
+    store.state.loading = false
+    fileOpenCoordinator.remove(pendingOpen)
+  }
+}
+
+export async function listRecoverySnapshots(): Promise<RecoverySnapshotMeta[]> {
+  return getRecoveryStore().list()
+}
+
+export async function discardRecoverySnapshot(id: string): Promise<void> {
+  await getRecoveryStore().remove(id)
+}
+
+export async function restoreRecoverySnapshot(id: string): Promise<void> {
+  const snapshot = await getRecoveryStore().read(id)
+  if (!snapshot) throw new Error('Recovery snapshot is no longer available')
+
+  const { store } = reusableTabStore()
+  store.state.loading = true
+  try {
+    const fileBytes = new Uint8Array(snapshot.figBytes)
+    const file = new File([fileBytes.buffer], `${snapshot.documentName}.fig`, {
+      type: 'application/octet-stream'
+    })
+    const imported = await readFigForTab(file, store)
+
+    await showImportedGraph(store, imported, async () => {
+      store.state.documentName = snapshot.documentName
+      await store.adoptRecoverySnapshot(id, snapshot.sceneVersion)
+    })
+  } finally {
+    store.state.loading = false
+  }
+}
+
+export async function prepareForReload(): Promise<void> {
+  await Promise.all(tabsRef.value.map((tab) => tab.store.persistRecoveryNow()))
+}
+
+export function tabCount(): number {
+  return tabsRef.value.length
 }
 
 export function useTabsStore() {
   return {
     tabs: allTabs,
     activeTabId,
+    createHomeTab,
+    createDocumentInCurrentTab,
     createTab,
+    leaveHome,
     switchTab,
     closeTab,
     getActiveTabId,
@@ -410,6 +465,10 @@ export function useTabsStore() {
     getTabsSnapshot,
     openFileInNewTab,
     openStorageDocumentInNewTab,
+    listRecoverySnapshots,
+    restoreRecoverySnapshot,
+    discardRecoverySnapshot,
+    prepareForReload,
     getActiveStore,
     tabCount
   }

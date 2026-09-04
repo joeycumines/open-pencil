@@ -2,6 +2,7 @@ import type { LanguageModel } from 'ai'
 
 import { modelProviderAdapter } from '@/app/ai/providers/registry'
 import type { ModelConfig } from '@/app/ai/providers/types'
+import type { FetchFunction } from '@/app/http/types'
 import { isTauri } from '@/app/tauri/env'
 import { createTauriFetch, tauriFetch } from '@/app/tauri/http'
 
@@ -24,7 +25,7 @@ interface CreateLanguageModelOptions {
   requestTimeoutMs?: number
 }
 
-function desktopFetch(timeoutMs?: number): typeof fetch | undefined {
+function desktopFetch(timeoutMs?: number): FetchFunction | undefined {
   if (!isTauri()) return undefined
   if (timeoutMs !== undefined) return createTauriFetch({ timeoutMs })
   return tauriFetch

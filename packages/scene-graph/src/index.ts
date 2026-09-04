@@ -7,6 +7,8 @@ export * from './export-scale'
 export * from './coordinate'
 export * from './constants'
 export * from './geometry'
+export * from './guides'
+export * from './layout-guides'
 export * from './font-style'
 export * from './shared-styles'
 export { default as TransformMatrix } from './matrix'
@@ -24,15 +26,11 @@ import { CONTAINER_TYPES, createDefaultNode } from './node-defaults'
 import { updateNodePreview } from './preview'
 import { styleDetachmentChanges } from './shared-styles'
 import { markSourceFieldsEdited } from './source-metadata'
-import {
-  FIGMA_DERIVED_TEXT_GLYPH_KEYS,
-  TEXT_PICTURE_KEYS,
-  clearInvalidatedTextRenderingData
-} from './text-picture'
+import { GLYPH_AFFECTING_KEYS, invalidateTextCaches, TEXT_PICTURE_KEYS } from './text-picture'
 import * as Variables from './variables'
 import { normalizeVectorNetwork } from './vector-network'
 
-export type { GUID, Color, Rect, Vector, Size } from './primitives'
+export type { GUID, Color, Size, Vector } from './primitives'
 export * from './types'
 
 import type { Emitter } from 'nanoevents'
@@ -41,6 +39,7 @@ import { getAbsolutePosition } from './coordinate'
 import type { Color, Rect, Vector } from './primitives'
 import type {
   DocumentColorSpace,
+  EnabledLibraryBinding,
   NodeType,
   SceneGraphEventHandlers,
   SceneGraphEvents,
@@ -78,6 +77,7 @@ export class SceneGraph {
   /** Deflated kiwi schema bytes from the original .fig file, preserved for roundtrip fidelity. */
   figSchemaDeflated: Uint8Array | null = null
   documentColorSpace: DocumentColorSpace = 'display-p3'
+  enabledLibraries = new Map<string, EnabledLibraryBinding>()
   readonly emitter: Emitter<SceneGraphEvents> = createNanoEvents()
   private absPosCache = new Map<string, Vector>()
   private previewMutationDepth = 0
@@ -312,9 +312,9 @@ export class SceneGraph {
     if (parent && !parent.childIds.includes(id)) parent.childIds.push(id)
     return this.registerNode(node, parentId)
   }
-  static TEXT_PICTURE_KEYS: ReadonlySet<string> = TEXT_PICTURE_KEYS
 
-  static FIGMA_DERIVED_TEXT_GLYPH_KEYS: ReadonlySet<string> = FIGMA_DERIVED_TEXT_GLYPH_KEYS
+  static TEXT_PICTURE_KEYS: ReadonlySet<string> = TEXT_PICTURE_KEYS
+  static GLYPH_AFFECTING_KEYS: ReadonlySet<string> = GLYPH_AFFECTING_KEYS
 
   static LAYOUT_AFFECTING_KEYS: ReadonlySet<string> = new Set([
     'x',
@@ -426,9 +426,7 @@ export class SceneGraph {
         set.add(id)
       }
     }
-    if (node.type === 'TEXT') {
-      clearInvalidatedTextRenderingData(node, changes)
-    }
+    if (node.type === 'TEXT') invalidateTextCaches(node, changes)
     if (this.sourceMetadataPreservationDepth === 0) {
       markSourceFieldsEdited(node, Object.keys(changes))
     }
@@ -480,7 +478,7 @@ export class SceneGraph {
 
     const oldParent = node.parentId ? this.nodes.get(node.parentId) : undefined
     const newParent = this.nodes.get(parentId)
-    if (!newParent) return
+    if (!newParent || this.isDescendant(parentId, nodeId)) return
 
     // Remove from old parent
     if (oldParent) {
@@ -497,6 +495,7 @@ export class SceneGraph {
     }
 
     node.parentId = parentId
+    this.absPosCache.clear()
     idx = Math.min(idx, newParent.childIds.length)
     newParent.childIds.splice(idx, 0, nodeId)
 

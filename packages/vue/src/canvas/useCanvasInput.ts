@@ -1,29 +1,30 @@
 import { useEventListener } from '@vueuse/core'
-import { ref, type Ref } from 'vue'
+import { onScopeDispose, ref, type Ref } from 'vue'
 
 import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import {
-  handleBendHandleMove,
-  handleNodeEditMouseUp,
-  updateNodeEditHover
-} from '#vue/canvas/node-edit-input/use'
-import { handlePenDragMove, updatePenHover } from '#vue/canvas/pen-input/use'
+import { createGuideInput, selectedTopLevelGuideFrameId } from '#vue/canvas/guides/input'
+import { handlePenDragMove, updatePenHover } from '#vue/canvas/pen/input'
 import { createCanvasPointer } from '#vue/canvas/pointer/use'
 import { createTextEditInput } from '#vue/canvas/text-edit/input'
-import { handleToolMouseDown } from '#vue/canvas/tool-input/use'
-import { createCanvasTransformInput } from '#vue/canvas/transform-input/use'
+import { handleToolMouseDown } from '#vue/canvas/tools/input'
+import { createCanvasTransformInput } from '#vue/canvas/transform/input'
+import {
+  handleBendHandleMove,
+  handleNodeEditPointerUp,
+  updateNodeEditHover
+} from '#vue/canvas/vector-input/input'
 import { resolveAutoLayoutHover } from '#vue/shared/input/auto-layout-hover'
 import { createClickCounter } from '#vue/shared/input/click-count'
 import { handleDrawMove, handleDrawUp } from '#vue/shared/input/draw'
 import { handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
-import { handleNodeEditMove } from '#vue/shared/input/node-edit'
 import { setupPanZoom } from '#vue/shared/input/pan-zoom'
 import { applyResize, commitResizePreview } from '#vue/shared/input/resize'
 import { updateHoverCursor } from '#vue/shared/input/select'
 import { useSpaceHeld } from '#vue/shared/input/space-key'
 import type { DragState } from '#vue/shared/input/types'
+import { handleNodeEditMove } from '#vue/shared/input/vector'
 
 /**
  * Wires pointer and mouse interaction to an OpenPencil canvas.
@@ -38,7 +39,9 @@ export function useCanvasInput(
   hitTestSectionTitle: (cx: number, cy: number) => SceneNode | null,
   hitTestComponentLabel: (cx: number, cy: number) => SceneNode | null,
   hitTestFrameTitle: (cx: number, cy: number) => SceneNode | null,
-  onCursorMove?: (cx: number, cy: number) => void
+  onCursorMove?: (cx: number, cy: number) => void,
+  onActivate?: () => void,
+  isEnabled: () => boolean = () => true
 ) {
   const drag = ref<DragState | null>(null)
   const cursorOverride = ref<string | null>(null)
@@ -49,6 +52,11 @@ export function useCanvasInput(
     previous: number
   } | null>(null)
   const selectedIdsBeforeClickSequence = ref<ReadonlySet<string>>(new Set())
+  const lastPointer = ref<{ cx: number; cy: number } | null>(null)
+  const pointerInside = ref(false)
+  let altHeld = false
+  let metaHeld = false
+  let controlHeld = false
   const spaceHeld = useSpaceHeld()
   const { recordClick, getClickCount } = createClickCounter()
 
@@ -60,9 +68,67 @@ export function useCanvasInput(
     hitTestFrameTitle
   )
 
+  function canMeasure() {
+    return (
+      pointerInside.value &&
+      !drag.value &&
+      editor.state.activeTool === 'SELECT' &&
+      editor.state.selectedIds.size > 0 &&
+      !editor.state.editingTextId &&
+      !editor.state.nodeEditState &&
+      !editor.state.penState
+    )
+  }
+
+  function refreshMeasurement() {
+    const mode = altHeld && canMeasure() ? (metaHeld || controlHeld ? 'deep' : 'shallow') : 'off'
+    editor.setMeasurementMode(mode)
+    const pointer = lastPointer.value
+    if (!pointer || drag.value || editor.state.activeTool !== 'SELECT' || !pointerInside.value)
+      return
+    cursorOverride.value = updateHoverCursor(
+      pointer.cx,
+      pointer.cy,
+      editor,
+      hitFns,
+      mode === 'deep'
+    )
+    editor.setAutoLayoutHover(
+      mode === 'off' ? resolveAutoLayoutHover(pointer.cx, pointer.cy, editor) : null
+    )
+  }
+
+  function updateModifier(code: string, held: boolean) {
+    if (!isEnabled()) return
+    if (code === 'AltLeft' || code === 'AltRight') altHeld = held
+    if (code === 'MetaLeft' || code === 'MetaRight') metaHeld = held
+    if (code === 'ControlLeft' || code === 'ControlRight') controlHeld = held
+    if (code.startsWith('Alt') || code.startsWith('Meta') || code.startsWith('Control')) {
+      refreshMeasurement()
+    }
+  }
+
+  function resetMeasurementModifiers() {
+    altHeld = false
+    metaHeld = false
+    controlHeld = false
+    editor.setMeasurementMode('off')
+  }
+
   function setDrag(d: DragState) {
+    editor.setMeasurementMode('off')
     drag.value = d
   }
+
+  const guideInput = createGuideInput({
+    canvasRef,
+    editor,
+    canvasToLocal,
+    setDrag,
+    setCursor: (cursor) => {
+      cursorOverride.value = cursor
+    }
+  })
 
   const { handleTextEditClick, onDblClick: onTextDblClick } = createTextEditInput({
     editor,
@@ -148,6 +214,9 @@ export function useCanvasInput(
   }
 
   function onMouseDown(e: MouseEvent) {
+    onActivate?.()
+    if (!isEnabled()) return
+    editor.setMeasurementMode('off')
     const paddingEdit = autoLayoutPaddingEdit.value
     if (paddingEdit) {
       commitAutoLayoutPaddingEdit(paddingEdit.value)
@@ -155,6 +224,15 @@ export function useCanvasInput(
     if (!editor.state.editingTextId) canvasRef.value?.focus()
     editor.setHoveredNode(null)
     const { sx, sy, cx, cy } = getCoords(e)
+    if (e.button === 0 && guideInput.tryStartExisting(sx, sy, e.altKey)) {
+      e.preventDefault()
+      return
+    }
+    if (e.button === 0 && guideInput.tryStartFromRuler(sx, sy, cx, cy)) {
+      e.preventDefault()
+      return
+    }
+    editor.setSelectedGuide(null)
 
     const selectedIdsBeforeMouseDown = new Set(editor.state.selectedIds)
     const clickCount = recordClick(sx, sy)
@@ -174,26 +252,36 @@ export function useCanvasInput(
     })
   }
 
+  // Dispatching the full drag union is intentionally centralized here.
+  // eslint-disable-next-line complexity
   function onMouseMove(e: MouseEvent) {
+    if (!isEnabled()) return
+    pointerInside.value = true
+    const coords = getCoords(e)
+    lastPointer.value = { cx: coords.cx, cy: coords.cy }
     if (onCursorMove) {
-      const { cx, cy } = getCoords(e)
-      onCursorMove(cx, cy)
+      onCursorMove(coords.cx, coords.cy)
     }
 
     if (!drag.value) {
-      const { cx, cy } = getCoords(e)
+      const { cx, cy } = coords
       updatePenHover(cx, cy, editor)
     }
 
     if (!drag.value) {
-      const { cx, cy } = getCoords(e)
+      const { cx, cy } = coords
       updateNodeEditHover(editor, cx, cy)
     }
 
     if (!drag.value && editor.state.activeTool === 'SELECT') {
-      const { cx, cy } = getCoords(e)
-      cursorOverride.value = updateHoverCursor(cx, cy, editor, hitFns)
-      editor.setAutoLayoutHover(resolveAutoLayoutHover(cx, cy, editor))
+      const { sx, sy, cx, cy } = coords
+      const guideCursor = guideInput.updateHover(sx, sy)
+      cursorOverride.value =
+        guideCursor ??
+        updateHoverCursor(cx, cy, editor, hitFns, editor.state.measurementMode === 'deep')
+      editor.setAutoLayoutHover(
+        editor.state.measurementMode === 'off' ? resolveAutoLayoutHover(cx, cy, editor) : null
+      )
     }
 
     if (!drag.value) return
@@ -206,12 +294,25 @@ export function useCanvasInput(
 
     const { sx, sy, cx, cy } = getCoords(e)
 
+    if (d.type === 'guide') {
+      const frameId = e.altKey && !d.guideId ? selectedTopLevelGuideFrameId(editor) : null
+      guideInput.handleMove(
+        d,
+        sx,
+        sy,
+        cx,
+        cy,
+        frameId ? { frameId, deep: e.metaKey || e.ctrlKey } : undefined
+      )
+      return
+    }
+
     if (d.type === 'rotate') {
       handleRotateMove(d, cx, cy, e.shiftKey)
       return
     }
     if (d.type === 'move') {
-      handleMoveMove(d, cx, cy, sx, sy, editor)
+      handleMoveMove(d, cx, cy, sx, sy, editor, e.ctrlKey)
       return
     }
     if (d.type === 'text-select') {
@@ -219,7 +320,7 @@ export function useCanvasInput(
       return
     }
     if (d.type === 'resize') {
-      applyResize(d, cx, cy, e.shiftKey, editor)
+      applyResize(d, cx, cy, e.shiftKey, editor, e.ctrlKey)
       return
     }
 
@@ -229,7 +330,7 @@ export function useCanvasInput(
     }
 
     if (d.type === 'edit-node' || d.type === 'edit-handle') {
-      handleNodeEditMove(d, cx, cy, editor, e.altKey, e.metaKey || e.ctrlKey, e.shiftKey)
+      handleNodeEditMove(d, cx, cy, editor, e.altKey, e.metaKey || e.ctrlKey, e.shiftKey, e.ctrlKey)
       return
     }
 
@@ -250,9 +351,11 @@ export function useCanvasInput(
     if (!drag.value) return
     const d = drag.value
 
-    if (handleNodeEditMouseUp(drag, editor)) return
+    if (handleNodeEditPointerUp(drag, editor)) return
 
-    if (d.type === 'move') handleMoveUp(d, editor)
+    if (d.type === 'guide') {
+      guideInput.finish(d)
+    } else if (d.type === 'move') handleMoveUp(d, editor)
     else if (d.type === 'text-select') {
       drag.value = null
       return
@@ -280,20 +383,92 @@ export function useCanvasInput(
 
     drag.value = null
     cursorOverride.value = null
+    refreshMeasurement()
   }
 
+  function clearTransientInteractionFeedback() {
+    editor.setSnapGuides([])
+    editor.setLayoutInsertIndicator(null)
+    editor.setDropTarget(null)
+    guideInput.clearHoverAndPreview()
+  }
+
+  function cancelPointerInteraction() {
+    if (
+      drag.value?.type === 'edit-node' ||
+      drag.value?.type === 'edit-handle' ||
+      drag.value?.type === 'bend-handle'
+    ) {
+      const methods = editor as Editor & {
+        nodeEditCancelDrag?: () => void
+      }
+      methods.nodeEditCancelDrag?.()
+    }
+    drag.value = null
+    cursorOverride.value = null
+    clearTransientInteractionFeedback()
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return
+    canvasRef.value?.setPointerCapture(e.pointerId)
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (e.pointerType !== 'mouse') return
+    onMouseUp()
+    if (canvasRef.value?.hasPointerCapture(e.pointerId)) {
+      canvasRef.value.releasePointerCapture(e.pointerId)
+    }
+  }
+
+  function onPointerCancel(e: PointerEvent) {
+    if (e.pointerType !== 'mouse') return
+    cancelPointerInteraction()
+    if (canvasRef.value?.hasPointerCapture(e.pointerId)) {
+      canvasRef.value.releasePointerCapture(e.pointerId)
+    }
+  }
+
+  useEventListener(canvasRef, 'pointerdown', onPointerDown)
+  useEventListener(canvasRef, 'pointerup', onPointerUp)
+  useEventListener(canvasRef, 'pointercancel', onPointerCancel)
   useEventListener(canvasRef, 'dblclick', onDblClick)
   useEventListener(canvasRef, 'mousedown', onMouseDown)
   useEventListener(canvasRef, 'mousemove', onMouseMove)
   useEventListener(canvasRef, 'mouseup', onMouseUp)
+  useEventListener(window, 'keydown', (event) => {
+    if (!guideInput.deleteSelected(event)) updateModifier(event.code, true)
+  })
+  useEventListener(window, 'keyup', (event) => updateModifier(event.code, false))
+  useEventListener(window, 'blur', () => {
+    resetMeasurementModifiers()
+    cancelPointerInteraction()
+  })
   useEventListener(canvasRef, 'mouseleave', () => {
+    pointerInside.value = false
+    if (!isEnabled()) return
+    editor.setMeasurementMode('off')
     if (!drag.value) {
       editor.setHoveredNode(null)
+      editor.setHoveredGuide(null)
     }
   })
-  useEventListener(window, 'mouseup', () => {
-    if (drag.value) onMouseUp()
+  useEventListener(
+    window,
+    'mouseup',
+    () => {
+      if (drag.value) onMouseUp()
+    },
+    { capture: true }
+  )
+
+  const stopToolListener = editor.onEditorEvent('tool:changed', () => {
+    if (!isEnabled()) return
+    editor.setMeasurementMode('off')
+    cancelPointerInteraction()
   })
+  onScopeDispose(stopToolListener)
 
   setupPanZoom(canvasRef, editor, drag, onMouseDown, onMouseMove, onMouseUp)
   return {
@@ -302,6 +477,14 @@ export function useCanvasInput(
     autoLayoutPaddingEdit,
     updateAutoLayoutPaddingEdit,
     commitAutoLayoutPaddingEdit,
-    cancelAutoLayoutPaddingEdit
+    cancelAutoLayoutPaddingEdit,
+    cleanupInteractions() {
+      cancelAutoLayoutPaddingEdit()
+      drag.value = null
+      cursorOverride.value = null
+      pointerInside.value = false
+      clearTransientInteractionFeedback()
+      resetMeasurementModifiers()
+    }
   }
 }

@@ -6,8 +6,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from '@open-pencil/vue'
 
 import { DEFAULT_COLLAB_STATE, useCollabInjected } from '@/app/collab/use'
+import { useNotificationMessages } from '@/app/i18n/notifications'
 import { toast } from '@/app/shell/ui'
-import { getShareUrl } from '@/constants'
+import { getShareURL } from '@/constants'
 
 function createCollabPanelContext() {
   const route = useRoute()
@@ -15,6 +16,7 @@ function createCollabPanelContext() {
   const collab = useCollabInjected()
   const { copy, copied } = useClipboard({ copiedDuring: 2000 })
   const { dialogs } = useI18n()
+  const notifications = useNotificationMessages()
 
   const joinInput = ref('')
   const nameDraft = ref(collab?.state.value.localName ?? '')
@@ -25,9 +27,9 @@ function createCollabPanelContext() {
   const state = computed(() => collab?.state.value ?? DEFAULT_COLLAB_STATE)
   const peers = computed(() => collab?.remotePeers.value ?? [])
   const followingPeer = computed(() => collab?.followingPeer.value ?? null)
-  const shareUrl = computed(() => {
+  const shareURL = computed(() => {
     if (!state.value.roomId) return ''
-    return getShareUrl(state.value.roomId)
+    return getShareURL(state.value.roomId)
   })
   const isJoining = computed(() => !!pendingRoomId.value && !state.value.connected)
 
@@ -40,9 +42,9 @@ function createCollabPanelContext() {
   )
 
   function copyLink() {
-    if (!shareUrl.value) return
-    void copy(shareUrl.value)
-    toast.info('Link copied to clipboard')
+    if (!shareURL.value) return
+    void copy(shareURL.value)
+    toast.info(notifications.value.linkCopied)
   }
 
   function share() {
@@ -50,8 +52,8 @@ function createCollabPanelContext() {
     collab.setLocalName(nameDraft.value.trim())
     const roomId = collab.shareCurrentDoc()
     void router.push(`/share/${roomId}`)
-    void copy(getShareUrl(roomId))
-    toast.info('Link copied to clipboard')
+    void copy(getShareURL(roomId))
+    toast.info(notifications.value.linkCopied)
     popoverOpen.value = false
   }
 
@@ -85,7 +87,7 @@ function createCollabPanelContext() {
     state,
     peers,
     followingPeer,
-    shareUrl,
+    shareURL,
     isJoining,
     copyLink,
     share,

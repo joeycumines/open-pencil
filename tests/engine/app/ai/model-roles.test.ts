@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { buildReasoningProviderOptions } from '@/app/ai/chat/reasoning'
 import {
   aiModelSettings,
   createAIModelRuntime,
@@ -140,6 +141,36 @@ describe('AI model profiles and role assignments', () => {
     expect(modelSettingsSnapshot().connections).toHaveLength(2)
   })
 
+  test('stores multiple Harness provider profiles with independent model IDs', () => {
+    const first = createModelProfileDraft()
+    Object.assign(first, {
+      name: 'Pi Sonnet',
+      providerID: 'harness:pi',
+      modelID: '',
+      customModelID: 'anthropic/claude-sonnet-4.6',
+      harnessThinkingLevel: 'medium',
+      harnessPermissionMode: 'allow-edits'
+    })
+    const second = createModelProfileDraft()
+    Object.assign(second, {
+      name: 'Pi custom',
+      providerID: 'harness:pi',
+      modelID: '',
+      customModelID: 'custom/provider-model',
+      harnessThinkingLevel: 'high',
+      harnessPermissionMode: 'allow-reads'
+    })
+
+    const savedFirst = saveModelProfileDraft(first)
+    const savedSecond = saveModelProfileDraft(second)
+    expect(savedFirst.customModelID).toBe('anthropic/claude-sonnet-4.6')
+    expect(savedSecond.customModelID).toBe('custom/provider-model')
+    expect(savedFirst.harnessThinkingLevel).toBe('medium')
+    expect(savedSecond.harnessThinkingLevel).toBe('high')
+    expect(savedFirst.harnessPermissionMode).toBe('allow-edits')
+    expect(savedSecond.harnessPermissionMode).toBe('allow-reads')
+  })
+
   test('keeps ACP agents exclusive to the Design role', () => {
     const settings = modelSettingsSnapshot()
     settings.connections.push({
@@ -175,6 +206,24 @@ describe('AI model profiles and role assignments', () => {
     const draft = createModelProfileDraft('model-fast')
     draft.maxOutputTokens = Number.NaN
     expect(saveModelProfileDraft(draft).maxOutputTokens).toBe(16_384)
+  })
+
+  test('persists provider-specific reasoning effort', () => {
+    const draft = createModelProfileDraft('model-fast')
+    draft.reasoningEffort = 'none'
+    expect(saveModelProfileDraft(draft).reasoningEffort).toBe('none')
+    expect(createModelProfileDraft('model-fast').reasoningEffort).toBe('none')
+  })
+
+  test('maps reasoning effort to supported provider options', () => {
+    expect(buildReasoningProviderOptions('openai-compatible', 'none')).toEqual({
+      openai: { reasoningEffort: 'none' }
+    })
+    expect(buildReasoningProviderOptions('openrouter', 'high')).toEqual({
+      openrouter: { reasoning: { effort: 'high' } }
+    })
+    expect(buildReasoningProviderOptions('google', 'high')).toBeUndefined()
+    expect(buildReasoningProviderOptions('openai', '')).toBeUndefined()
   })
 
   test('repairs assignments when removing a model', () => {

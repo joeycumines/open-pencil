@@ -1,20 +1,6 @@
 export type TestId = string
 
-export type TestIdProps = {
-  testId?: TestId
-}
-
-export type RequiredTestIdProps = {
-  testId: TestId
-}
-
-export type WithTestId<TProps extends object = object> = TProps & TestIdProps
-
-export type WithRequiredTestId<TProps extends object = object> = TProps & RequiredTestIdProps
-
-export type WithoutTestId<TProps extends object> = Omit<TProps, keyof TestIdProps>
-
-type CssEscapeRuntime = {
+type CSSEscapeRuntime = {
   CSS?: {
     escape?: (value: string) => string
   }
@@ -49,7 +35,7 @@ export function acpPermissionOptionTestId(kind: string): TestId {
 }
 
 function cssEscape(value: string): string {
-  const runtime = globalThis as CssEscapeRuntime
+  const runtime = globalThis as CSSEscapeRuntime
   const nativeEscape = runtime.CSS?.escape
   if (typeof nativeEscape === 'function') {
     return nativeEscape(value)

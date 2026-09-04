@@ -10,6 +10,7 @@ import {
   customBaseURL,
   customModelID,
   isACPProvider,
+  isHarnessProvider,
   isConfigured,
   maxOutputTokens,
   modelID,
@@ -33,6 +34,7 @@ const activeTab = ref<'design' | 'code' | 'ai'>('design')
 const chatSession = createChatSessionManager({
   isConfigured,
   isACPProvider,
+  isHarnessProvider,
   providerID,
   credentialsReady,
   getActiveEditorStore
@@ -67,6 +69,8 @@ export function useAIChat() {
     activeTab,
     isConfigured,
     ensureChat: chatSession.ensureChat,
-    resetChat: chatSession.resetChat
+    resetChat: chatSession.resetChat,
+    chatFailure: chatSession.failure,
+    clearChatFailure: chatSession.clearFailure
   }
 }

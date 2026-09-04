@@ -43,12 +43,38 @@ describe('APP_MENU_SCHEMA', () => {
     expect(commandIds).toContain('selection.moveToPage')
   })
 
+  test('marks route-neutral native actions for shell dispatch', () => {
+    const shellEntries = actionItems(APP_MENU_SCHEMA.flatMap((group) => group.items)).filter(
+      (entry) => !('type' in entry) && entry.handler === 'shell'
+    )
+
+    expect(shellEntries.map((entry) => ('type' in entry ? '' : entry.id))).toEqual([
+      'open-storage-workspace',
+      'theme-light',
+      'theme-dark',
+      'theme-auto',
+      'snap-geometry',
+      'snap-objects',
+      'snap-pixel-grid',
+      'settings'
+    ])
+  })
+
   test('includes storage workspace navigation in the shared File menu', () => {
     const fileMenu = APP_MENU_SCHEMA.find((group) => group.label === 'File')
     const entries = fileMenu ? actionItems(fileMenu.items) : []
 
     expect(entries).toContainEqual(
       expect.objectContaining({ id: 'open-storage-workspace', label: 'Open Storage Workspace…' })
+    )
+  })
+
+  test('exposes recent files through the native File menu', () => {
+    const fileMenu = APP_MENU_SCHEMA.find((group) => group.label === 'File')
+    const entries = fileMenu ? actionItems(fileMenu.items) : []
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({ id: 'open-recent', label: 'Open Recent', target: 'native' })
     )
   })
 

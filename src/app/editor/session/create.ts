@@ -12,13 +12,14 @@ import {
 import { resolveFigmaClipboardImages } from '@/app/editor/clipboard/figma-images'
 import { bindClipboardNotifications } from '@/app/editor/clipboard/notifications'
 import { loadFont } from '@/app/editor/fonts'
+import { createCanvasPaneRegistry } from '@/app/editor/panes/registry'
 import {
   createEditorComputedRefs,
   createEditorStoreModules,
   defineEditorStoreAccessors
 } from '@/app/editor/session/modules'
 import { createInitialAppEditorState, type AppEditorState } from '@/app/editor/session/types'
-import { IS_TAURI } from '@/constants'
+import { IS_BROWSER, IS_TAURI } from '@/constants'
 
 export { EDITOR_TOOLS as TOOLS, TOOL_SHORTCUTS } from '@open-pencil/core/editor'
 export type { EditorToolDef as ToolDef, Tool } from '@open-pencil/core/editor'
@@ -38,7 +39,10 @@ export function createEditorStore(initialGraph?: SceneGraph) {
     getViewportSize: () =>
       viewportSize.width > 0 && viewportSize.height > 0
         ? viewportSize
-        : { width: window.innerWidth, height: window.innerHeight }
+        : {
+            width: IS_BROWSER ? window.innerWidth : 1920,
+            height: IS_BROWSER ? window.innerHeight : 1080
+          }
   })
   const io = new IORegistry(BUILTIN_IO_FORMATS)
   bindClipboardNotifications(editor)
@@ -54,12 +58,24 @@ export function createEditorStore(initialGraph?: SceneGraph) {
   // ─── Public API ───────────────────────────────────────────────
   // Spread all core Editor methods, then override getters and add app-specific.
 
+  const panes = createCanvasPaneRegistry(state)
+
   const store = {
     ...editor,
     state,
+    panes,
     selectedNodes,
     selectedNode,
     layerTree,
+    splitTree: panes.splitTree,
+    activePaneId: panes.activePaneId,
+    visiblePaneCount: panes.visiblePaneCount,
+    getPaneRenderState: panes.getPaneRenderState,
+    setActivePane: panes.setActivePane,
+    splitPane: panes.splitPane,
+    closePane: panes.closePane,
+    resizePane: panes.resizePane,
+    setSplitSizes: panes.setSplitSizes,
 
     // App-specific overrides and additions
     ...modules

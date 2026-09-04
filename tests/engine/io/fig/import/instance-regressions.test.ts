@@ -27,7 +27,7 @@ describe('derived instance layout regressions', () => {
   test('retains imported glyph outlines through non-glyph layout updates', () => {
     const glyphCount = () =>
       layoutNodes.filter(
-        (node) => node.type === 'TEXT' && (node.figmaDerivedTextGlyphs?.length ?? 0) > 0
+        (node) => node.type === 'TEXT' && (node.derivedTextGlyphs?.length ?? 0) > 0
       ).length
 
     // The fork's updateNode invalidation is content-aware: it preserves
@@ -111,7 +111,7 @@ describe('derived instance layout regressions', () => {
     )
     expect(dividers).toHaveLength(3)
     const generatedDividers = dividers.filter(
-      (node) => layoutGraph.getNode(node.componentId)?.figmaDerivedLayout?.y === 13.5
+      (node) => layoutGraph.getNode(node.componentId)?.derivedLayout?.y === 13.5
     )
     expect(generatedDividers).toHaveLength(3)
     for (const divider of generatedDividers) expect(divider.y).toBeCloseTo(13.5, 3)
@@ -206,7 +206,7 @@ describe('derived instance layout regressions', () => {
       b: 0.9215686321258545,
       a: 1
     })
-    expect(linkText?.figmaDerivedTextGlyphs).toBeNull()
+    expect(linkText?.derivedTextGlyphs).toBeNull()
 
     const input = previewChild(graph, nodes, 'Input')
     const inputRoot = childNamed(graph, input, '_input')

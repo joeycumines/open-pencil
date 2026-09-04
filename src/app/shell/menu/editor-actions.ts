@@ -1,6 +1,7 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { setSnappingPreference } from '@/app/settings/preferences/apply'
 
 type TextFormatUpdates = {
   fontWeight?: number
@@ -52,6 +53,8 @@ export function createSharedEditorMenuActions(
   return {
     'zoom-in': () => store.applyZoom(-100, window.innerWidth / 2, window.innerHeight / 2),
     'zoom-out': () => store.applyZoom(100, window.innerWidth / 2, window.innerHeight / 2),
+    'view-split-right': () => store.splitPane(store.activePaneId.value, 'horizontal'),
+    'view-split-down': () => store.splitPane(store.activePaneId.value, 'vertical'),
     'view-rulers': () => {
       store.state.showRulers = !store.state.showRulers
       store.requestRepaint()
@@ -60,6 +63,12 @@ export function createSharedEditorMenuActions(
       store.state.showRemoteCursors = !store.state.showRemoteCursors
       store.requestRepaint()
     },
+    'snap-geometry': () =>
+      setSnappingPreference('geometry', !store.state.snappingPreferences.geometry),
+    'snap-objects': () =>
+      setSnappingPreference('objects', !store.state.snappingPreferences.objects),
+    'snap-pixel-grid': () =>
+      setSnappingPreference('pixelGrid', !store.state.snappingPreferences.pixelGrid),
     'toggle-ui': () => {
       store.state.showUI = !store.state.showUI
     },

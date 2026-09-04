@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { startServer } from '#mcp/server'
+import { readToolPolicyFromEnv } from '#mcp/tool/policy'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
@@ -18,7 +19,13 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
       `  OPENPENCIL_MCP_AUTH_TOKEN    Bearer token for MCP and RPC auth\n` +
       `  OPENPENCIL_MCP_ROOT          Allowed directory for file-scoped tools (default: current working directory)\n` +
       `  OPENPENCIL_MCP_EVAL          Set to 1 to enable the eval tool\n` +
-      `  OPENPENCIL_MCP_CORS_ORIGIN   Allowed CORS origin\n`
+      `  OPENPENCIL_MCP_DISABLED_TOOLS Comma-separated tool names to omit\n` +
+      `  OPENPENCIL_MCP_CORS_ORIGIN   Allowed CORS origin\n` +
+      `  OPENPENCIL_MCP_APP_TIMEOUT_MS  If set, close the server and remove its discovery\n` +
+      `                               file after no app is attached for this many ms. The\n` +
+      `                               grace period starts at startup and after disconnects.\n` +
+      `                               Unset/0 disables it (default) — do not set this for\n` +
+      `                               manual/CLI use, since nothing may ever register.\n`
   )
   process.exit(0)
 }
@@ -41,11 +48,33 @@ const port = rawPort
 // the PORT value alone determines whether TCP is enabled (PORT=0 is the kill switch).
 const withTcp = port > 0
 
+const MAX_APP_TIMEOUT_MS = 2_147_483_647
+const rawAppTimeoutText = process.env.OPENPENCIL_MCP_APP_TIMEOUT_MS?.trim()
+let appAttachTimeoutMs: number | undefined
+if (rawAppTimeoutText) {
+  if (!/^\d+$/.test(rawAppTimeoutText)) {
+    process.stderr.write(
+      `Error: OPENPENCIL_MCP_APP_TIMEOUT_MS must be a non-negative integer, got "${rawAppTimeoutText}"\n`
+    )
+    process.exit(1)
+  }
+  appAttachTimeoutMs = Number.parseInt(rawAppTimeoutText, 10)
+  if (!Number.isSafeInteger(appAttachTimeoutMs) || appAttachTimeoutMs > MAX_APP_TIMEOUT_MS) {
+    process.stderr.write(
+      `Error: OPENPENCIL_MCP_APP_TIMEOUT_MS must be an integer in 0–${MAX_APP_TIMEOUT_MS}, got "${rawAppTimeoutText}"\n`
+    )
+    process.exit(1)
+  }
+}
+
+const toolPolicy = readToolPolicyFromEnv()
+
 const handle = await startServer({
   httpPort: withTcp ? port : 0,
   withTcp,
   socketPath: process.env.OPENPENCIL_MCP_SOCKET?.trim() || null,
-  enableEval: process.env.OPENPENCIL_MCP_EVAL === '1',
+  enableEval: toolPolicy.allowEval,
+  disabledTools: toolPolicy.disabledTools,
   mcpRoot: process.env.OPENPENCIL_MCP_ROOT?.trim() || process.cwd(),
   // Auth token: undefined → auto-generate, empty string → disable auth,
   // non-empty → use trimmed value. Whitespace-only is rejected to prevent a
@@ -64,7 +93,8 @@ const handle = await startServer({
     }
     return trimmed
   })(),
-  corsOrigin: process.env.OPENPENCIL_MCP_CORS_ORIGIN?.trim() || null
+  corsOrigin: process.env.OPENPENCIL_MCP_CORS_ORIGIN?.trim() || null,
+  appAttachTimeoutMs
 })
 
 process.stderr.write(`OpenPencil MCP server\n`)

@@ -3,7 +3,12 @@ import { tool } from 'ai'
 import * as v from 'valibot'
 
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { CORE_TOOLS, toolsToAI } from '@open-pencil/core/tools'
+import {
+  CORE_TOOLS,
+  EXTENDED_TOOLS,
+  registerComponentCatalog,
+  toolsToAI
+} from '@open-pencil/core/tools'
 import type { StepBudget, ToolLogEntry } from '@open-pencil/core/tools'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -11,26 +16,13 @@ import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { getActiveEditorStore } from '@/app/editor/active-store'
 import type { EditorStore } from '@/app/editor/active-store'
 import { ensureGraphFonts } from '@/app/editor/fonts'
+import { useLibraryService } from '@/app/libraries'
 
 export const MAX_AGENT_STEPS = 50
 
-export interface StepUsage {
-  inputTokens: number
-  outputTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-  timestamp: number
-}
-
 class RunState {
   toolLog: ToolLogEntry[] = []
-  stepUsages: StepUsage[] = []
   currentSteps = 0
-
-  recordStep(usage: StepUsage): void {
-    this.stepUsages.push(usage)
-    this.currentSteps++
-  }
 
   resetSteps(): void {
     this.currentSteps = 0
@@ -42,7 +34,6 @@ class RunState {
 
   clear(): void {
     this.toolLog = []
-    this.stepUsages = []
     this.currentSteps = 0
   }
 }
@@ -62,12 +53,8 @@ export function getToolLogEntries(store?: EditorStore): ToolLogEntry[] {
   return getRunState(store).toolLog
 }
 
-export function getStepUsages(store?: EditorStore): StepUsage[] {
-  return getRunState(store).stepUsages
-}
-
-export function recordStepUsage(usage: StepUsage, store?: EditorStore): void {
-  getRunState(store).recordStep(usage)
+export function recordStep(store?: EditorStore): void {
+  getRunState(store).currentSteps++
 }
 
 export function resetRunSteps(store?: EditorStore): void {
@@ -85,9 +72,17 @@ export function clearToolLogEntries(store?: EditorStore): void {
 export function createAITools(store: EditorStore) {
   let beforeSnapshot: Map<string, SceneNode> | null = null
   const runState = getRunState(store)
+  const libraryService = useLibraryService()
+  libraryService.bindEditor(store)
+  registerComponentCatalog(store.graph, libraryService)
 
   return toolsToAI(
-    CORE_TOOLS,
+    [
+      ...CORE_TOOLS,
+      ...EXTENDED_TOOLS.filter((def) =>
+        ['get_components', 'list_libraries', 'insert_library_component'].includes(def.name)
+      )
+    ],
     {
       getFigma: () => makeFigmaFromStore(store),
       onBeforeExecute: (def) => {

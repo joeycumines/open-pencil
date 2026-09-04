@@ -282,6 +282,13 @@ export interface PluginRelaunchData {
   isDeleted: boolean
 }
 
+export interface AssetRef {
+  key: string
+  version?: string
+}
+
+export type StyleReference = { guid: GUID; assetRef?: never } | { guid?: never; assetRef: AssetRef }
+
 export interface NodeChange {
   [key: string]: unknown
   guid?: GUID
@@ -370,7 +377,8 @@ export interface NodeChange {
       fontSize: number
       firstCharacter: number
       advance: number
-      rotation: number
+      /** Radians along the text path; kiwi omits the field for axis-aligned text. */
+      rotation?: number
     }>
     fontMetaData?: Array<{
       key: { family: string; style: string; postscript?: string }
@@ -385,9 +393,11 @@ export interface NodeChange {
     truncatedHeight?: number
   }
   styleType?: string
-  styleIdForText?: { guid?: GUID }
-  styleIdForFill?: { guid?: GUID }
-  styleIdForStrokeFill?: { guid?: GUID }
+  styleIdForText?: StyleReference
+  styleIdForFill?: StyleReference
+  styleIdForStrokeFill?: StyleReference
+  styleIdForEffect?: StyleReference
+  styleIdForGrid?: StyleReference
   textUserLayoutVersion?: number
   textExplicitLayoutVersion?: number
   textBidiVersion?: number

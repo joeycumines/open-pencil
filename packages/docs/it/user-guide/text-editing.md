@@ -1,39 +1,36 @@
 ---
-title: Modifica testo
-description: Creare e modificare testo con formattazione rich in OpenPencil.
+title: Modificare testo
+description: Creare testo, selezionare caratteri e applicare formattazione tipografica.
 ---
-# Modifica testo
+
+# Modificare testo
 
 ## Creare testo
-Premi <kbd>T</kbd>, poi clicca sul canvas. Inizia a digitare immediatamente.
 
-## Modifica inline
-Doppio click su un nodo testo per entrare in modalità modifica. Clicca fuori per confermare.
+Premi <kbd>T</kbd> e fai clic nell’area di lavoro. Appare un oggetto vuoto con il cursore di inserimento pronto per scrivere.
 
-## Navigazione cursore
-| Azione | Mac | Windows / Linux |
-|--------|-----|-----------------|
-| Sinistra/destra | <kbd>←</kbd> / <kbd>→</kbd> | <kbd>←</kbd> / <kbd>→</kbd> |
-| Su/giù | <kbd>↑</kbd> / <kbd>↓</kbd> | <kbd>↑</kbd> / <kbd>↓</kbd> |
-| Per parola | <kbd>⌥</kbd><kbd>←</kbd> / <kbd>⌥</kbd><kbd>→</kbd> | <kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>Ctrl</kbd> + <kbd>→</kbd> |
-| Inizio/fine riga | <kbd>⌘</kbd><kbd>←</kbd> / <kbd>⌘</kbd><kbd>→</kbd> | <kbd>Home</kbd> / <kbd>End</kbd> |
+## Modificare
 
-<kbd>Shift</kbd> estende la selezione.
+Fai doppio clic su un oggetto di testo. Un contorno blu indica la modalità di modifica. Fai clic all’esterno per salvare e uscire.
 
-## Formattazione rich text
-| Azione | Mac | Windows / Linux |
-|--------|-----|-----------------|
-| Grassetto | <kbd>⌘</kbd><kbd>B</kbd> | <kbd>Ctrl</kbd> + <kbd>B</kbd> |
-| Corsivo | <kbd>⌘</kbd><kbd>I</kbd> | <kbd>Ctrl</kbd> + <kbd>I</kbd> |
-| Sottolineato | <kbd>⌘</kbd><kbd>U</kbd> | <kbd>Ctrl</kbd> + <kbd>U</kbd> |
+Il testo viene disegnato direttamente nell’area di lavoro; non appare un campo sovrapposto indipendente.
 
-## Selettore font
-Ricerca, anteprima e scroll virtuale.
+## Selezione
 
-## Fonti dei font
-- **App desktop** — tutti i font di sistema disponibili
-- **Browser** — font di sistema disponibili in Chrome e Edge
+- Un clic posiziona il cursore di inserimento.
+- Il trascinamento seleziona un intervallo.
+- Il doppio clic seleziona una parola.
+- Il triplo clic seleziona tutto il testo.
+- <kbd>Shift</kbd> estende la selezione.
 
-## Suggerimenti
-- Input IME (cinese, giapponese, coreano) completamente supportato.
-- La formattazione rich text si preserva nell'import/export .fig.
+I tasti freccia spostano il cursore. <kbd>Option</kbd>/<kbd>Ctrl</kbd> salta per parole; <kbd>Shift</kbd> mantiene ed estende la selezione.
+
+## Formattazione
+
+Il pannello delle proprietà modifica famiglia, stile, dimensione, interlinea, spaziatura tra lettere e allineamento. Grassetto, corsivo, sottolineato e barrato possono essere applicati a un intervallo senza cambiare il resto.
+
+La formattazione parziale viene conservata in intervalli e partecipa ad annulla e ripristina.
+
+## Font
+
+OpenPencil rileva i font di sistema quando l’ambiente lo consente. Se un font manca, ne mostra lo stato e usa un’alternativa finché non è disponibile.

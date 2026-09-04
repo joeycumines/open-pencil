@@ -1,6 +1,11 @@
 import type { CanvasKit, Canvas } from 'canvaskit-wasm'
 
-import type { SceneGraph } from '@open-pencil/scene-graph'
+import {
+  getWorldMatrix,
+  type Mat3,
+  type SceneGraph,
+  type SceneNode
+} from '@open-pencil/scene-graph'
 import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 
 import type { SkiaRenderer } from '#core/canvas'
@@ -223,7 +228,7 @@ function renderToSurface(
   }
 }
 
-function prepareSelectionRenderGraph(
+export function prepareSelectionRenderGraph(
   source: SceneGraph,
   renderGraph: SceneGraph,
   pageId: string,
@@ -235,13 +240,34 @@ function prepareSelectionRenderGraph(
   page.childIds = nodeIds.filter((nodeId) => renderGraph.getNode(nodeId) !== undefined)
   for (const nodeId of page.childIds) {
     const node = renderGraph.getNode(nodeId)
-    if (!node) continue
-    const position = source.getAbsolutePosition(nodeId)
+    const sourceNode = source.getNode(nodeId)
+    if (!node || !sourceNode) continue
+    if (sourceNode.parentId === pageId) continue
+    const world = getWorldMatrix(sourceNode, source)
     node.parentId = pageId
-    node.x = position.x
-    node.y = position.y
+    applyWorldTransform(node, world)
   }
   renderGraph.clearAbsPosCache()
+}
+
+function applyWorldTransform(node: SceneNode, matrix: Mat3): void {
+  const determinant = matrix[0] * matrix[4] - matrix[1] * matrix[3]
+  const flipX = determinant < 0
+  const rotation = Math.atan2(matrix[3], flipX ? matrix[4] : matrix[0])
+  const cos = Math.cos(rotation)
+  const sin = Math.sin(rotation)
+  const centerX = node.width / 2
+  const centerY = node.height / 2
+  const m00 = flipX ? -cos : cos
+  const m01 = flipX ? sin : -sin
+  const m10 = sin
+  const m11 = cos
+
+  node.x = matrix[2] - centerX + m00 * centerX + m01 * centerY
+  node.y = matrix[5] - centerY + m10 * centerX + m11 * centerY
+  node.rotation = rotation * (180 / Math.PI)
+  node.flipX = flipX
+  node.flipY = false
 }
 
 export function renderNodesToImage(
@@ -315,13 +341,13 @@ export function renderThumbnail(
   const contentH = bounds.maxY - bounds.minY
   if (contentW <= 0 || contentH <= 0) return null
 
-  const scale = Math.min(width / contentW, height / contentH, 2)
+  const scale = Math.min(width / contentW, height / contentH)
+  const pixelW = Math.max(1, Math.round(contentW * scale))
+  const pixelH = Math.max(1, Math.round(contentH * scale))
 
-  return renderToSurface(ck, renderer, graph, pageId, width, height, 'PNG', 100, (canvas) => {
+  return renderToSurface(ck, renderer, graph, pageId, pixelW, pixelH, 'PNG', 100, (canvas) => {
     canvas.clear(ck.Color4f(renderer.pageColor.r, renderer.pageColor.g, renderer.pageColor.b, 1))
-    const offsetX = (width - contentW * scale) / 2 - bounds.minX * scale
-    const offsetY = (height - contentH * scale) / 2 - bounds.minY * scale
-    canvas.translate(offsetX, offsetY)
+    canvas.translate(-bounds.minX * scale, -bounds.minY * scale)
     canvas.scale(scale, scale)
   })
 }

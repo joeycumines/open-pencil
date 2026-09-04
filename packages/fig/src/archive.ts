@@ -1,5 +1,6 @@
-import { unzipSync, zipSync, type Zippable } from 'fflate'
+import { unzipSync, zipSync, type Unzipped, type Zippable } from 'fflate'
 
+import type { FigPageManifestEntry } from '@open-pencil/kiwi/fig'
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import { buildFigKiwi } from '@open-pencil/kiwi/fig/container'
 import { decodeFigKiwiCanvas } from '@open-pencil/kiwi/fig/parse'
@@ -12,8 +13,8 @@ export interface FigImageEntry {
 export interface WriteFigArchiveInput {
   schemaDeflated: Uint8Array
   kiwiData: Uint8Array
-  thumbnailPng: Uint8Array
-  metaJson: string
+  thumbnailPNG: Uint8Array
+  metaJSON: string
   images?: FigImageEntry[]
   figKiwiVersion?: number
 }
@@ -25,6 +26,8 @@ export interface FigParseResult {
   figKiwiVersion: number
   /** Deflated Kiwi schema bytes from the original file, retained for round-trip fidelity. */
   figSchemaDeflated: Uint8Array
+  thumbnailPNG: Uint8Array | null
+  metaJSON: string | null
 }
 
 function isLikelyAsset(name: string): boolean {
@@ -44,27 +47,45 @@ function findCanvasData(entries: Partial<Record<string, Uint8Array>>): Uint8Arra
   return largest
 }
 
+function isCanonicalCanvasEntry(name: string): boolean {
+  return name === 'canvas.fig' || name === 'canvas'
+}
+
 /** Parse a complete zipped `.fig` file into its Figma protocol payload and binary resources. */
-export function parseFigBuffer(buffer: ArrayBuffer): FigParseResult {
-  const archive = unzipSync(new Uint8Array(buffer), {
-    filter: (file) =>
-      file.name === 'canvas.fig' ||
-      file.name === 'canvas' ||
-      (file.name.startsWith('images/') && file.name !== 'images/')
-  })
-  const canvasData = findCanvasData(archive)
-  if (!canvasData) {
-    throw new Error(
-      `No canvas data found in .fig file. Entries: ${Object.keys(archive).join(', ')}`
-    )
+export function parseFigBuffer(
+  buffer: ArrayBuffer,
+  onPages?: (pages: FigPageManifestEntry[]) => void
+): FigParseResult {
+  const bytes = new Uint8Array(buffer)
+  const canvasArchive = unzipSync(bytes, { filter: ({ name }) => isCanonicalCanvasEntry(name) })
+  let canvasData = findCanvasData(canvasArchive)
+  let archive: Unzipped
+  let decoded: ReturnType<typeof decodeFigKiwiCanvas>
+  if (canvasData) {
+    decoded = decodeFigKiwiCanvas(canvasData, onPages)
+    archive = unzipSync(bytes, { filter: ({ name }) => !isCanonicalCanvasEntry(name) })
+  } else {
+    archive = unzipSync(bytes)
+    canvasData = findCanvasData(archive)
+    if (!canvasData) {
+      throw new Error(
+        `No canvas data found in .fig file. Entries: ${Object.keys(archive).join(', ')}`
+      )
+    }
+    decoded = decodeFigKiwiCanvas(canvasData, onPages)
   }
 
-  const decoded = decodeFigKiwiCanvas(canvasData)
+  const metaBytes = archive['meta.json']
   const images = Object.entries(archive)
     .filter(([name]) => name.startsWith('images/') && name !== 'images/')
     .map(([name, data]) => [name.slice('images/'.length), data] as [string, Uint8Array])
 
-  return { ...decoded, images }
+  return {
+    ...decoded,
+    images,
+    thumbnailPNG: archive['thumbnail.png'] ?? null,
+    metaJSON: Object.hasOwn(archive, 'meta.json') ? new TextDecoder().decode(metaBytes) : null
+  }
 }
 
 /** Assemble a complete zipped `.fig` archive from an encoded Kiwi message and resources. */
@@ -72,8 +93,8 @@ export function writeFigArchive(input: WriteFigArchiveInput): Uint8Array {
   const canvasData = buildFigKiwi(input.schemaDeflated, input.kiwiData, input.figKiwiVersion)
   const entries: Zippable = {
     'canvas.fig': [canvasData, { level: 0 }],
-    'thumbnail.png': [input.thumbnailPng, { level: 0 }],
-    'meta.json': new TextEncoder().encode(input.metaJson)
+    'thumbnail.png': [input.thumbnailPNG, { level: 0 }],
+    'meta.json': new TextEncoder().encode(input.metaJSON)
   }
   for (const image of input.images ?? []) entries[image.name] = [image.data, { level: 0 }]
   return zipSync(entries)
@@ -83,16 +104,16 @@ export function writeFigArchive(input: WriteFigArchiveInput): Uint8Array {
 export function compressFigDataSync(
   schemaDeflated: Uint8Array,
   kiwiData: Uint8Array,
-  thumbnailPng: Uint8Array,
-  metaJson: string,
+  thumbnailPNG: Uint8Array,
+  metaJSON: string,
   imageEntries: FigImageEntry[],
   figKiwiVersion?: number
 ): Uint8Array {
   return writeFigArchive({
     schemaDeflated,
     kiwiData,
-    thumbnailPng,
-    metaJson,
+    thumbnailPNG,
+    metaJSON,
     images: imageEntries,
     figKiwiVersion
   })

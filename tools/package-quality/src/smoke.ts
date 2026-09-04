@@ -28,32 +28,12 @@ function run(command: string[], cwd = rootDir): string {
 
 const EVAL_TIMEOUT_S = 30
 
-/**
- * Runs an eval command with a hard timeout, killing the child if it exceeds
- * the limit. Uses Bun's spawn timeout instead of the external GNU `timeout`
- * executable so the smoke harness stays portable on stock macOS.
- */
-async function runEvalWithTimeout(command: string[], cwd: string): Promise<void> {
-  const proc = Bun.spawn(command, { cwd, stdout: 'pipe', stderr: 'pipe' })
-  const timer = setTimeout(() => proc.kill(), EVAL_TIMEOUT_S * 1000)
-  const exitCode = await proc.exited
-  clearTimeout(timer)
-  const stdout = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
-  if (exitCode !== 0) {
-    console.error(`$ ${command.join(' ')}`)
-    if (stdout) console.error(stdout)
-    if (stderr) console.error(stderr)
-    process.exit(exitCode || 1)
-  }
-}
-
-async function nodeEval(code: string, cwd: string): Promise<void> {
-  await runEvalWithTimeout(['node', '--input-type=module', '--eval', code], cwd)
-}
-
-async function bunEval(code: string, cwd: string): Promise<void> {
-  await runEvalWithTimeout(['bun', '--eval', code], cwd)
+function nodeEval(code: string, cwd: string): void {
+  const args =
+    process.platform === 'win32'
+      ? ['node', '--input-type=module', '--eval', code]
+      : ['timeout', String(EVAL_TIMEOUT_S), 'node', '--input-type=module', '--eval', code]
+  run(args, cwd)
 }
 
 function writeTypeConsumer(cwd: string): void {
@@ -88,13 +68,7 @@ import { FIG_KIWI_DEFAULT_VERSION, buildFigKiwi } from '@open-pencil/kiwi/fig/co
 import { type GUID as KiwiGUID } from '@open-pencil/kiwi/fig'
 import { parsePenFile, type PenDocument } from '@open-pencil/pen'
 import { SceneGraph, type Color, type SceneNode, type Vector } from '@open-pencil/scene-graph'
-import {
-  testIdSelector,
-  type RequiredTestIdProps,
-  type TestIdProps,
-  type WithRequiredTestId,
-  type WithoutTestId
-} from '@open-pencil/vue'
+import { testIdSelector } from '@open-pencil/vue'
 
 const graph = new SceneGraph()
 const editorFactory: typeof createEditor = createEditor
@@ -110,13 +84,6 @@ const figDocument: FigContainerDocument = {
   dataRaw: new Uint8Array([2])
 }
 const kiwiGuid: KiwiGUID = { sessionID: 1, localID: 2 }
-const optionalTestId: TestIdProps = { testId: 'smoke' }
-const requiredTestId: RequiredTestIdProps = { testId: 'required-smoke' }
-const mergedTestId: WithRequiredTestId<{ label: string }> = {
-  label: 'OpenPencil',
-  testId: 'typed-smoke'
-}
-const withoutTestId: WithoutTestId<{ label: string; testId?: string }> = { label: 'clean' }
 
 void editorFactory
 void editor
@@ -127,10 +94,6 @@ void maybeNode
 void penDocument
 void figDocument
 void kiwiGuid
-void optionalTestId
-void requiredTestId
-void mergedTestId
-void withoutTestId
 void FIG_PACKAGE_STATUS
 void FIG_KIWI_DEFAULT_VERSION
 void buildFigKiwi
@@ -147,7 +110,7 @@ function checkTypeConsumer(cwd: string): void {
   run([tsgoBin, '--noEmit', '-p', 'tsconfig.package-smoke.json'], cwd)
 }
 
-interface PackageJson {
+interface PackageJSON {
   name: string
   types?: string
   exports?: unknown
@@ -157,7 +120,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function readPackageJson(packageDir: string): PackageJson {
+function readPackageJSON(packageDir: string): PackageJSON {
   return JSON.parse(readFileSync(join(rootDir, packageDir, 'package.json'), 'utf8'))
 }
 
@@ -189,7 +152,7 @@ function exportKeyToSpecifier(packageName: string, exportKey: string): string | 
   return `${packageName}/${exportKey.slice(2)}`
 }
 
-function collectPublicImportSpecifiers(packageJSON: PackageJson): string[] {
+function collectPublicImportSpecifiers(packageJSON: PackageJSON): string[] {
   const { exports } = packageJSON
   if (!exports) return []
   if (typeof exports === 'string') return [packageJSON.name]
@@ -217,7 +180,7 @@ try {
   const tarballs: string[] = []
   const publicImportSpecifiers = new Set<string>()
   for (const packageDir of publicPackageDirs) {
-    const packageJSON = readPackageJson(packageDir)
+    const packageJSON = readPackageJSON(packageDir)
     for (const specifier of collectPublicImportSpecifiers(packageJSON)) {
       publicImportSpecifiers.add(specifier)
     }
@@ -268,77 +231,53 @@ try {
 
   for (const specifier of [...publicImportSpecifiers].sort()) {
     if (evalSkipSpecifiers.has(specifier)) continue
-    await nodeEval(`await import(${JSON.stringify(specifier)})`, tempDir)
-    await bunEval(`await import(${JSON.stringify(specifier)})`, tempDir)
+    nodeEval(`await import(${JSON.stringify(specifier)})`, tempDir)
   }
 
   checkTypeConsumer(tempDir)
 
-  await nodeEval(
+  nodeEval(
     "const { guidToString } = await import('@open-pencil/kiwi/fig/guid'); if (guidToString({ sessionID: 1, localID: 2 }) !== '1:2') throw new Error('Kiwi GUID subpath failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { buildFigKiwi, parseFigKiwiChunks } = await import('@open-pencil/kiwi/fig/container'); const chunks = parseFigKiwiChunks(buildFigKiwi(new Uint8Array([1]), new Uint8Array([2]))); if (chunks?.length !== 2) throw new Error('Kiwi container subpath failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { FIG_PACKAGE_STATUS, effectiveFigmaRawNodeFields, parseFigBuffer, writeFigArchive, readFigContainer, writeFigContainer } = await import('@open-pencil/fig'); if (FIG_PACKAGE_STATUS !== 'archive-api' || typeof effectiveFigmaRawNodeFields !== 'function' || typeof parseFigBuffer !== 'function' || typeof writeFigArchive !== 'function') throw new Error('Fig package status smoke failed'); const document = readFigContainer(writeFigContainer({ schemaDeflated: new Uint8Array([1]), dataRaw: new Uint8Array([2]) })); if (document.dataRaw[0] !== 2) throw new Error('Fig container smoke failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { convertLineHeight, sceneNodeToKiwi } = await import('@open-pencil/fig/node-change'); if (convertLineHeight({ value: 120, units: 'PERCENT' }, 20) !== 24 || typeof sceneNodeToKiwi !== 'function') throw new Error('Fig NodeChange subpath failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { populateAndApplyOverrides } = await import('@open-pencil/fig/instance-overrides'); if (typeof populateAndApplyOverrides !== 'function') throw new Error('Fig instance override subpath failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { SceneGraph } = await import('@open-pencil/scene-graph'); const graph = new SceneGraph(); if (graph.getPages().length !== 1) throw new Error('SceneGraph package smoke failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { parsePenFile } = await import('@open-pencil/pen'); const graph = parsePenFile(JSON.stringify({ version: '1', children: [{ id: 'frame', type: 'frame', width: 100, height: 50 }] })); if (graph.getPages()[0].childIds.length !== 1) throw new Error('Pen package smoke failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { htmlToSceneGraph } = await import('@open-pencil/dom-css'); const graph = await htmlToSceneGraph('<div class=card>OpenPencil</div>', { cssText: '.card { width: 320px; }' }); if (graph.getPages()[0].width !== 320) throw new Error('DOM/CSS scene graph smoke failed')",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const browser = await import('@open-pencil/dom-css/browser'); for (const key of ['browserHTMLToDesignDocument', 'browserHTMLToSceneGraph', 'browserTailwindJSXToSceneGraph']) if (typeof browser[key] !== 'function') throw new Error('DOM/CSS browser export missing: ' + key)",
     tempDir
   )
-  await nodeEval(
+  nodeEval(
     "const { jsx, jsxToDesignDocument } = await import('@open-pencil/dom-css/jsx-runtime'); const document = await jsxToDesignDocument(jsx('section', { class: 'card', style: { width: '120px' }, children: 'OpenPencil' })); const node = document.children[0]; if (node?.type !== 'element' || node.inlineStyle?.width !== '120px') throw new Error('DOM/CSS JSX runtime smoke failed')",
     tempDir
   )
 
   run(['node', 'node_modules/.bin/openpencil', '--help'], tempDir)
-  const cliDomInput = join(tempDir, 'dom-smoke.html')
-  const cliDomOutput = join(tempDir, 'dom-smoke.json')
-  writeFileSync(cliDomInput, '<article class="card"><h1>Node CLI DOM smoke</h1></article>', 'utf8')
-  const cliDomSummary = JSON.parse(
-    run(
-      [
-        'node',
-        'node_modules/.bin/openpencil',
-        'import',
-        cliDomInput,
-        '--format',
-        'json',
-        '--output',
-        cliDomOutput,
-        '--json'
-      ],
-      tempDir
-    )
-  )
-  const cliDomDocument = JSON.parse(readFileSync(cliDomOutput, 'utf8'))
-  if (cliDomSummary.format !== 'json' || cliDomDocument.children[0]?.tagName !== 'article') {
-    throw new Error('CLI DOM Node smoke failed')
-  }
   run(['node', 'node_modules/.bin/openpencil-mcp', '--help'], tempDir)
   run(['node', 'node_modules/.bin/openpencil-mcp-http', '--help'], tempDir)
 

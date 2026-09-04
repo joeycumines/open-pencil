@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue'
 
 import { IS_TAURI } from '@open-pencil/core/constants'
-import { setPexelsApiKey, setUnsplashAccessKey } from '@open-pencil/core/tools'
+import { setPexelsAPIKey, setUnsplashAccessKey } from '@open-pencil/core/tools'
 
 import {
   designCustomAPIType,
@@ -37,9 +37,12 @@ export const unsplashKeyStatus = ref<CredentialStatus>('missing')
 const credentialRevision = ref(0)
 
 export const isACPProvider = computed(() => providerID.value.startsWith('acp:'))
+export const isHarnessProvider = computed(() => providerID.value === 'harness:pi')
+export const isAgentProvider = computed(() => isACPProvider.value || isHarnessProvider.value)
 
 export const isConfigured = computed(() => {
   if (isACPProvider.value) return IS_TAURI
+  if (isHarnessProvider.value) return IS_TAURI && apiKeyStatus.value === 'configured'
   if (apiKeyStatus.value !== 'configured') return false
   const needsBaseURL =
     providerID.value === 'openai-compatible' || providerID.value === 'anthropic-compatible'
@@ -68,7 +71,7 @@ async function refreshMediaCredentials(): Promise<void> {
   ])
   pexelsKeyStatus.value = pexelsStatus
   unsplashKeyStatus.value = unsplashStatus
-  setPexelsApiKey(
+  setPexelsAPIKey(
     pexelsStatus === 'configured'
       ? await appCredentialServices.resolver.resolve(PEXELS_CREDENTIAL)
       : null
@@ -106,7 +109,7 @@ export async function setPexelsKey(key: string): Promise<void> {
   if (value) await appCredentialServices.manager.set(PEXELS_CREDENTIAL, value)
   else await appCredentialServices.manager.clear(PEXELS_CREDENTIAL)
   pexelsKeyStatus.value = await refreshStatus(PEXELS_CREDENTIAL)
-  setPexelsApiKey(value || null)
+  setPexelsAPIKey(value || null)
 }
 
 export async function setUnsplashKey(key: string): Promise<void> {

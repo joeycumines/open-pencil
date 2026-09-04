@@ -63,12 +63,13 @@ describe('model provider registry', () => {
     expect(requestBody).toContain('"model":"MiniMax-M3"')
   })
 
-  test('registers every direct provider without handling ACP agents as models', () => {
-    for (const provider of AI_PROVIDERS) {
+  test('registers every direct provider without handling agent runtimes as models', () => {
+    for (const provider of AI_PROVIDERS.filter((entry) => entry.id !== 'harness:pi')) {
       expect(modelProviderAdapter(provider.id).create).toBeFunction()
     }
+    expect(() => modelProviderAdapter('harness:pi')).toThrow('Harness agents')
     expect(() => modelProviderAdapter('acp:claude-code')).toThrow(
-      'ACP providers do not use direct API models'
+      'ACP providers and Harness agents do not use direct API models'
     )
   })
 })
@@ -114,9 +115,16 @@ describe('normalizeOpenRouterModel', () => {
       normalizeOpenRouterModel({
         id: 'meta-llama/llama-3.3-70b-instruct',
         name: 'Llama 3.3 70B Instruct',
-        supported_parameters: ['tools']
+        supported_parameters: ['tools'],
+        architecture: { input_modalities: ['text', 'image'] },
+        top_provider: { max_completion_tokens: 32_768 }
       })
-    ).toEqual({ id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B Instruct' })
+    ).toEqual({
+      id: 'meta-llama/llama-3.3-70b-instruct',
+      name: 'Llama 3.3 70B Instruct',
+      capabilities: ['tools', 'vision'],
+      recommendedMaxOutputTokens: 32_768
+    })
   })
 
   test('skips OpenRouter models without tool support', () => {

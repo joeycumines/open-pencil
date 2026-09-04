@@ -1,27 +1,30 @@
 ---
-title: Outil plume
-description: Tracés vectoriels avec courbes de Bézier in OpenPencil.
+title: Outil Plume
+description: Dessiner des tracés vectoriels et des courbes de Bézier avec l’outil Plume.
 ---
-# Outil plume
 
-## Activation
-**P**
+# Outil Plume
 
-## Placer des points
-- **Click** — corner point
-- **Click + drag** — curve point with Bézier tangent handles
-  - **Hold <kbd>Space</kbd>** while dragging to move the point itself
+L’outil Plume crée des tracés à l’aide du modèle de réseau vectoriel compatible avec Figma.
 
-## Fermer un tracé
-Click the first point to close into a loop.
+Appuyez sur <kbd>P</kbd> pour l’activer.
 
-## Tracés ouverts
-<kbd>Escape</kbd> to commit as open path.
+## Dessiner
 
-## Réseaux vectoriels
-Les tracés dans OpenPencil utilisent des réseaux vectoriels — un modèle plus flexible que les listes de points simples, qui prend en charge les tracés ramifiés et les topologies complexes. C'est le même modèle que Figma, les tracés sont donc parfaitement conservés dans les fichiers .fig.
+- Un clic crée un point d’angle et un segment droit.
+- Cliquez et faites glisser pour créer un point avec des poignées de Bézier.
+- Maintenez <kbd>Space</kbd> pendant le glissement pour déplacer le point avant de relâcher.
 
-| Action | Mac | Windows / Linux |
-|--------|-----|-----------------|
-| Pen tool | <kbd>P</kbd> | <kbd>P</kbd> |
-| Commit | <kbd>Escape</kbd> | Escape |
+Chaque point prolonge le tracé. Une ligne d’aperçu relie le dernier point au pointeur.
+
+## Fermer ou terminer
+
+Cliquez sur le premier point pour fermer le tracé. Appuyez sur <kbd>Enter</kbd> pour le terminer ouvert ou sur <kbd>Escape</kbd> pour annuler le dessin actuel.
+
+## Continuer un tracé
+
+Sélectionnez un tracé ouvert et activez Plume. Cliquez sur l’une de ses extrémités pour poursuivre depuis celle-ci.
+
+## Courbes
+
+Faire glisser un point crée deux poignées opposées et une courbe régulière. En [édition vectorielle](./vector-edit), les poignées peuvent être déplacées ensemble ou séparément.

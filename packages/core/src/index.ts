@@ -1,5 +1,5 @@
-import codegenPrompt from './tools/prompts/codegen.md'
-import jsxReference from './tools/prompts/jsx-reference.md'
+import codegenPrompt from './tools/prompts/codegen.md?raw'
+import jsxReference from './tools/prompts/jsx-reference.md?raw'
 
 export { randomHex, randomInt, randomIndex } from './random'
 
@@ -93,7 +93,7 @@ export type {
   AIAdapterOptions,
   StepBudget
 } from './tools'
-export { executeRpcCommand, ALL_RPC_COMMANDS } from './rpc'
+export { executeRPCCommand, ALL_RPC_COMMANDS } from './rpc'
 export { queryByXPath, matchByXPath, nodeToXPath } from './xpath'
 export type { XPathQueryOptions } from './xpath'
 export {
@@ -171,8 +171,15 @@ export {
   styleToVariant,
   type DownloadedFontCache,
   type FontInfo,
+  type FontLoadedSource,
   type LocalFontAccessState
 } from './text/fonts'
+export {
+  documentFontStatus,
+  type DocumentFontFaceStatus,
+  type DocumentFontStatus,
+  type FontFaceStatus
+} from './text/font/status'
 export {
   fontFaceFromFigmaFontName,
   fontFaceRenderFamily,
@@ -208,7 +215,7 @@ export {
   resolveRGBAForPreview,
   resolveNodeFillColor,
   resolveNodeStrokeColor,
-  colorToDisplayCss,
+  colorToDisplayCSS,
   getDefaultRenderColorSpace,
   type RenderColorSpace,
   type ColorIntentSpace,
@@ -412,7 +419,7 @@ export {
   KIWI,
   SESSION_ID,
   ZSTD_MAGIC,
-  buildMultiplayerUrl,
+  buildMultiplayerURL,
   isZstdCompressed,
   hasFigWireHeader,
   skipFigWireHeader,
@@ -428,7 +435,7 @@ export * from './lint'
 export const CODEGEN_PROMPT: string = codegenPrompt
 export const JSX_REFERENCE: string = jsxReference
 export {
-  setPexelsApiKey,
+  setPexelsAPIKey,
   setUnsplashAccessKey,
   registerStockPhotoProvider,
   setActiveStockPhotoProvider,
