@@ -1,1 +1,0 @@
-export const E2E_SLOW_TEST_TIMEOUT_MS = 60_000

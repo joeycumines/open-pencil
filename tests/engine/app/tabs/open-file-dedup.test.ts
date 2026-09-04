@@ -5,6 +5,7 @@ import * as layoutModule from '@open-pencil/core/layout'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { resolveBrowserFileURL } from '@/app/document/io/browser'
+import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import {
   createDocumentInCurrentTab,
   createHomeTab,
@@ -15,7 +16,7 @@ import {
   showNewTab,
   tabCount
 } from '@/app/tabs'
-import { findExistingTab } from '@/app/tabs/identity'
+import { fileIdentitiesMatch, findTabByFileIdentity } from '@/app/tabs/open/identity'
 
 function setupGlobals() {
   globalThis.window = {
@@ -47,65 +48,59 @@ function makeHandle(
 
 describe('file identity', () => {
   test('matches equivalent handles without using file names as identity', async () => {
-    const stored = makeHandle('design.fig', async () => false)
-    // The incoming alias handle reports the stored handle as the same entry,
-    // so the alias request finds the stored tab even though the names differ.
-    const alias = makeHandle('alias.fig', async (other) => other.name === 'design.fig')
+    const stored = makeHandle('design.fig', async (other) => other.name === 'alias.fig')
+    const alias = makeHandle('alias.fig', async () => false)
     const sameName = makeHandle('design.fig', async () => false)
 
-    const storedTab = {
-      store: {
-        getSourceHandle: () => stored,
-        getSourcePath: () => null,
-        getFileHandle: () => null,
-        getFilePath: () => null
-      }
-    }
-    const sameNameTab = {
-      store: {
-        getSourceHandle: () => sameName,
-        getSourcePath: () => null,
-        getFileHandle: () => null,
-        getFilePath: () => null
-      }
-    }
-
-    // The stored handle reports the alias handle as the same entry, so the
-    // alias request finds the stored tab even though the names differ.
-    await expect(findExistingTab([storedTab], alias, undefined)).resolves.toBe(storedTab)
-    // A different handle with the same name is not the same file.
-    await expect(findExistingTab([storedTab], sameName, undefined)).resolves.toBeNull()
     await expect(
-      findExistingTab([storedTab, sameNameTab], undefined, undefined)
-    ).resolves.toBeNull()
+      fileIdentitiesMatch({ handle: stored, path: null }, { handle: alias, path: null })
+    ).resolves.toBe(true)
+    await expect(
+      fileIdentitiesMatch({ handle: stored, path: null }, { handle: sameName, path: null })
+    ).resolves.toBe(false)
+  })
+
+  test('ignores an asynchronous handle match after the tab source changes', async () => {
+    const comparison = Promise.withResolvers<boolean>()
+    const started = Promise.withResolvers<undefined>()
+    const storedHandle = makeHandle('stored.fig', async () => {
+      started.resolve(undefined)
+      return comparison.promise
+    })
+    const incomingHandle = makeHandle('incoming.fig', async () => false)
+    let storedIdentity: DocumentSourceIdentity = { handle: storedHandle, path: null }
+    const tab = { store: { getSourceIdentity: () => storedIdentity } }
+
+    const finding = findTabByFileIdentity([tab], {
+      handle: incomingHandle,
+      path: null
+    })
+    await started.promise
+    storedIdentity = { handle: storedHandle, path: '/other.fig' }
+    comparison.resolve(true)
+
+    await expect(finding).resolves.toBeNull()
   })
 
   test('finds a tab by path and ignores tabs without stable identity', async () => {
+    const matchedIdentity = { handle: null, path: '/tmp/design.fig' }
     const matched = {
-      store: { getSourcePath: () => '/tmp/design.fig', getSourceHandle: () => null }
+      store: { getSourceIdentity: () => matchedIdentity }
     }
+    const unidentifiedIdentity = { handle: null, path: null }
     const unidentified = {
-      store: {
-        getSourcePath: () => null,
-        getSourceHandle: () => null,
-        getFilePath: () => null,
-        getFileHandle: () => null
-      }
+      store: { getSourceIdentity: () => unidentifiedIdentity }
     }
 
     await expect(
-      findExistingTab([unidentified, matched], undefined, '/tmp/design.fig')
+      findTabByFileIdentity([unidentified, matched], {
+        handle: null,
+        path: '/tmp/design.fig'
+      })
     ).resolves.toBe(matched)
-    await expect(findExistingTab([unidentified], undefined, '/tmp/design.fig')).resolves.toBeNull()
-    await expect(findExistingTab([unidentified], undefined, undefined)).resolves.toBeNull()
-  })
-
-  test('matches platform-equivalent path spellings', async () => {
-    const matched = {
-      store: { getSourcePath: () => '/tmp//design.fig/', getSourceHandle: () => null }
-    }
-
-    await expect(findExistingTab([matched], undefined, '/tmp/design.fig')).resolves.toBe(matched)
+    await expect(
+      findTabByFileIdentity([unidentified], { handle: null, path: null })
+    ).resolves.toBeNull()
   })
 })
 
@@ -233,7 +228,7 @@ describe('openFileInNewTab deduplication', () => {
     ).resolves.toBeUndefined()
 
     expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
-    expect(getActiveStore().getSourcePath()).toBe('/tmp/retry.fig')
+    expect(getActiveStore().getSourceIdentity().path).toBe('/tmp/retry.fig')
   })
 
   test('keeps same-named files distinct without a path or handle', async () => {

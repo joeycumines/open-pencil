@@ -98,7 +98,6 @@ export function createDOMOpenActions({
         retryable: describeDiagnosticError(e).retryable
       })
       toast.error(notificationMessages.get().openDOMCSSFailed({ error: errorDetail(e) }))
-      throw e
     } finally {
       state.loading = false
     }

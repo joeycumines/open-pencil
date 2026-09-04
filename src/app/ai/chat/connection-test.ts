@@ -3,7 +3,6 @@ import { generateText } from 'ai'
 import { isInsufficientCreditError, providerErrorStatus } from '@/app/ai/chat/failure'
 import { createLanguageModel, resolveLanguageModelID, type ModelConfig } from '@/app/ai/chat/model'
 import { isTauri } from '@/app/tauri/env'
-import { PROVIDER_CONNECTION_TEST_TIMEOUT_MS } from '@/constants'
 
 export type ProviderConnectionTestResult =
   | { ok: true }
@@ -98,10 +97,10 @@ export async function testProviderConnection(
 
   try {
     await generateText({
-      model: createLanguageModel(config, { requestTimeoutMs: PROVIDER_CONNECTION_TEST_TIMEOUT_MS }),
+      model: createLanguageModel(config),
       prompt: 'Reply with OK.',
       maxOutputTokens: 1,
-      abortSignal: AbortSignal.timeout(PROVIDER_CONNECTION_TEST_TIMEOUT_MS)
+      abortSignal: AbortSignal.timeout(15_000)
     })
     return { ok: true }
   } catch (error) {

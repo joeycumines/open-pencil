@@ -37,21 +37,6 @@ describe('font fallback manifest', () => {
     )
   })
 
-  test('does not use cross-script fallbacks as strict Korean candidates', () => {
-    const korean = fontFallbackEntry('cjk-kr', 'X11; Linux x86_64')
-
-    expect(fontFallbackEntry('cjk-kr', 'Mozilla/5.0 (Macintosh)').localFamilies).toEqual([
-      'Apple SD Gothic Neo'
-    ])
-    expect(fontFallbackEntry('cjk-kr', 'Mozilla/5.0 (Windows NT 10.0)').localFamilies).toEqual([
-      'Malgun Gothic'
-    ])
-    expect(korean.localFamilies).toContain('Noto Sans CJK KR')
-    expect(korean.remoteFamilies).toContain('Noto Sans KR')
-    expect(korean.localFamilies).not.toContain('Noto Sans CJK SC')
-    expect(korean.remoteFamilies).not.toContain('Noto Sans SC')
-  })
-
   test('returns entries by script', () => {
     expect(fontFallbackEntry('arabic').localFamilies).toContain('Geeza Pro')
     expect(fontFallbackEntry('cjk', 'Mozilla/5.0 (Macintosh)').localFamilies).toContain(

@@ -27,9 +27,6 @@ type DocumentSourceOptions = DocumentSourceAccess & {
   stopWatchingFile: () => void
   startWatchingFile: () => Promise<void>
   getRenderer: () => Editor['renderer']
-  setSourceHandle: (handle: FileSystemFileHandle | null) => void
-  setSourcePath: (path: string | null) => void
-  setSourceFileName: (name: string | null) => void
 }
 
 export function createDocumentSourceActions({
@@ -49,9 +46,6 @@ export function createDocumentSourceActions({
   getSavedVersion,
   setSavedVersion,
   setLastWriteTime,
-  setSourceHandle,
-  setSourcePath,
-  setSourceFileName,
   getRenderer
 }: DocumentSourceOptions) {
   function buildFigFile() {
@@ -84,7 +78,6 @@ export function createDocumentSourceActions({
     setSourceIdentity,
     setSavedVersion,
     setLastWriteTime,
-    updateSourceIdentity,
     startWatchingFile: () => {
       void startWatchingFile()
     },
@@ -113,11 +106,6 @@ export function createDocumentSourceActions({
     const isFig = sourceFormat === 'fig'
     setFileHandle(isFig ? (handle ?? null) : null)
     setFilePath(isFig ? (path ?? null) : null)
-
-    // Store identity metadata for all source formats so the tab layer can
-    // deduplicate files on every platform, not only .fig files.
-    updateSourceIdentity(fileName, handle, path)
-
     setDownloadName(figDownloadName(fileName, sourceFormat))
     setSourceIdentity({ handle: handle ?? null, path: path ?? null })
     setSavedVersion(state.sceneVersion)
@@ -148,19 +136,6 @@ export function createDocumentSourceActions({
     const downloadName = downloadNameFromPath(path)
     setDownloadName(downloadName)
     state.documentName = documentNameFromFigPath(downloadName)
-    updateSourceIdentity(downloadName, undefined, path)
-  }
-
-  function updateSourceIdentity(fileName: string, handle?: FileSystemFileHandle, path?: string) {
-    setSourceHandle(handle ?? null)
-    setSourcePath(path ?? null)
-    setSourceFileName(fileName)
-  }
-
-  function clearSourceIdentity() {
-    setSourceHandle(null)
-    setSourcePath(null)
-    setSourceFileName(null)
   }
 
   function startWatchingCurrentFile() {
@@ -177,8 +152,6 @@ export function createDocumentSourceActions({
     setDocumentSource,
     setStorageDocumentSource,
     setPlannedFilePath,
-    updateSourceIdentity,
-    clearSourceIdentity,
     startWatchingCurrentFile,
     disposeDocumentIO,
     saveFigFile,

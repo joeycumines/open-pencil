@@ -1,7 +1,7 @@
 import { parseFigBuffer } from '@open-pencil/fig'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
-import { importNodeChanges, type FigImportOptions } from '#core/kiwi/fig/import'
+import { importNodeChanges } from '#core/kiwi/fig/import'
 import { getLazyFigImportContext, populateLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
 import {
   serializeSceneGraph,
@@ -11,7 +11,7 @@ import { buildFigPopulationDelta, installFigMutationJournal } from '#core/kiwi/f
 
 interface WorkerParseRequest {
   buffer: ArrayBuffer
-  options?: FigImportOptions
+  options?: { populate?: 'all' | 'first-page' }
 }
 interface PopulateRequest {
   type: 'populate'

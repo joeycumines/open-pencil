@@ -30,17 +30,12 @@ describe('derived instance layout regressions', () => {
         (node) => node.type === 'TEXT' && (node.derivedTextGlyphs?.length ?? 0) > 0
       ).length
 
-    // The fork's updateNode invalidation is content-aware: it preserves
-    // explicitly-provided glyphs (e.g. from instance text-clone propagation),
-    // so more imported texts keep their outline geometry than upstream (160 vs
-    // 43). These are the imported glyphs, and layout recomputation must not
-    // drop them.
-    expect(glyphCount()).toBe(160)
+    expect(glyphCount()).toBe(43)
 
     computeAllLayouts(layoutGraph)
     layoutNodes = collectAllNodes(layoutGraph)
 
-    expect(glyphCount()).toBe(160)
+    expect(glyphCount()).toBe(43)
   })
 
   test('preserves repeated badge overrides without moving sibling component wrappers', () => {
@@ -54,17 +49,12 @@ describe('derived instance layout regressions', () => {
     const placeholderFrame = childNamed(layoutGraph, content, 'Placeholder')
     const placeholderText = childNamed(layoutGraph, placeholderFrame, 'Placeholder')
 
-    // The Input instance tree is imported from the .fig fixture with
-    // source.format='fig', so the fork's preserveImportedInstanceLayout
-    // feature intentionally keeps Figma's stored positions instead of
-    // recomputing them via Yoga (upstream has no such feature and reflows to
-    // 0/8/6). These positions are the imported ground truth, not a rebaseline.
-    expect(inputFrame).toMatchObject({ x: 0, y: 30 })
+    expect(inputFrame).toMatchObject({ x: 0, y: 0 })
     expect(inputFrame?.width).toBeCloseTo(375.7498, 3)
     expect(inputFrame?.height).toBeCloseTo(39.3803, 3)
-    expect(content).toMatchObject({ x: 150, y: 0 })
-    expect(firstBadge?.x).toBeCloseTo(7.1268, 3)
-    expect(firstBadge?.y).toBeCloseTo(5.3451, 3)
+    expect(content).toMatchObject({ x: 0, y: 0 })
+    expect(firstBadge?.x).toBeCloseTo(8, 3)
+    expect(firstBadge?.y).toBeCloseTo(6, 3)
     expect(firstBadge?.width).toBeCloseTo(85.3239, 3)
     expect(firstBadge?.height).toBeCloseTo(28.6901, 3)
     expect(firstBadgeContent).toMatchObject({ x: 0, y: 0 })

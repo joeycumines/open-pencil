@@ -6,58 +6,10 @@ export function resolveBrowserFileURL(path: string): URL {
   return url
 }
 
-type AnimationFrameGlobals = Partial<
-  Pick<typeof globalThis, 'requestAnimationFrame' | 'cancelAnimationFrame'>
->
-
-export function yieldToUI(timeoutMs = 100): Promise<void> {
-  const g = globalThis as AnimationFrameGlobals
-  const requestAnimationFrame =
-    g.requestAnimationFrame ??
-    ((cb: (time: number) => void) => {
-      cb(0)
-      return 0
-    })
-  const cancelAnimationFrame = g.cancelAnimationFrame ?? (() => void 0)
-
-  let timeoutId: ReturnType<typeof setTimeout> | undefined
-  let animationFrameId: number | undefined
-
-  // The fallback is scheduled before the frame is registered so that a
-  // synchronous requestAnimationFrame (test harnesses, throttled frames)
-  // can always clear a defined timer handle.
-  const fallback = new Promise<void>((resolve) => {
-    let resolved = false
-    const settle = () => {
-      if (resolved) return
-      resolved = true
-      resolve()
-    }
-
-    timeoutId = setTimeout(() => {
-      if (animationFrameId !== undefined) cancelAnimationFrame(animationFrameId)
-      settle()
-    }, timeoutMs)
+export function yieldToUI(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
   })
-
-  const animation = new Promise<void>((resolve) => {
-    let resolved = false
-    const settle = () => {
-      if (resolved) return
-      resolved = true
-      resolve()
-    }
-
-    animationFrameId = requestAnimationFrame(() => {
-      if (timeoutId !== undefined) clearTimeout(timeoutId)
-      settle()
-    })
-  })
-
-  // Race so the UI continues even if requestAnimationFrame is throttled or
-  // suspended while the window is hidden. Whichever callback fires first
-  // cancels the other to avoid leaving dangling timers or rAF callbacks.
-  return Promise.race([animation, fallback])
 }
 
 type ViewportEditor = {
@@ -79,10 +31,7 @@ export function createDocumentViewportActions(editor: ViewportEditor, viewportSi
 }
 
 export function downloadBlob(data: Uint8Array, filename: string, mime: string) {
-  // Pass the TypedArray view directly. Using `data.buffer` would discard
-  // `byteOffset`/`byteLength` and include adjacent bytes when `data` is a
-  // subarray of a larger ArrayBuffer.
-  const blob = new Blob([data as BlobPart], { type: mime })
+  const blob = new Blob([data.buffer as ArrayBuffer], { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

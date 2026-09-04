@@ -101,34 +101,26 @@ async function discoveryFileExists(discoveryPath: string): Promise<boolean> {
  * endpoint's discoveryPath field.
  */
 async function computeExpectedDiscoveryPath(): Promise<string> {
-  const { homeDir, join, localDataDir, runtimeDir } = await import('@tauri-apps/api/path')
-  const isMac = navigator.platform.includes('Mac')
-  const isWindows = navigator.platform.includes('Win')
-
-  if (isMac) {
-    const home = await homeDir()
-    if (!home) throw new Error('homeDir() returned an empty string')
-    return join(home, 'Library', 'Application Support', 'OpenPencil', 'mcp.json')
-  }
-
-  if (isWindows) {
-    const localData = await localDataDir()
-    if (!localData) throw new Error('localDataDir() returned an empty string')
-    return join(localData, 'OpenPencil', 'mcp.json')
-  }
-
-  // Linux: Tauri's runtimeDir() resolves $XDG_RUNTIME_DIR (e.g.
-  // /run/user/<uid>), matching the server's getPlatformDir() in
-  // packages/mcp/src/transport/paths.ts. Fall back to ~/.openpencil when the
-  // runtime dir is unavailable; resolveDiscoveryPath() then uses the
-  // server-reported path from /health if the local guess is wrong.
-  const runtime = await runtimeDir().catch(() => null)
-  if (runtime) {
-    return join(runtime, 'openpencil', 'mcp.json')
-  }
-
+  const { homeDir, join } = await import('@tauri-apps/api/path')
   const home = await homeDir()
   if (!home) throw new Error('homeDir() returned an empty string')
+
+  const isMac = navigator.platform.includes('Mac')
+  const isWindows = navigator.platform.includes('Win')
+  // Must match the server's getPlatformDir() in packages/mcp/src/transport/paths.ts.
+  // On Windows, LOCALAPPDATA usually equals <home>\AppData\Local, so this fallback
+  // matches the server's path in the common case. When it doesn't (custom
+  // LOCALAPPDATA), resolveDiscoveryPath() falls back to the /health endpoint.
+  if (isMac) {
+    return join(home, 'Library', 'Application Support', 'OpenPencil', 'mcp.json')
+  }
+  if (isWindows) {
+    return join(home, 'AppData', 'Local', 'OpenPencil', 'mcp.json')
+  }
+  // Linux: $XDG_RUNTIME_DIR/openpencil/mcp.json or ~/.openpencil/mcp.json.
+  // In Tauri we don't have direct env access, so we use the home-directory
+  // fallback. The server may use XDG_RUNTIME_DIR if set — when the paths
+  // differ, resolveDiscoveryPath() falls back to the /health endpoint.
   return join(home, '.openpencil', 'mcp.json')
 }
 
