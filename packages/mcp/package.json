@@ -24,19 +24,19 @@
     },
     "./transport": {
       "types": "./dist/transport.d.mts",
-      "bun": "./dist/transport.mjs",
+      "bun": "./src/transport/paths.ts",
       "import": "./dist/transport.mjs",
       "default": "./dist/transport.mjs"
     },
     "./discovery": {
       "types": "./dist/discovery.d.mts",
-      "bun": "./dist/discovery.mjs",
+      "bun": "./src/transport/discovery.ts",
       "import": "./dist/discovery.mjs",
       "default": "./dist/discovery.mjs"
     },
     "./tools": {
       "types": "./dist/tools.d.mts",
-      "bun": "./dist/tools.mjs",
+      "bun": "./src/tool/index.ts",
       "import": "./dist/tools.mjs",
       "default": "./dist/tools.mjs"
     }

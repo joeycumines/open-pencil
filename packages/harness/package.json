@@ -8,7 +8,7 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "bun": "./dist/index.mjs",
+      "bun": "./src/index.ts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     }

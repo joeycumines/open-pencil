@@ -18,13 +18,7 @@ export default defineConfig({
     moduleSideEffects: false
   },
   deps: {
-    neverBundle: [
-      '@open-pencil/core',
-      /^@open-pencil\/core\//,
-      '@open-pencil/scene-graph',
-      /^@open-pencil\/scene-graph\//,
-      'node:fs/promises'
-    ],
+    neverBundle: ['@open-pencil/core', /^@open-pencil\/core\//, 'node:fs/promises'],
     onlyBundle: false
   },
   outputOptions: {
