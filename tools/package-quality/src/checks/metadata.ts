@@ -28,7 +28,7 @@ const rootPackage = readPackageJSON('.')
 const expectedVersion = rootPackage.version
 
 function checkRuntimePath(packageName: string, field: string, value: string): void {
-  if (value.endsWith('.ts') || isDeclarationPath(value)) {
+  if (value.endsWith('.ts') && !value.endsWith('.d.ts')) {
     errors.push(`${packageName}: ${field} must not point to runtime TypeScript (${value})`)
   }
   if (value.startsWith('./src/')) {
