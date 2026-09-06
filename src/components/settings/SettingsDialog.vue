@@ -4,8 +4,8 @@ import { computed } from 'vue'
 import { useI18n } from '@open-pencil/vue'
 import { IS_TAURI } from '@open-pencil/core/constants'
 
-import { useAIChat } from '@/app/ai/chat/use'
-import { appCredentialServices } from '@/app/settings/credentials/app'
+import { browserCredentialsRemembered, appCredentialServices } from '@/app/settings/credentials/app'
+import { setRememberCredentials } from '@/app/settings/credentials/media'
 import { settingsDialogOpen, settingsDialogSection } from '@/app/settings/dialog'
 import DiagnosticsSettingsPanel from '@/components/settings/diagnostics/DiagnosticsSettingsPanel.vue'
 import GeneralSettingsPanel from '@/components/settings/general/GeneralSettingsPanel.vue'
@@ -16,11 +16,10 @@ import StockPhotoKeysSection from '@/components/settings/provider/StockPhotoKeys
 import UsageSettingsPanel from '@/components/settings/usage/UsageSettingsPanel.vue'
 import StorageSettingsPanel from '@/components/settings/storage/StorageSettingsPanel.vue'
 import VectorizeSettingsSection from '@/components/settings/vectorize/VectorizeSettingsSection.vue'
-import AppSwitch from '@/components/ui/AppSwitch.vue'
+import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 import { AppDialogFooter, AppDialogHeader, AppDialogRoot } from '@/components/ui/dialog'
 
 const { credentials, settings, common } = useI18n()
-const { browserCredentialsRemembered, setRememberCredentials } = useAIChat()
 function onOpenChange(open: boolean): void {
   settingsDialogOpen.value = open
 }
