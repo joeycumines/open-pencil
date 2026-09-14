@@ -123,6 +123,7 @@ fr:panels.radialGradient
 fr:panels.rotation
 fr:panels.saturation
 fr:panels.variables
+fr:settings.animations
 fr:settings.diagnostics
 fr:settings.notifications
 fr:storage.bucket
@@ -230,3 +231,7 @@ zh-cn:panels.maskTypeAlpha
 zh-cn:storage.providerAmazonS3
 zh-cn:storage.providerBackblaze
 zh-cn:storage.providerR2
+
+de:ai.chatSettings
+es:ai.chatSettings
+it:ai.chatSettings

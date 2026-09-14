@@ -76,13 +76,17 @@ App dialogs compose the Reka-backed components under `src/components/ui/dialog/`
 
 Prefer `dev:portless`, especially in worktrees. It assigns branch-specific app and `mcp.open-pencil` sibling URLs with isolated runtime discovery. Use fixed-port `dev` only for Playwright, Tauri, and Dev Container flows.
 
+Browser tests use the canonical `playwright.config.ts`; do not create task-specific config copies or server runners. Managed runs must start the intended checkout, with server reuse explicitly opted into only for local development, never baseline comparisons or CI. Isolate the app URL and MCP endpoint, CORS origin, socket, and discovery path together. Playwright owns Vite; the existing Vite automation plugin owns MCP startup and cleanup; browser fixtures own interactions, not server processes. See `packages/docs/development/testing.md` for configuration and commands.
+
 ## Releases & CI
 
 For releases, update versions in the root and publishable package manifests plus `desktop/tauri.conf.json` and `desktop/Cargo.toml`; move `Unreleased` into `## x.y.z — YYYY-MM-DD`; commit `Release vX.Y.Z`; then tag and push `vX.Y.Z`.
 
-`.github/workflows/build.yml` is the source of truth: `v*` tags build signed desktop artifacts, create a draft release from the exact changelog section, upload updater files, and publish the package set defined there and in `tools/release-packages/src/publish-dirs.ts`. Publishing uses prepared, validated npm tarballs—do not publish package directories manually. Ensure Tauri and Apple signing/notarization secrets are configured. Verify the draft title/body and artifacts, then publish it; `homebrew.yml` updates the cask on publication.
+`.github/workflows/build.yml` is the source of truth: `v*` tags build signed desktop artifacts, create a draft release from the exact changelog section, upload updater files, and publish the public workspace packages discovered by `tools/package-artifacts/src/catalog.ts`. Bun source exports require the complete `src` directory in package contents; Node exports continue to use `dist`. Release preparation must preserve resolution maps. Publishing uses prepared npm tarballs verified through the shared Node/Bun consumer checks—do not publish package directories manually. Ensure Tauri and Apple signing/notarization secrets are configured. Verify the draft title/body and artifacts, then publish it; `homebrew.yml` updates the cask on publication.
 
 App/docs production workflows run on `v*` tags or `workflow_dispatch`, not ordinary `master` pushes. `ci.yml` and `heavy-tests.yml` define validation gates.
+
+PR CI always classifies changed paths through `tools/ci/`. Docs-only changes run documentation integrity/reference checks and the docs build, not engine, browser, Storybook, or native suites. Runtime prompt Markdown, executable examples, configuration, and unknown paths require code validation. The aggregate `CI result` gate requires successful classification and every applicable job; failures, cancellations, and unexpected skips cannot pass. Do not restore workflow-level path filtering on required CI.
 
 ## Documentation
 
@@ -109,7 +113,8 @@ Use Conventional Commits (`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `bu
 - CLI commands own CLI UX independently; `eval` exposes operations through `FigmaAPI`.
 - MCP-only filesystem/server tools live in `packages/mcp/src/tool/registration.ts`; listener/session lifecycle lives under `server/`, stdio under `stdio/`, and transport discovery under `transport/`. File access must resolve symlinks inside the effective MCP root; CLI defaults are cwd on macOS/Linux and home on Windows.
 - Keep MCP transport tests under `tests/engine/mcp/{server,stdio,transport}` and shared fixtures under `tests/helpers/mcp`; isolate tests from user runtime discovery.
-- Core codegen prompts live under `packages/core/src/tools/prompts/`; app chat/ACP prompts under `src/app/ai/**`.
+- Shared scene-authoring guidance and tested examples live under `packages/core/src/design-jsx/reference/`; `reference.ts` combines them with renderer metadata. Core codegen prompts under `packages/core/src/tools/prompts/` and the app chat/ACP prompt compose that public reference rather than copying it. Run `bun run generate:authoring-reference` after changes; committed skill/docs copies are checked by `check:authoring-reference` (also part of `check:docs`). Do not edit generated reference files directly.
+- The installable agent skill is maintained in `skills/open-pencil/`. Changes to agent-facing APIs, CLI/MCP behavior, or design authoring must update affected skill examples, prompts, and public documentation in the same change. Keep examples valid in their actual execution environment; do not advertise library exports as scripting globals unless exposed there. Prefer runtime discovery and canonical references over duplicated API/tool inventories.
 
 ## ACP and collaboration
 
@@ -119,6 +124,8 @@ Use Conventional Commits (`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `bu
 - Collaboration lives under `src/app/collab/**` and uses Trystero, Yjs, and awareness; preserve crypto-safe room IDs and peer cleanup.
 
 ## Code conventions
+
+- Use Valibot for first-party runtime validation. Keep Zod at upstream SDK integration boundaries that require it, such as MCP tool registration; do not maintain parallel first-party schemas in both libraries.
 
 - Put code and tests in the established owning domain; inspect nearby structure before adding files.
 - `bun run check:arch` enforces boundaries: use public workspace exports, keep Core framework-neutral, keep app services out of views/shared UI, and keep property-panel internals scoped to that panel.
@@ -134,10 +141,16 @@ Use Conventional Commits (`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `bu
 
 Private tooling belongs under `tools/<domain>/{src,tests}`, with kebab-case domains and focused tests. `scripts/` may contain only tiny compatibility entrypoints; put real workflow, release, architecture, package, or visual tooling in `tools/`.
 
-- Use `@/` for app cross-directory imports. Package aliases are `#vue/*`, `#cli/*`, `#dom-css/*`, `#mcp/*`, and `#core/*`; prefer clear relative imports nearby.
+- Use `@/` for app cross-directory imports. Never escape an alias root with `../` (for example `#tests/../vite`); fix module ownership instead. Package aliases are `#vue/*`, `#cli/*`, `#dom-css/*`, `#mcp/*`, and `#core/*`; prefer clear relative imports nearby.
 - No `any`, non-null assertions, or `Math.random()`; use precise types, guards, and `crypto.getRandomValues()`.
+- Use the existing `dedent` package for multiline prompt composition and embedded examples instead of escaped newline strings. Keep substantial prompt prose in the owning Markdown source; compose it rather than duplicating it. Apply this convention across app, packages, and tools.
+- Tooling must resolve the workspace with `resolveWorkspaceRoot` from `@open-pencil/package-artifacts`, not parent-directory traversal. Use domain aliases for cross-directory tooling imports, including tests; keep nearby sibling imports relative.
 - Reuse named types and primitives from `@open-pencil/scene-graph`; do not respell `Color`, `Vector`, `SceneNode`, `Effect`, `Fill`, or `Stroke` shapes.
-- Window API declarations belong in `src/global.d.ts` or `packages/core/src/global.d.ts`.
+- Window API augmentations belong in the owning compilation boundary: app declarations in `src/global.d.ts`, package DOM gaps in the owning package's `global.d.ts`, and native-test declarations in `tests/helpers/tauri/native-global.d.ts`. Never put `declare global` in specs or implementation modules. Include canonical declarations through tsconfig instead of duplicating them.
+- Keep app API contracts named and owned by their implementation domain; declaration files import those types. Derive vendor API types from top-level type imports rather than hand-copying signatures. Optional runtime globals remain optional and require a runtime guard.
+- Native tests centralize invocation in a guarded test helper using vendor-derived types; do not import packages inside serialized WebView callbacks or repeat direct Tauri-global access in specs. Never expand production Window declarations just to accommodate test fixtures.
+- Prefer test-runner-owned fixtures and request/route counters over browser globals. For in-page performance instrumentation, return a scoped `JSHandle` from `evaluateHandle()`; restore patched methods/listeners and dispose the handle in `finally`. Handles do not survive navigation. Assert transient DOM state with locators before the interaction ends when possible. Do not create a catch-all test Window interface or add ad-hoc counter properties to window.
+- In Bun tests, prefer injected dependencies or scoped spies with explicit cleanup. `mock.restore()` restores spies but does not undo `mock.module()` overrides; do not assume module mocks are isolated by cleanup hooks. Read the installed runner's current lifecycle/mocking docs before introducing global or module-level instrumentation.
 - Use `culori` for color conversion and existing dependencies before custom implementations.
 - Prefer VueUse for common browser, event, focus, clipboard, storage, and timer behavior, but keep one-shot rAF or explicit service-owned timers when clearer.
 - Components must not hold module-level mutable state. Share repeated logic/constants rather than copying it.
@@ -160,6 +173,8 @@ Self-review for duplication, named shared types, precise unions, and files appro
 ### Native WebView tests
 
 Native desktop interaction checks live under `tests/e2e/native/**` and run through WebdriverIO against an explicit test-only Tauri binary. Use `bun run test:native` to build and run them, or `bun run build:native-test` when only the binary is needed. The embedded WebDriver plugin is compiled only with the `native-test` Cargo feature and must never be enabled in normal development or production binaries.
+
+Native-test builds use a separate application identifier, an ephemeral WebView data store, and process-memory credentials. Never run UI smoke tests against production Keychain entries or clear user recovery data to unblock tests. Tests requiring persistence across application restarts need a dedicated test-owned persistent profile rather than the default ephemeral profile.
 
 Keep responsibilities distinct: engine tests cover state contracts, Playwright browser E2E covers application integration, and native tests answer only whether the real platform WebView and Tauri shell deliver an interaction correctly. Platform-limited checks must skip rather than claim coverage. Synthetic composition tests do not prove real IME behavior, and native clipboard behavior remains a separate acceptance gap unless the test receives trusted OS clipboard events.
 
@@ -204,6 +219,7 @@ Keep responsibilities distinct: engine tests cover state contracts, Playwright b
 - Colocate `ComponentName.stories.ts` with `ComponentName.vue`. Multipart composition stories may use a descriptive family name. Preserve explicit Storybook titles and exported story names during file moves; keep default playgrounds static and give interaction flows named stories. Use deterministic fixtures and colocated Vue demos for substantial markup.
 - `src/components/ui/**` is store-free app design-system code; feature controls stay in their domain.
 - SDK property primitives remain controlled/editor-agnostic. Compose property rows from `PanelGrid`, `PanelFieldGroup`, `PanelItemRow`, and `PropertyItemRow`; use `BindableValue`, `FillRoot`, and `FillSwatch` rather than rebuilding binding/picker infrastructure.
+- Do not add automated tests or snapshot baselines for simple CSS-only UI changes, including spacing, sizing, colors, and responsive breakpoints. Verify these visually instead. Keep automated coverage focused on behavior and contracts; the separate canvas-renderer visual coverage requirement still applies.
 - Prefer accessible role/name, label, then text in tests. Use scoped `data-slot` anatomy or semantic attributes (`data-property`, `data-command`, `data-node-id`) when needed; reserve `data-test-id` for integration boundaries and never add test-hook props.
 - Use Reka UI primitives and typed Tailwind Variants themes under `src/theme/**`; merge per-instance `ui` slot overrides, expose `class` for single-root components, and do not add one-off class props. Use `UI` casing in type names.
 - Bind visual state through semantic `data-*` attributes; Steiger rejects template-time `use*UI()`, visual-state utility branches, and raw SVG app icons.
@@ -220,8 +236,19 @@ Keep responsibilities distinct: engine tests cover state contracts, Playwright b
 - Binding-aware fields detach/mutate only on the first value change; opening/focusing is non-destructive.
 - Preserve nearby interaction gotchas when refactoring: splitter handles, NumberField pointer ownership, section dragging, panel containment, and number-spinner styling.
 
+### Animations
+
+Motion policy lives in `src/app/shell/motion/`: resolve persisted System/Off preference and OS reduction once. The root `data-motion` attribute and the app's Tailwind `motion-safe`/`motion-reduce` variants represent this effective policy, including portalled content. Store-free presets/treatments live in `src/theme/motion/`; compose them into owning themes. Use the policy-aware Motion adapters for shared or feature-specific transitions rather than repeating preference conditionals in components. Keep what moves, geometry, and genuinely feature-specific spring values local.
+
+- Use Tailwind transitions and `tw-animate-css` for simple visual state changes and enter/exit animations. Use the existing `motion-v` dependency for gesture-driven motion, coordinated layout changes, and springs; do not add another animation library.
+- Use Reka state attributes and measured CSS variables for collapsibles. The utilities are `animate-collapsible-down` and `animate-collapsible-up`; keep padding and borders inside the animated height wrapper so they do not snap during collapse.
+- Respect `prefers-reduced-motion` in both CSS and Motion. Disable or simplify nonessential motion while preserving state changes and interaction feedback.
+- Keep reusable animation styling in the owning theme and share repeated duration/easing values rather than scattering timing constants across components.
+- Verify opening and closing, interrupted transitions, reduced motion, and scroll behavior. Expanding historical chat content must not force the transcript to the bottom.
+
 ## File format
 
+- Figma clipboard envelope encoding, decoding, bounds, and SceneGraph import conversion belong to `@open-pencil/fig/clipboard`. Core prepares runtime fonts/text and owns editor placement/history; browser/Tauri adapters own system clipboard I/O. Do not add platform clipboard APIs to Fig.
 - Kiwi schema/runtime/codec/container helpers live in `@open-pencil/kiwi`; complete archive parsing and SceneGraph conversion live in `@open-pencil/fig`; Core owns format-neutral orchestration, runtime fonts/workers, and thumbnails.
 - Vector networks use the reverse-engineered `vectorNetworkBlob`; codecs live under `packages/core/src/vector/` and types in Scene Graph.
 - File System Access APIs are browser APIs, not Tauri-only. Keep Safari download fallback and defer `revokeObjectURL`.

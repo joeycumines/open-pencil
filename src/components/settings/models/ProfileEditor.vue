@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger } from 'reka-ui'
+import { ref } from 'vue'
+
+import type { AIProviderID } from '@open-pencil/core/constants'
 import { useI18n } from '@open-pencil/vue'
+
+import { useModelProfileEditor } from '@/app/ai/models/settings/profile-editor/use'
 import ProviderConnectionTestButton from '@/components/chat/ProviderConnectionTestButton.vue'
 import ProviderSelect from '@/components/settings/provider-select/ProviderSelect.vue'
 import ProviderSettingsField from '@/components/settings/provider/ProviderSettingsField.vue'
 import ProviderSettingsInput from '@/components/settings/provider/ProviderSettingsInput.vue'
 import ProviderSettingsKeyField from '@/components/settings/provider/ProviderSettingsKeyField.vue'
-import AppCombobox from '@/components/ui/select/AppCombobox.vue'
+import AppButton from '@/components/ui/button/AppButton.vue'
+import { AppConfirmationDialog } from '@/components/ui/dialog'
 import AppInput from '@/components/ui/input/AppInput.vue'
+import AppCombobox from '@/components/ui/select/AppCombobox.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
-import { AppConfirmationDialog } from '@/components/ui/dialog'
-import { useModelProfileEditor } from '@/app/ai/models/settings/profile-editor/use'
-import type { AIProviderID } from '@open-pencil/core/constants'
 const { profileId } = defineProps<{ profileId?: string }>()
 const emit = defineEmits<{ done: []; deleted: [] }>()
 const { ai, common, credentials } = useI18n()
@@ -67,15 +70,7 @@ async function remove() {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col" data-test-id="settings-model-editor">
-    <div class="flex items-center gap-2 border-b border-border pb-3">
-      <button
-        type="button"
-        class="flex size-6 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-        :aria-label="common.back"
-        @click="emit('done')"
-      >
-        <icon-lucide-arrow-left class="size-3.5" />
-      </button>
+    <div class="flex shrink-0 items-center gap-2 border-b border-border pb-3">
       <div>
         <h3 class="text-xs font-semibold text-surface">
           {{ profileId ? ai.editModel : ai.addModel }}
@@ -276,29 +271,15 @@ async function remove() {
     </div>
 
     <div class="flex shrink-0 items-center gap-2 border-t border-border pt-3">
-      <button
-        v-if="canDelete"
-        type="button"
-        class="rounded px-2.5 py-1.5 text-[11px] text-danger hover:bg-danger/10"
-        @click="deleteOpen = true"
-      >
+      <AppButton v-if="canDelete" color="error" @click="deleteOpen = true">
         {{ ai.deleteModel }}
-      </button>
-      <button
-        type="button"
-        class="ml-auto rounded px-2.5 py-1.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
-        @click="emit('done')"
-      >
+      </AppButton>
+      <AppButton class="ml-auto" @click="emit('done')">
         {{ common.cancel }}
-      </button>
-      <button
-        type="button"
-        class="rounded bg-accent px-3 py-1.5 text-[11px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-        :disabled="!canSave"
-        @click="save"
-      >
+      </AppButton>
+      <AppButton color="primary" variant="solid" :disabled="!canSave" @click="save">
         {{ ai.saveModel }}
-      </button>
+      </AppButton>
     </div>
   </div>
 
