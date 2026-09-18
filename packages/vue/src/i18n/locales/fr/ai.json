@@ -1,4 +1,7 @@
 {
+  "maxAgentSteps": "Nombre maximal d’étapes par message",
+  "maxAgentStepsHint": "Pour l’IA intégrée uniquement ; ACP et Pi gèrent leurs propres limites. Enregistré avec Entrée ou en quittant le champ, puis appliqué au prochain message. Une limite élevée peut augmenter le coût.",
+  "maxAgentStepsRange": "Saisissez un nombre entier entre {min} et {max}.",
   "connectionTestSuccess": "Connexion réussie. Le modèle est accessible.",
   "connectionTestMissingAPIKey": "Saisissez une clé API avant le test.",
   "connectionTestMissingBaseURL": "Saisissez une URL de base avant le test.",
@@ -87,6 +90,7 @@
   "modelID": "ID du modèle",
   "customModelID": "ID du modèle personnalisé",
   "customModel": "Modèle personnalisé…",
+  "customModelGroup": "Modèle personnalisé",
   "advancedModelSettings": "Paramètres avancés",
   "outputLimit": "Limite de sortie",
   "outputLimitAutomatic": "Recommandation automatique",
@@ -137,15 +141,12 @@
   "allDocuments": "Tous les documents",
   "noChatsFound": "Aucune discussion trouvée.",
   "chatActions": "Actions de la discussion",
-  "copyDiagnosticLog": "Copier le journal de diagnostic",
-  "diagnosticCopied": "Journal de diagnostic copié.",
-  "diagnosticCopyFailed": "Impossible de copier le journal de diagnostic. Vérifiez les autorisations du presse-papiers et réessayez.",
   "continueChat": "Continuer",
-  "copyACPLog": "Copier le journal ACP",
   "chatSettings": "Discussion",
   "reasoningDisplay": "Affichage du raisonnement",
   "reasoningCollapsed": "Replié par défaut",
   "reasoningWhileThinking": "Déplier pendant le raisonnement",
   "reasoningExpanded": "Déplié par défaut",
-  "jumpToLatest": "Aller au dernier message"
+  "jumpToLatest": "Aller au dernier message",
+  "maxAgentStepsCustom": "Personnalisé…"
 }
