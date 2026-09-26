@@ -5,9 +5,9 @@ import { defineCommand } from 'citty'
 
 import { decodeBase64 } from '@open-pencil/core/bytes'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
-import type { RasterExportFormat } from '@open-pencil/core/io'
 import {
   exportHTMLBundle,
+  sceneNodesToTailwindJSX,
   sceneGraphToDesignDocument,
   type ExportHTMLBundleOptions
 } from '@open-pencil/dom-css'
@@ -19,8 +19,14 @@ import { ok, printError } from '#cli/format'
 import { loadDocument, populateDocumentPage, populateWholeDocument } from '#cli/headless'
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
-const RASTER_FORMATS = ['PNG', 'JPG', 'WEBP']
-const ALL_FORMATS = new Set([...RASTER_FORMATS, 'SVG', 'PDF', 'PPTX', 'JSX', 'FIG', 'HTML'])
+// HTML goes through the DOM/CSS bundle exporter; every other format is a Core IO adapter.
+const FORMAT_IDS = [...io.listExportFormats('node').map((format) => format.id), 'html']
+const ALL_FORMATS = new Set(FORMAT_IDS.map((id) => id.toUpperCase()))
+const FORMAT_LIST = `${FORMAT_IDS.slice(0, -1).join(', ')}, or ${FORMAT_IDS.at(-1)}`
+
+function formatSupportsScale(format: string): boolean {
+  return io.getFormat(format.toLowerCase())?.exportOptions?.scale ?? false
+}
 const JSX_STYLES = new Set(['openpencil', 'tailwind'])
 const HTML_STYLES = new Set(['inline', 'tailwind'])
 const HTML_MODES = new Set(['fragment', 'standalone'])
@@ -134,6 +140,23 @@ async function writeHTMLFiles(
   if (assetFiles.length > 0) console.log(ok(`Assets: ${assetFiles.length} files`))
 }
 
+async function exportTailwindJSXFromFile(
+  args: ExportArgs,
+  graph: Awaited<ReturnType<typeof loadDocument>>,
+  target: FileExportTarget,
+  defaultName: string
+) {
+  const nodeIds =
+    target.scope === 'node' ? [target.nodeId] : (graph.getNode(target.pageId)?.childIds ?? [])
+  const jsx = sceneNodesToTailwindJSX(graph, nodeIds)
+  if (!jsx) {
+    printError('Nothing to export.')
+    process.exit(1)
+  }
+  await writeAndLog(resolve(args.output ?? exportFileName(defaultName, 'jsx')), jsx)
+  console.log(ok(`Target: ${targetLabel(args.page, args.node)}`))
+}
+
 async function exportHTMLFromFile(
   args: ExportArgs,
   graph: Awaited<ReturnType<typeof loadDocument>>,
@@ -238,11 +261,15 @@ async function exportFromFile(format: string, args: ExportArgs) {
     return
   }
 
-  if (format === 'JSX') {
-    options = { format: args.style }
-  } else if (format === 'FIG') {
+  // Tailwind JSX is projected through DOM/CSS, like HTML; OpenPencil JSX is a Core adapter.
+  if (format === 'JSX' && args.style === 'tailwind') {
+    await exportTailwindJSXFromFile(args, graph, target, defaultName)
+    return
+  }
+
+  if (format === 'FIG') {
     options = { renderThumbnail: true }
-  } else if (format === 'PNG' || format === 'JPG' || format === 'WEBP') {
+  } else if (formatSupportsScale(format)) {
     options = {
       format,
       scale: Number(args.scale),
@@ -256,7 +283,7 @@ async function exportFromFile(format: string, args: ExportArgs) {
       exportFileName(
         defaultName,
         result.extension,
-        format === 'PNG' || format === 'JPG' || format === 'WEBP' ? Number(args.scale) : undefined
+        formatSupportsScale(format) ? Number(args.scale) : undefined
       )
   )
   await writeAndLog(output, result.data as string | Uint8Array)
@@ -264,7 +291,7 @@ async function exportFromFile(format: string, args: ExportArgs) {
 }
 
 export default defineCommand({
-  meta: { description: 'Export a document to PNG, JPG, WEBP, SVG, PDF, PPTX, JSX, HTML, or .fig' },
+  meta: { description: `Export a document to ${FORMAT_LIST}` },
   args: {
     file: {
       type: 'positional',
@@ -280,7 +307,7 @@ export default defineCommand({
     format: {
       type: 'string',
       alias: 'f',
-      description: 'Export format: png, jpg, webp, svg, pdf, pptx, jsx, html, fig (default: png)',
+      description: `Export format: ${FORMAT_IDS.join(', ')} (default: png)`,
       default: 'png'
     },
     scale: { type: 'string', alias: 's', description: 'Export scale (default: 1)', default: '1' },
@@ -336,11 +363,9 @@ export default defineCommand({
     ...appTargetOptions
   },
   async run({ args }) {
-    const format = args.format.toUpperCase() as RasterExportFormat | 'SVG' | 'JSX' | 'FIG' | 'HTML'
+    const format = args.format.toUpperCase()
     if (!ALL_FORMATS.has(format)) {
-      printError(
-        `Invalid format "${args.format}". Use png, jpg, webp, svg, pdf, pptx, jsx, html, or fig.`
-      )
+      printError(`Invalid format "${args.format}". Use ${FORMAT_LIST}.`)
       process.exit(1)
     }
 

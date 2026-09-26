@@ -4,7 +4,6 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import type { SkiaRenderer } from '#core/canvas'
 import type { RenderColorSpace } from '#core/color/management'
-import type { JSXFormat } from '#core/design-jsx'
 
 import type { RasterExportFormat } from './formats/raster'
 
@@ -82,10 +81,6 @@ export interface SVGExportOptions {
   colorSpace?: RenderColorSpace
 }
 
-export interface JSXExportOptions {
-  format?: JSXFormat
-}
-
 export interface ExportResult {
   format: string
   mimeType: string
@@ -109,8 +104,8 @@ export interface IOFormatExportOptions {
   colorSpace?: boolean
 }
 
-export interface IOFormatAdapter {
-  id: string
+export interface IOFormatAdapter<Id extends string = string> {
+  id: Id
   label: string
   role: IOFormatRole
   category: IOFormatCategory
