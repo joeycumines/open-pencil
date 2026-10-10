@@ -1,7 +1,7 @@
 import fsd from '@feature-sliced/steiger-plugin'
 import { defineConfig } from 'steiger'
 
-import { openPencilArchitecturePlugin } from './tools/architecture/src/steiger-rules/index.ts'
+import { openPencilArchitecturePlugin } from './tools/checks/architecture/src/steiger-rules/index.ts'
 
 // OpenPencil is not laid out as canonical Feature-Sliced Design layers.
 // Keep Steiger focused on project-specific architecture boundaries instead of
@@ -41,6 +41,7 @@ export default defineConfig([
       'open-pencil/no-production-test-ids-in-shared-layers': 'error',
       'open-pencil/no-native-title-attributes-in-vue': 'error',
       'open-pencil/no-ui-imports-in-core': 'error',
+      'open-pencil/no-graph-builders-in-front-ends': 'error',
       'open-pencil/scripts-are-entrypoint-shims': 'error',
       'open-pencil/strict-tools-layout': 'error'
     }

@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 
 import { exportFigFile, initCodec } from '@open-pencil/core'
-import { parseFigBuffer } from '@open-pencil/fig'
+import { parseFigBuffer, materializeDocument } from '@open-pencil/fig'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
-import { importNodeChanges } from '#core/kiwi/fig/import'
+import { uint8ArrayToArrayBuffer } from '#tests/helpers/fig/fixtures'
 
 describe('Figma component property roundtrip', () => {
   beforeAll(async () => {
@@ -35,12 +35,8 @@ describe('Figma component property roundtrip', () => {
     component.source.id = '50:1'
 
     const bytes = await exportFigFile(graph)
-    const parsed = parseFigBuffer(
-      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    )
-    const imported = importNodeChanges(parsed.nodeChanges, parsed.blobs, undefined, {
-      populate: 'all'
-    })
+    const parsed = parseFigBuffer(uint8ArrayToArrayBuffer(bytes))
+    const imported = materializeDocument(parsed.nodeChanges, parsed.blobs).graph
     expect(imported.enabledLibraries.get('design-system')).toEqual({
       libraryId: 'design-system',
       revisionId: 'revision-1',
@@ -97,12 +93,8 @@ describe('Figma component property roundtrip', () => {
     }
 
     const bytes = await exportFigFile(graph)
-    const parsed = parseFigBuffer(
-      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    )
-    const imported = importNodeChanges(parsed.nodeChanges, parsed.blobs, undefined, {
-      populate: 'all'
-    })
+    const parsed = parseFigBuffer(uint8ArrayToArrayBuffer(bytes))
+    const imported = materializeDocument(parsed.nodeChanges, parsed.blobs).graph
     const importedSet = [...imported.getAllNodes()].find(
       (node) => node.type === 'COMPONENT_SET' && node.name === 'Button'
     )
@@ -144,12 +136,8 @@ describe('Figma component property roundtrip', () => {
     instance.source.id = '20:1'
 
     const bytes = await exportFigFile(graph)
-    const parsed = parseFigBuffer(
-      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    )
-    const imported = importNodeChanges(parsed.nodeChanges, parsed.blobs, undefined, {
-      populate: 'all'
-    })
+    const parsed = parseFigBuffer(uint8ArrayToArrayBuffer(bytes))
+    const imported = materializeDocument(parsed.nodeChanges, parsed.blobs).graph
     const importedComponent = [...imported.getAllNodes()].find((node) => node.name === 'Card')
     const importedInstance = [...imported.getAllNodes()].find(
       (node) => node.name === 'Card instance'
@@ -189,12 +177,10 @@ describe('Figma component property roundtrip', () => {
     if (!instance) throw new Error('Expected instance')
     instance.source.id = '20:1'
 
-    const imported = importNodeChanges(
+    const imported = materializeDocument(
       parseFigBuffer((await exportFigFile(graph)).buffer as ArrayBuffer).nodeChanges,
-      [],
-      undefined,
-      { populate: 'all' }
-    )
+      []
+    ).graph
     const importedInstance = [...imported.getAllNodes()].find(
       (node) => node.name === 'Card instance'
     )
@@ -203,15 +189,46 @@ describe('Figma component property roundtrip', () => {
       componentPropertyAssignments: { '30:1': 'Edited' }
     })
 
-    const reloaded = importNodeChanges(
+    const reloaded = materializeDocument(
       parseFigBuffer((await exportFigFile(imported)).buffer as ArrayBuffer).nodeChanges,
-      [],
-      undefined,
-      { populate: 'all' }
-    )
+      []
+    ).graph
     const reloadedInstance = [...reloaded.getAllNodes()].find(
       (node) => node.name === 'Card instance'
     )
     expect(reloadedInstance?.componentPropertyAssignments).toEqual({ '30:1': 'Edited' })
+  })
+
+  test('saves an exposed nested instance as Figma does and reopens it', async () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const button = graph.createNode('COMPONENT', page.id, {
+      name: 'Button',
+      componentPropertyDefinitions: [
+        { id: '10:1', name: 'Label', type: 'TEXT', defaultValue: 'Button' }
+      ]
+    })
+    graph.createNode('TEXT', button.id, {
+      name: 'Label',
+      text: 'Button',
+      componentPropertyReferences: [{ propertyId: '10:1', field: 'TEXT' }]
+    })
+    const card = graph.createNode('COMPONENT', page.id, { name: 'Card' })
+    const action = graph.createInstance(button.id, card.id, { name: 'Action' })
+    const plain = graph.createInstance(button.id, card.id, { name: 'Plain' })
+    if (!action || !plain) throw new Error('nested instances were not created')
+    graph.updateNode(action.id, { isExposedInstance: true })
+
+    const bytes = await exportFigFile(graph)
+    const parsed = parseFigBuffer(uint8ArrayToArrayBuffer(bytes))
+    const saved = (name: string) => parsed.nodeChanges.find((change) => change.name === name)
+    expect(saved('Action')?.propsAreBubbled).toBe(true)
+    expect(saved('Plain')?.propsAreBubbled).toBeUndefined()
+
+    const imported = materializeDocument(parsed.nodeChanges, parsed.blobs).graph
+    const reopened = (name: string) =>
+      [...imported.getAllNodes()].find((node) => node.name === name && node.type === 'INSTANCE')
+    expect(reopened('Action')?.isExposedInstance).toBe(true)
+    expect(reopened('Plain')?.isExposedInstance).toBe(false)
   })
 })

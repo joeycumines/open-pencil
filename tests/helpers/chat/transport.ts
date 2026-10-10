@@ -5,6 +5,7 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
     const setChatTransport = window.openPencil?.setChatTransport
     if (!setChatTransport) throw new Error('Transport override not available')
     let messageCounter = 0
+    let flakyFailed = false
 
     setChatTransport(() => ({
       async sendMessages({
@@ -20,6 +21,7 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
         const tool = normalized.includes('frame') || normalized.includes('rectangle')
         const code = normalized.includes('code block')
         const unsafeMarkdown = normalized.includes('unsafe markdown')
+        const table = normalized.includes('markdown table')
         const multipleParts = normalized.includes('multiple parts')
         const reasoning = normalized.includes('reasoning')
 
@@ -33,6 +35,11 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
         }
         if (normalized.includes('missing agent')) {
           throw new Error('Mock agent unavailable')
+        }
+        // Fails the first time only, before any reply, as a dropped connection does.
+        if (normalized.includes('flaky request') && !flakyFailed) {
+          flakyFailed = true
+          throw new Error('Mock connection dropped')
         }
 
         return new ReadableStream({
@@ -48,6 +55,21 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
             if (tool) response = 'Created a frame called "Card".'
             else if (unsafeMarkdown) {
               response = `[unsafe](javascript:alert(1)) ![embedded](data:image/svg+xml,<svg onload=alert(1)></svg>) ![approved](${window.location.origin}/assets/approved.png) ![unapproved](https://example.com/unapproved.png) ![insecure](http://example.com/insecure.png) [safe](https://openpencil.dev)`
+            } else if (table) {
+              response = [
+                'The button now has these states:',
+                '',
+                '| State | Look |',
+                '| --- | --- |',
+                '| Default | Burnt orange `#c2410c` with the soft glow |',
+                '| Hover | Brighter `#ea580c` with a bigger glow |',
+                '| Disabled | Muted `#374151` with grey text |',
+                '',
+                '- [x] Variants created',
+                '- [ ] Checked in preview',
+                '',
+                'See [the guide](https://openpencil.dev/guide).'
+              ].join('\n')
             } else if (code) response = '```typescript\nconst greeting = "Hello"\n```'
             enqueueText(controller, response)
           }

@@ -103,6 +103,57 @@ export function conversations(): Conversation[] {
         }
       ]
     },
+    {
+      id: 'failed-request',
+      title: 'Card spacing',
+      status: 'error',
+      messages: [
+        {
+          id: 'failed-first-request',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Add a card.' }]
+        },
+        {
+          id: 'failed-first-response',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Added a card to the page.' }]
+        },
+        {
+          id: 'failed-request-unanswered',
+          role: 'user',
+          // The request failed before any reply, so the chat ends with it.
+          parts: [{ type: 'text', text: 'Give it more padding.' }]
+        }
+      ]
+    },
+    {
+      id: 'reverted',
+      title: 'Blue header',
+      status: 'ready',
+      messages: [
+        {
+          id: 'reverted-request',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Make the header blue.' }]
+        },
+        {
+          id: 'reverted-response',
+          role: 'assistant',
+          // Reverted from the chat; conversations store the mark in the reply's metadata.
+          metadata: { reverted: true },
+          parts: [
+            {
+              type: 'tool-set_fill',
+              toolCallId: 'fill',
+              state: 'output-available',
+              input: { id: 'header', color: '#2563eb' },
+              output: { id: 'header', name: 'Header' }
+            },
+            { type: 'text', text: 'The header is now blue.' }
+          ]
+        }
+      ]
+    },
     { id: 'empty', title: 'New chat', status: 'ready', messages: [] },
     {
       id: 'long-title',

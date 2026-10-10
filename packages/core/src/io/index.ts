@@ -1,5 +1,5 @@
 export { IORegistry } from './registry'
-export { extractExportGraph } from './subgraph'
+export { extractExportGraph, findPageId } from './subgraph'
 export {
   BUILTIN_IO_FORMATS,
   type BuiltinIOFormatId,
@@ -15,7 +15,6 @@ export {
 } from './formats'
 export { exportFigFile, parseFigFile, readFigFile, type ParseFigFileOptions } from './formats/fig'
 export { parsePenFile, readPenFile } from '@open-pencil/pen'
-export { sceneNodeToJSX, selectionToJSX } from './formats/jsx'
 export {
   computeContentBounds,
   renderNodesToImage,
@@ -29,6 +28,7 @@ export {
 export {
   createSVGNodes,
   createSVGNodesFromImport,
+  isSVGMarkup,
   prepareSVGImport,
   renderNodesToSVG,
   geometryBlobToSVGPath,
@@ -36,6 +36,7 @@ export {
   type SVGImportData,
   type SVGImportOptions
 } from './formats/svg'
+export { vectorElement } from './formats/html/vectors'
 export {
   renderNodesToPPTX,
   type PPTXExportOptions,

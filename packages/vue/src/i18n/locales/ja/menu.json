@@ -10,6 +10,7 @@
   "openStorageWorkspace": "ストレージワークスペースを開く…",
   "save": "保存",
   "saveAs": "名前を付けて保存…",
+  "saveToStorage": "ストレージに保存…",
   "exportSelection": "選択範囲をエクスポート…",
   "autosave": "ファイルに自動保存",
   "copy": "コピー",
@@ -56,13 +57,17 @@
   "arrangeAlignMiddle": "上下中央揃え",
   "arrangeAlignBottom": "下揃え",
   "multiplayerCursors": "マルチプレイヤーカーソル",
+  "designIssues": "デザインの問題",
   "preferences": "環境設定",
   "snapToGeometry": "ジオメトリにスナップ",
   "snapToObjects": "オブジェクトにスナップ",
   "snapToPixelGrid": "ピクセルグリッドにスナップ",
   "renameSelection": "選択範囲の名前を変更…",
   "rulers": "ルーラー",
+  "pixelGrid": "ピクセルグリッド",
   "settings": "設定…",
+  "variables": "変数…",
+  "insertIcon": "アイコンを挿入…",
   "splitRight": "右に分割",
   "splitDown": "下に分割",
   "closeView": "ビューを閉じる",
@@ -70,5 +75,6 @@
   "exportSelectionAsPNG": "選択範囲を PNG としてエクスポート",
   "exportSelectionAsSVG": "選択範囲を SVG としてエクスポート",
   "exportSelectionAsPPTX": "選択範囲を PPTX としてエクスポート",
-  "exportSelectionAsFig": "選択範囲を .fig としてエクスポート"
+  "exportSelectionAsFig": "選択範囲を .fig としてエクスポート",
+  "togglePreview": "プレビュー"
 }

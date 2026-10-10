@@ -5,6 +5,7 @@ import type { Color, Fill, SceneNode, Stroke } from '@open-pencil/scene-graph'
 import { colorToHexRaw } from '@open-pencil/scene-graph/color'
 import {
   applySolidStrokeColor,
+  applyStrokePaint,
   BindableValueRoot,
   useColorBindingProvider,
   useI18n,
@@ -13,8 +14,9 @@ import {
 } from '@open-pencil/vue'
 import type { BindableValueActions } from '@open-pencil/vue'
 
-import ColorPicker from '@/components/ColorPicker/ColorPicker.vue'
+import FillPicker from '@/components/fill-picker/FillPicker.vue'
 import NumberField from '@/components/inputs/NumberField.vue'
+import PaintField from '@/components/inputs/PaintField.vue'
 import VariableBindingPicker from '@/components/properties/binding/VariableBindingPicker.vue'
 import PropertyItemRow from '@/components/properties/item-list/PropertyItemRow.vue'
 import {
@@ -23,14 +25,13 @@ import {
   commitPaintMutation,
   paintBindingTargets
 } from '@/components/properties/paint/binding'
+import { useGradientEditing } from '@/components/properties/paint/gradient-edit'
 import { createStrokeOkhclAdapter } from '@/components/properties/paint/okhcl'
-import PaintField from '@/components/properties/paint/PaintField.vue'
 import PaintValue from '@/components/properties/paint/PaintValue.vue'
 import PropertyListRoot from '@/components/properties/PropertyListRoot.vue'
 import { useSharedStylePicker } from '@/components/properties/shared-style/useSharedStylePicker'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
-import FillSwatchTrigger from '@/components/ui/paint/FillSwatchTrigger.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 const {
@@ -47,16 +48,34 @@ const strokeCtx = useStrokeControls()
 const { advancedActive } = strokeCtx
 const colorProvider = useColorBindingProvider()
 const okhcl = useOkHCL()
+const gradients = useGradientEditing()
+
+/** Opening a paint's picker shows its gradient handles on the canvas; closing commits the edit. */
+function onPickerOpenChange(
+  nodeIds: readonly string[],
+  index: number,
+  open: boolean,
+  binding: BindableValueActions<Color>
+) {
+  gradients.setOpen(gradients.target(nodeIds, 'strokes', index), open)
+  if (!open) commitPaintMutation(binding)
+}
 const { panels, common } = useI18n()
 const expandedSides = ref(false)
 
-function strokePreview(stroke: Stroke, color: Color): Fill {
-  return {
-    type: 'SOLID',
-    color,
-    opacity: stroke.opacity,
-    visible: stroke.visible
-  }
+/** A bound variable colours the swatch, but only a solid stroke has one colour to replace. */
+function displayStroke(stroke: Stroke, resolvedColor: Color | undefined): Fill {
+  return stroke.type === 'SOLID' && resolvedColor ? { ...stroke, color: resolvedColor } : stroke
+}
+
+function updateStrokePaint(
+  binding: BindableValueActions<Color>,
+  flush: () => void,
+  stroke: Stroke,
+  paint: Fill,
+  update: (stroke: Stroke) => void
+) {
+  applyPaintMutation(binding, flush, () => update(applyStrokePaint(stroke, paint)))
 }
 
 function updateStrokeColor(
@@ -147,32 +166,28 @@ function onToggleSides(activeNode: SceneNode | null) {
             @update:opacity="actions.patch(index, { opacity: $event })"
           >
             <template #preview>
-              <ColorPicker
-                :color="binding.resolvedValue ?? stroke.color"
+              <FillPicker
+                :label="panels.stroke"
+                :fill="displayStroke(stroke, binding.resolvedValue)"
                 :okhcl="createStrokeOkhclAdapter(okhcl, activeNode, index)"
+                :keep-open="gradients.pressesHandle"
+                :active-stop="gradients.stop(gradients.target(selectedNodeIds, 'strokes', index))"
+                @update:active-stop="
+                  gradients.setStop(gradients.target(selectedNodeIds, 'strokes', index), $event)
+                "
                 @update="
-                  updateStrokeColor(
-                    binding.actions,
-                    flush,
-                    $event,
-                    (changes) => actions.patch(index, changes),
-                    false
+                  updateStrokePaint(binding.actions, flush, stroke, $event, (next) =>
+                    actions.update(index, next)
                   )
                 "
-                @open-change="!$event && commitPaintMutation(binding.actions)"
+                @open-change="onPickerOpenChange(selectedNodeIds, index, $event, binding.actions)"
                 @cancel="cancelPaintMutation(binding.actions)"
-              >
-                <template #trigger>
-                  <FillSwatchTrigger
-                    :label="panels.stroke"
-                    :fill="strokePreview(stroke, binding.resolvedValue ?? stroke.color)"
-                  />
-                </template>
-              </ColorPicker>
+              />
             </template>
 
             <template #value>
               <PaintValue
+                v-if="stroke.type === 'SOLID'"
                 :color="stroke.color"
                 :resolved-color="binding.resolvedValue"
                 :variable-name="binding.variable?.name ?? binding.bindingId"

@@ -1,5 +1,11 @@
-import { SceneGraph } from '@open-pencil/scene-graph'
-import type { LayoutMode, LayoutSizing, SceneNode, VectorNetwork } from '@open-pencil/scene-graph'
+import { fillSizingFields, SceneGraph } from '@open-pencil/scene-graph'
+import type {
+  AxisSizingMode,
+  LayoutMode,
+  LayoutSizing,
+  SceneNode,
+  VectorNetwork
+} from '@open-pencil/scene-graph'
 import { copyEffects, copyFills, copyStrokes } from '@open-pencil/scene-graph/copy'
 import { populateInstanceChildren } from '@open-pencil/scene-graph/instances'
 import { parseSVGPath } from '@open-pencil/scene-graph/parse-path'
@@ -92,12 +98,14 @@ function applyAutoLayout(
       ? ctx.resolveNumber(pen.gap)
       : ((pen.gap ?? 0) as number)
 
+  // Fill is the child's grow or stretch, set with its parent; the frame itself stays fixed.
+  const own = (sizing: LayoutSizing): AxisSizingMode => (sizing === 'HUG' ? 'HUG' : 'FIXED')
   if (layoutMode === 'VERTICAL') {
-    overrides.primaryAxisSizing = heightSizing
-    overrides.counterAxisSizing = widthSizing
+    overrides.primaryAxisSizing = own(heightSizing)
+    overrides.counterAxisSizing = own(widthSizing)
   } else {
-    overrides.primaryAxisSizing = widthSizing
-    overrides.counterAxisSizing = heightSizing
+    overrides.primaryAxisSizing = own(widthSizing)
+    overrides.counterAxisSizing = own(heightSizing)
   }
 }
 
@@ -126,7 +134,7 @@ function applyTextProps(node: SceneNode, pen: PenNode, ctx: VarContext): void {
 function resolveSizing(pen: PenNode, ctx: VarContext) {
   const isTextLike = pen.type === 'text' || pen.type === 'icon_font'
   const defaultSize = isTextLike ? 20 : 100
-  const defaultW = isTextLike && pen.width === undefined ? 10_000 : defaultSize
+  const defaultW = isTextLike && pen.width === undefined ? 0 : defaultSize
   const w = parseSize(pen.width, defaultW, ctx)
   const h = parseSize(pen.height, defaultSize, ctx)
   const layout = mapLayoutMode(pen)
@@ -254,14 +262,8 @@ function createSceneNode(
   applyCornerRadius(node, pen.cornerRadius, ctx)
   applyPadding(node, pen.padding, ctx)
 
-  if (isTextLike) {
-    applyTextProps(node, pen, ctx)
-    if (parentLayout === 'NONE' && pen.width === undefined && !pen.textGrowth) {
-      node.textAutoResize = 'NONE'
-      node.width = node.text.length * node.fontSize * 0.65
-      node.height = node.fontSize * (node.lineHeight ? node.lineHeight / node.fontSize : 1.2)
-    }
-  }
+  // Text without a width resizes to its content, which laying out the document measures.
+  if (isTextLike) applyTextProps(node, pen, ctx)
 
   if (pen.type === 'path' && pen.geometry) {
     const vectorNetwork = parseSVGPath(pen.geometry)
@@ -270,15 +272,8 @@ function createSceneNode(
   }
 
   if (parentLayout !== 'NONE') {
-    const parentVertical = parentLayout === 'VERTICAL'
-    if (w.sizing === 'FILL') {
-      if (parentVertical) node.layoutAlignSelf = 'STRETCH'
-      else node.layoutGrow = 1
-    }
-    if (h.sizing === 'FILL') {
-      if (parentVertical) node.layoutGrow = 1
-      else node.layoutAlignSelf = 'STRETCH'
-    }
+    if (w.sizing === 'FILL') Object.assign(node, fillSizingFields(parentLayout, 'HORIZONTAL'))
+    if (h.sizing === 'FILL') Object.assign(node, fillSizingFields(parentLayout, 'VERTICAL'))
   }
 
   if (pen.reusable) {
@@ -475,14 +470,6 @@ function fixInstanceWidths(graph: SceneGraph): void {
   }
 }
 
-function fixTextWidths(graph: SceneGraph): void {
-  for (const node of graph.getAllNodes()) {
-    if (node.type !== 'TEXT' || !node.text || node.text.length <= 1) continue
-    if (node.width >= node.fontSize * 2) continue
-    node.width = node.text.length * node.fontSize * 0.65
-  }
-}
-
 export function parsePenFile(json: string): SceneGraph {
   const doc: PenDocument = JSON.parse(json)
   const graph = new SceneGraph()
@@ -508,7 +495,6 @@ export function parsePenFile(json: string): SceneGraph {
   populateInstances(graph)
   resolveThemeVariables(doc.children, graph, ctx)
   fixInstanceWidths(graph)
-  fixTextWidths(graph)
 
   if (graph.getPages(true).length === 0) {
     graph.addPage('Page 1')

@@ -34,6 +34,10 @@
         "accelerator": "CmdOrCtrl+Shift+S"
       },
       {
+        "id": "save-to-storage",
+        "label": "Save to Storage…"
+      },
+      {
         "type": "separator"
       },
       {
@@ -145,15 +149,18 @@
     "items": [
       {
         "id": "view.zoom100",
-        "label": "Zoom to 100%"
+        "label": "Zoom to 100%",
+        "accelerator": "CmdOrCtrl+0"
       },
       {
         "id": "view.zoomFit",
-        "label": "Zoom to Fit"
+        "label": "Zoom to Fit",
+        "accelerator": "Shift+1"
       },
       {
         "id": "view.zoomSelection",
-        "label": "Zoom to Selection"
+        "label": "Zoom to Selection",
+        "accelerator": "Shift+2"
       },
       {
         "id": "zoom-in",
@@ -180,13 +187,33 @@
         "type": "separator"
       },
       {
+        "id": "variables",
+        "label": "Variables…"
+      },
+      {
+        "type": "separator"
+      },
+      {
         "id": "view-rulers",
         "label": "Rulers",
+        "accelerator": "Shift+R",
+        "checkbox": true
+      },
+      {
+        "id": "view-pixel-grid",
+        "label": "Pixel Grid",
+        "accelerator": "Shift+'",
         "checkbox": true
       },
       {
         "id": "view-multiplayer-cursors",
         "label": "Multiplayer Cursors",
+        "accelerator": "Alt+CmdOrCtrl+\\",
+        "checkbox": true
+      },
+      {
+        "id": "view-design-issues",
+        "label": "Design Issues",
         "checkbox": true
       },
       {
@@ -233,6 +260,7 @@
           {
             "id": "snap-pixel-grid",
             "label": "Snap to Pixel Grid",
+            "accelerator": "CmdOrCtrl+Shift+'",
             "checkbox": true
           },
           {
@@ -252,6 +280,11 @@
         "id": "toggle-ui",
         "label": "Toggle UI",
         "accelerator": "CmdOrCtrl+\\"
+      },
+      {
+        "id": "toggle-preview",
+        "label": "Preview",
+        "accelerator": "CmdOrCtrl+Alt+Enter"
       },
       {
         "type": "separator"
@@ -280,6 +313,13 @@
         "id": "selection.ungroup",
         "label": "Ungroup Selection",
         "accelerator": "CmdOrCtrl+Shift+G"
+      },
+      {
+        "type": "separator"
+      },
+      {
+        "id": "insert-icon",
+        "label": "Insert Icon…"
       },
       {
         "type": "separator"
@@ -366,6 +406,10 @@
         "label": "Create Instance"
       },
       {
+        "id": "selection.createSlot",
+        "label": "Create Slot"
+      },
+      {
         "id": "selection.goToMainComponent",
         "label": "Go to Main Component"
       },
@@ -373,6 +417,10 @@
         "id": "selection.detachInstance",
         "label": "Detach Instance",
         "accelerator": "CmdOrCtrl+Alt+B"
+      },
+      {
+        "id": "selection.detachIcon",
+        "label": "Detach Icon"
       },
       {
         "type": "separator"

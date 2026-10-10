@@ -1,4 +1,4 @@
-import { serializeHTML } from '../serialize'
+import { serializeHTML } from '../export/html'
 import type {
   CSSComputeOptions,
   CSSRuntime,
@@ -35,6 +35,7 @@ const DEFAULT_COMPUTED_PROPERTIES = [
   'border-top-right-radius',
   'border-top-width',
   'box-shadow',
+  'box-sizing',
   'color',
   'column-gap',
   'display',

@@ -5,10 +5,11 @@ import { computed, ref } from 'vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 
 import AppToast from './AppToast.vue'
-import { toastProgressPercent, type ToastProps, type ToastProgress } from './toast'
+import { progressPercent, type ProgressAmount } from './progress'
+import type { ToastProps } from './toast'
 
 const meta = {
-  title: 'Design System/Toast',
+  title: 'Design System/Feedback/Toast',
   component: AppToast,
   // A toast only renders inside a provider, and the viewport is where it lands.
   decorators: [
@@ -65,6 +66,18 @@ export const WithAction: Story = {
   args: { message: 'Design file moved to Trash.', actionLabel: 'Undo' }
 }
 
+export const ErrorWithAction: Story = {
+  args: {
+    message: 'Your provider API key is invalid or expired. Replace it in Settings.',
+    variant: 'error',
+    actionLabel: 'Open settings',
+    copyable: true,
+    copyLabel: 'Copy message',
+    copiedLabel: 'Copied',
+    closeLabel: 'Close'
+  }
+}
+
 export const RepeatedMessage: Story = {
   args: {
     message: 'Lost connection to the collaboration room',
@@ -105,14 +118,14 @@ export const ProgressLifecycle: Story = {
       const totalBytes = ref<number | null>(TOTAL_BYTES)
       const reporting = ref(true)
 
-      const progress = computed<ToastProgress | null>(() => {
+      const progress = computed<ProgressAmount | null>(() => {
         if (!reporting.value) return null
         return totalBytes.value === null
           ? { value: downloaded.value }
           : { value: downloaded.value, max: totalBytes.value }
       })
       const progressLabel = computed(() => {
-        const percent = toastProgressPercent(progress.value)
+        const percent = progressPercent(progress.value)
         if (percent === null) return `${formatMiB(downloaded.value)} downloaded`
         return `${percent}% · ${formatMiB(downloaded.value)} of ${formatMiB(totalBytes.value ?? 0)}`
       })

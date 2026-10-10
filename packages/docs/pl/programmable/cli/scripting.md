@@ -65,6 +65,7 @@ API jest celowo zbliżone do Figma Plugin API, ale pracuje z SceneGraph i format
 - `figma.createPolygon()`
 - `figma.createStar()`
 - `figma.createVector()`
+- `figma.createNodeFromSvg(svg)`
 - `figma.createComponent()`
 - `figma.createSection()`
 
@@ -106,6 +107,6 @@ Najczęściej używane właściwości można odczytywać i zapisywać przez poś
 
 ## Brak pełnej zgodności z Figmą
 
-Nie są jeszcze dostępne między innymi `node.exportAsync()`, `node.setBoundVariable()`, `node.detachInstance()`, `figma.combineAsVariants()` i API stylów Figmy.
+Nie są jeszcze dostępne między innymi `node.exportAsync()`, `node.setBoundVariable()`, `figma.combineAsVariants()` i API stylów Figmy.
 
 Zamiast nich używaj poleceń eksportu CLI, narzędzi głównego pakietu albo bezpośrednich funkcji pomocniczych SceneGraph.

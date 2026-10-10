@@ -1,3 +1,5 @@
+import { compact } from 'es-toolkit/array'
+
 import { IS_BROWSER, WEB_APP_ORIGIN } from '@/constants'
 
 /** Origins OpenPencil may run from when calling S3 from the browser. */
@@ -22,7 +24,7 @@ export function collectCloudCORSOrigins(extra?: string | null): string[] {
   if (IS_BROWSER && window.location.origin) {
     set.add(window.location.origin)
   }
-  return [...set].filter(Boolean).sort()
+  return compact([...set]).sort()
 }
 
 function escapeXML(value: string): string {
@@ -50,6 +52,7 @@ ${originTags}
     <AllowedMethod>HEAD</AllowedMethod>
     <AllowedHeader>*</AllowedHeader>
     <ExposeHeader>ETag</ExposeHeader>
+    <ExposeHeader>Content-Range</ExposeHeader>
     <ExposeHeader>x-amz-request-id</ExposeHeader>
     <ExposeHeader>x-amz-id-2</ExposeHeader>
     <ExposeHeader>x-amz-version-id</ExposeHeader>
@@ -67,7 +70,14 @@ export function buildCORSConfigurationJSON(origins: string[]): string {
         AllowedHeaders: ['*'],
         AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
         AllowedOrigins: origins,
-        ExposeHeaders: ['ETag', 'x-amz-request-id', 'x-amz-id-2', 'x-amz-version-id'],
+        // Content-Range lets a 200 reply to a range read be checked against the request.
+        ExposeHeaders: [
+          'ETag',
+          'Content-Range',
+          'x-amz-request-id',
+          'x-amz-id-2',
+          'x-amz-version-id'
+        ],
         MaxAgeSeconds: 3600
       }
     ],

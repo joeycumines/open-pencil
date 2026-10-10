@@ -85,6 +85,7 @@ API намеренно близок к Figma Plugin API, но работает �
 - `figma.createPolygon()`
 - `figma.createStar()`
 - `figma.createVector()`
+- `figma.createNodeFromSvg(svg)`
 - `figma.createComponent()`
 - `figma.createSection()`
 
@@ -149,7 +150,6 @@ API намеренно близок к Figma Plugin API, но работает �
 
 - `node.exportAsync()`
 - `node.setBoundVariable(field, variable)`
-- `node.detachInstance()`
 - `figma.combineAsVariants(components, parent)`
 - API стилей Figma, например `figma.createPaintStyle()` и `figma.createTextStyle()`
 - полная совместимость логических операций над векторами

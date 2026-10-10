@@ -1,9 +1,20 @@
-import { executeAtomicTool } from '@open-pencil/core/editor'
+import { executeAtomicTool, isEmptyPageChange } from '@open-pencil/core/editor'
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 import type { ToolDef } from '@open-pencil/core/tools'
 
 import type { EditorStore } from '@/app/editor/active-store'
 import { ensureGraphFonts } from '@/app/editor/fonts'
+
+/** Undo steps made through the automation bridge (MCP, CLI) start with this label. */
+export const AUTOMATION_UNDO_LABEL = 'Agent'
+
+export function automationUndoLabel(operation: string): string {
+  return `${AUTOMATION_UNDO_LABEL}: ${operation}`
+}
+
+export function isAutomationUndoLabel(label: string | null): boolean {
+  return label?.startsWith(`${AUTOMATION_UNDO_LABEL}: `) === true
+}
 
 /** Commit first; asynchronous font availability is presentation work, not a transaction. */
 export async function executeAtomicEditorTool(
@@ -28,4 +39,30 @@ export async function executeAtomicEditorTool(
     }
   }
   return result
+}
+
+/**
+ * Run a structural edit as one undo step by recording what it changes on its page, as the AI
+ * chat does, so `undo` reverts what an automation client created, moved, or deleted.
+ */
+export async function executeWithPageUndo<T>(
+  store: EditorStore,
+  pageId: string,
+  label: string,
+  run: () => Promise<T>
+): Promise<T> {
+  const finishChange = store.capturePageChange(pageId)
+  try {
+    return await run()
+  } finally {
+    const change = finishChange()
+    // Read-only scripts and no-op edits must not leave empty steps in the user's history.
+    if (!isEmptyPageChange(change)) {
+      store.pushUndoEntry({
+        label,
+        forward: () => store.restorePageChange(change, 'after'),
+        inverse: () => store.restorePageChange(change, 'before')
+      })
+    }
+  }
 }

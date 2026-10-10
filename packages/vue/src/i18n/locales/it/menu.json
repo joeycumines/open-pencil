@@ -10,6 +10,7 @@
   "openStorageWorkspace": "Apri area di archiviazione…",
   "save": "Salva",
   "saveAs": "Salva con nome…",
+  "saveToStorage": "Salva nell’area di archiviazione…",
   "exportSelection": "Esporta selezione…",
   "autosave": "Salvataggio automatico su file",
   "copy": "Copia",
@@ -56,13 +57,17 @@
   "arrangeAlignMiddle": "Centra verticalmente",
   "arrangeAlignBottom": "Allinea in basso",
   "multiplayerCursors": "Cursori multigiocatore",
+  "designIssues": "Problemi di design",
   "preferences": "Preferenze",
   "snapToGeometry": "Aggancia alla geometria",
   "snapToObjects": "Aggancia agli oggetti",
   "snapToPixelGrid": "Aggancia alla griglia di pixel",
   "renameSelection": "Rinomina selezione…",
   "rulers": "Righelli",
+  "pixelGrid": "Griglia di pixel",
   "settings": "Impostazioni…",
+  "variables": "Variabili…",
+  "insertIcon": "Inserisci icona…",
   "splitRight": "Dividi a destra",
   "splitDown": "Dividi in basso",
   "closeView": "Chiudi vista",
@@ -70,5 +75,6 @@
   "exportSelectionAsPNG": "Esporta selezione come PNG",
   "exportSelectionAsSVG": "Esporta selezione come SVG",
   "exportSelectionAsPPTX": "Esporta selezione come PPTX",
-  "exportSelectionAsFig": "Esporta selezione come .fig"
+  "exportSelectionAsFig": "Esporta selezione come .fig",
+  "togglePreview": "Anteprima"
 }

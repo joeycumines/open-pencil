@@ -24,6 +24,11 @@ export class ByteBuffer {
     this._index = value
   }
 
+  /** The bytes this buffer reads, as a view rather than a copy. */
+  get bytes(): Uint8Array {
+    return this._data
+  }
+
   /**
    * Returns a view into the internal buffer, not a copy.
    *
@@ -163,6 +168,9 @@ export class ByteBuffer {
   }
 
   writeByteArray(value: Uint8Array): void {
+    if (!(value instanceof Uint8Array) && !Array.isArray(value)) {
+      throw new Error('Expected byte array')
+    }
     this.writeVarUint(value.length)
     let index = this.length
     this._growBy(value.length)

@@ -23,12 +23,53 @@ const exportInputs = {
   )
 }
 
+/** Scale inputs shared by every tool that returns a raster image to a model. */
+export const rasterScaleInputs = {
+  scale: v.optional(
+    toolNumber(
+      v.pipe(
+        v.number(),
+        v.minValue(0.1),
+        v.maxValue(4),
+        v.description(
+          'Export scale multiplier before the maximum-edge limit is applied (default: 1)'
+        )
+      )
+    ),
+    1
+  ),
+  maxEdge: v.optional(
+    toolNumber(
+      v.pipe(
+        v.number(),
+        v.minValue(64),
+        v.maxValue(4096),
+        v.description(
+          'Maximum output width or height in pixels. Preserves aspect ratio and never upscales. Defaults to 1280 for bounded model input.'
+        )
+      )
+    ),
+    1280
+  )
+}
+
+/** The requested scale, reduced so the longest edge fits `maxEdge`; 0 for empty content. */
+export function boundedRasterScale(
+  width: number,
+  height: number,
+  scale: number,
+  maxEdge: number
+): number {
+  const longestEdge = Math.max(width, height)
+  return longestEdge > 0 ? Math.min(scale, maxEdge / longestEdge) : 0
+}
+
 export const exportSVG = defineTool({
   name: 'export_svg',
   description: 'Export nodes as SVG markup. Returns the SVG string.',
   execution: { kind: 'async', mutation: 'none' },
   exposure: { webmcp: false },
-  input: v.object({ ...exportInputs }),
+  input: v.strictObject({ ...exportInputs }),
   execute: async (figma, args) => {
     const { renderNodesToSVG } = await import('#core/io/formats/svg')
     const pageId = figma.currentPageId
@@ -46,7 +87,7 @@ export const exportPDF = defineTool({
     'Export nodes as a vector PDF document. Text remains selectable, paths stay sharp at any zoom. Returns base64-encoded PDF data.',
   execution: { kind: 'async', mutation: 'none' },
   exposure: { webmcp: false },
-  input: v.object({ ...exportInputs }),
+  input: v.strictObject({ ...exportInputs }),
   execute: async (figma, args) => {
     const { renderNodesToPDF } = await import('#core/io/formats/pdf')
     const pageId = figma.currentPageId
@@ -65,38 +106,13 @@ export const exportImage = defineTool({
     'Export nodes as a raster image (PNG, JPG, or WEBP). Returns base64-encoded image data. Use to visually verify designs.',
   execution: { kind: 'async', mutation: 'none' },
   exposure: { webmcp: false },
-  input: v.object({
+  input: v.strictObject({
     ...exportInputs,
     format: v.optional(
       v.pipe(v.picklist(['PNG', 'JPG', 'WEBP']), v.description('Image format')),
       'PNG'
     ),
-    scale: v.optional(
-      toolNumber(
-        v.pipe(
-          v.number(),
-          v.minValue(0.1),
-          v.maxValue(4),
-          v.description(
-            'Export scale multiplier before the maximum-edge limit is applied (default: 1)'
-          )
-        )
-      ),
-      1
-    ),
-    maxEdge: v.optional(
-      toolNumber(
-        v.pipe(
-          v.number(),
-          v.minValue(64),
-          v.maxValue(4096),
-          v.description(
-            'Maximum output width or height in pixels. Preserves aspect ratio and never upscales. Defaults to 1280 for bounded model input.'
-          )
-        )
-      ),
-      1280
-    )
+    ...rasterScaleInputs
   }),
   execute: async (figma, args) => {
     if (!figma.exportImage) {
@@ -127,8 +143,7 @@ export const exportImage = defineTool({
     )
     const width = bounds.maxX - bounds.minX
     const height = bounds.maxY - bounds.minY
-    const longestEdge = Math.max(width, height)
-    const boundedScale = longestEdge > 0 ? Math.min(requestedScale, maxEdge / longestEdge) : 0
+    const boundedScale = boundedRasterScale(width, height, requestedScale, maxEdge)
     if (boundedScale <= 0) return { error: 'No visible nodes to export' }
     const data = await figma.exportImage(ids, {
       scale: boundedScale,

@@ -39,6 +39,16 @@ Pinch-to-zoom on UI panels (layers, properties) is prevented so it doesn't accid
 | Zoom in | <kbd>⌘</kbd><kbd>+</kbd> | <kbd>Ctrl</kbd> + <kbd>+</kbd> |
 | Zoom out | <kbd>⌘</kbd><kbd>−</kbd> | <kbd>Ctrl</kbd> + <kbd>−</kbd> |
 | Zoom to 100% | <kbd>⌘</kbd><kbd>0</kbd> | <kbd>Ctrl</kbd> + <kbd>0</kbd> |
+| Zoom to fit | <kbd>⇧</kbd><kbd>1</kbd> | <kbd>Shift</kbd> + <kbd>1</kbd> |
+| Zoom to selection | <kbd>⇧</kbd><kbd>2</kbd> | <kbd>Shift</kbd> + <kbd>2</kbd> |
+| Pixel grid | <kbd>⇧</kbd><kbd>'</kbd> | <kbd>Shift</kbd> + <kbd>'</kbd> |
+| Snap to pixel grid | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>'</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>'</kbd> |
+| Rulers | <kbd>⇧</kbd><kbd>R</kbd> | <kbd>Shift</kbd> + <kbd>R</kbd> |
+| Multiplayer cursors | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>\\</kbd> | <kbd>Alt</kbd> + <kbd>Ctrl</kbd> + <kbd>\\</kbd> |
+
+## Pixel Grid
+
+Zoomed in far enough that each document pixel covers eight screen pixels (800% on a standard display, 400% on a Retina one), the canvas shows a line at every pixel, as in Figma. Turn it off or on with **View → Pixel Grid**.
 
 ## Ruler Guides
 
@@ -55,6 +65,8 @@ Under **View → Preferences**, toggle **Snap to Geometry**, **Snap to Objects**
 
 Geometry and object snapping help align vector points, moved layers, and resized edges with nearby geometry, objects, guides, and frame bounds. Alignment lines appear for those targets; pixel-grid rounding does not draw an alignment line for every pixel.
 
+With **Snap to Pixel Grid** on, moved layers, resized edges, and drawn layers land on whole pixels at any zoom, even when they started between pixels. A snap to an object or guide wins over the grid. Arrow-key nudges and values typed in the properties panel keep their fractions.
+
 Hold <kbd>Control</kbd> during a layer drag to temporarily bypass object and pixel snapping, including on macOS where this is Control, not Command.
 
 ## Distance Measurements
@@ -64,6 +76,8 @@ Select a layer, hold <kbd>Option</kbd> on macOS or <kbd>Alt</kbd> on Windows/Lin
 ## Command Palette
 
 Press <kbd>⌘</kbd><kbd>K</kbd> on macOS or <kbd>Ctrl</kbd> + <kbd>K</kbd> on Windows/Linux to search editor and application actions. Select a result to run it; unavailable actions remain subject to the current selection and document state.
+
+The palette also moves between pages. Before you type, it lists the pages you visited recently in this tab, most recent first, and **Go to page…** opens a list of every page. Typing a page name finds it too. Pages where collaborators or AI agents are working list their names; the Pages panel marks the same pages with their colors.
 
 ## Tips
 

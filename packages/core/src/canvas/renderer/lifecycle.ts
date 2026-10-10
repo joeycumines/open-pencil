@@ -29,13 +29,17 @@ function disposePathCaches(r: SkiaRenderer): void {
 export function destroyRenderer(r: SkiaRenderer): void {
   if (r.destroyed) return
   r.destroyed = true
+  r.transientPreviews.clear()
 
-  for (const img of r.imageCache.values()) img.delete()
+  r.onImagePreviewReady = null
+  r.imagePreviews.destroy()
   r.imageCache.clear()
   disposePathCaches(r)
   r.fillPaint.delete()
   r.diamondGradientEffect?.delete()
   r.diamondGradientEffect = null
+  r.pixelGridEffect?.delete()
+  r.pixelGridEffect = null
   r.strokePaint.delete()
   r.selectionPaint.delete()
   r.parentOutlinePaint.delete()

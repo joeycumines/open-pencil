@@ -10,6 +10,7 @@
   "openStorageWorkspace": "Открыть рабочее пространство хранилища…",
   "save": "Сохранить",
   "saveAs": "Сохранить как…",
+  "saveToStorage": "Сохранить в хранилище…",
   "exportSelection": "Экспорт выделения…",
   "autosave": "Автосохранение в файл",
   "copy": "Копировать",
@@ -56,13 +57,17 @@
   "arrangeAlignMiddle": "Выровнять по центру по вертикали",
   "arrangeAlignBottom": "Выровнять по нижнему краю",
   "multiplayerCursors": "Курсоры участников",
+  "designIssues": "Проблемы дизайна",
   "preferences": "Настройки",
   "snapToGeometry": "Привязка к геометрии",
   "snapToObjects": "Привязка к объектам",
   "snapToPixelGrid": "Привязка к пиксельной сетке",
   "renameSelection": "Переименовать выделение…",
   "rulers": "Линейки",
+  "pixelGrid": "Пиксельная сетка",
   "settings": "Настройки…",
+  "variables": "Переменные…",
+  "insertIcon": "Вставить иконку…",
   "splitRight": "Разделить вправо",
   "splitDown": "Разделить вниз",
   "closeView": "Закрыть вид",
@@ -70,5 +75,6 @@
   "exportSelectionAsPNG": "Экспортировать выделение как PNG",
   "exportSelectionAsSVG": "Экспортировать выделение как SVG",
   "exportSelectionAsPPTX": "Экспортировать выделение как PPTX",
-  "exportSelectionAsFig": "Экспортировать выделение как .fig"
+  "exportSelectionAsFig": "Экспортировать выделение как .fig",
+  "togglePreview": "Просмотр"
 }

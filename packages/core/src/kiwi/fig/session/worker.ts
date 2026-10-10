@@ -1,18 +1,14 @@
-import { parseFigBuffer } from '@open-pencil/fig'
-import type { SceneGraph } from '@open-pencil/scene-graph'
-
-import { importNodeChanges } from '#core/kiwi/fig/import'
-import { getLazyFigImportContext, populateLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
 import { serializeSceneGraph } from '#core/kiwi/fig/parse/transfer'
-import { buildFigPopulationDelta, installFigMutationJournal } from '#core/kiwi/fig/population/delta'
+import { createFigArchiveOperations } from '#core/kiwi/fig/session/archive'
 import type {
   FigSessionOpenRequest,
   FigSessionRequest,
   FigSessionResponse
 } from '#core/kiwi/fig/session/protocol'
+import { openReaderSession } from '#core/kiwi/fig/session/reader'
 
-let graph: SceneGraph | undefined
-let originalArchive: Uint8Array | undefined
+let session: ReturnType<typeof openReaderSession> | undefined
+let archive: ReturnType<typeof createFigArchiveOperations> | undefined
 let port: MessagePort | undefined
 
 function respond(message: FigSessionResponse): void {
@@ -20,37 +16,60 @@ function respond(message: FigSessionResponse): void {
 }
 
 function populate(request: Extract<FigSessionRequest, { type: 'populate' }>): void {
-  if (!graph) throw new Error('FIG session has no retained graph')
-  const journal = installFigMutationJournal(graph)
+  if (!session) throw new Error('FIG session has no retained reader')
+  const result = session.populate(request.pageId)
+  respond({
+    type: 'population-result',
+    requestId: request.requestId,
+    baseRevision: request.baseRevision,
+    ...result
+  })
+}
+
+type ArchiveRequest = Extract<
+  FigSessionRequest,
+  { type: 'original-archive' | 'archive-info' | 'component-pages' | 'patch-archive' }
+>
+
+function answerArchiveRequest(request: ArchiveRequest): void {
+  const { requestId } = request
   try {
-    const populated = populateLazyFigImportRoots(graph, [request.pageId])
-    const context = getLazyFigImportContext(graph)
-    if (!context) throw new Error('FIG session has no lazy import context')
+    if (!archive) throw new Error('FIG session has no original archive')
+    if (request.type === 'original-archive') {
+      const bytes = archive.original()
+      port?.postMessage({ type: 'original-archive-result', requestId, bytes }, [bytes.buffer])
+    } else if (request.type === 'archive-info') {
+      respond({ type: 'archive-info-result', requestId, info: archive.info() })
+    } else if (request.type === 'component-pages') {
+      const pageIds = archive.componentPages(request.componentIds)
+      respond({ type: 'component-pages-result', requestId, pageIds })
+    } else {
+      const bytes = archive.patch(request.patch, request.input)
+      port?.postMessage({ type: 'patch-archive-result', requestId, bytes }, [bytes.buffer])
+    }
+  } catch (error) {
     respond({
-      type: 'population-result',
-      requestId: request.requestId,
-      baseRevision: request.baseRevision,
-      populated,
-      delta: buildFigPopulationDelta(graph, journal, context.populatedRootIds)
+      type: 'archive-error',
+      requestId,
+      error: error instanceof Error ? error.message : String(error)
     })
-  } finally {
-    journal.stop()
   }
 }
 
 function handleRequest(request: FigSessionRequest): void {
   try {
-    if (request.type === 'original-archive') {
-      if (!originalArchive) throw new Error('FIG session has no original archive')
-      const bytes = originalArchive.slice()
-      port?.postMessage({ type: 'original-archive-result', requestId: request.requestId, bytes }, [
-        bytes.buffer
-      ])
+    if (
+      request.type === 'original-archive' ||
+      request.type === 'archive-info' ||
+      request.type === 'component-pages' ||
+      request.type === 'patch-archive'
+    ) {
+      answerArchiveRequest(request)
       return
     }
     if (request.type === 'dispose') {
-      graph = undefined
-      originalArchive = undefined
+      session = undefined
+      archive = undefined
       respond({ type: 'disposed' })
       port?.close()
       port = undefined
@@ -58,6 +77,10 @@ function handleRequest(request: FigSessionRequest): void {
       return
     }
     if (request.type === 'cancel') return
+    if (request.type === 'retire') {
+      session = undefined
+      return
+    }
     populate(request)
   } catch (error) {
     respond({
@@ -73,17 +96,23 @@ self.onmessage = (event: MessageEvent<FigSessionOpenRequest>) => {
   port = request.port
   port.onmessage = (message: MessageEvent<FigSessionRequest>) => handleRequest(message.data)
   port.start()
-  originalArchive = new Uint8Array(request.archiveBuffer)
+  // The worker copies the archive itself, so the main thread sends the file once.
+  const archiveBytes = request.buffer.slice(0)
   try {
-    const { nodeChanges, blobs, images, figKiwiVersion, figSchemaDeflated } = parseFigBuffer(
-      request.originalBuffer,
-      (pages) => respond({ type: 'page-manifest', pages })
-    )
-    const parsedGraph = importNodeChanges(nodeChanges, blobs, new Map(images), request.options)
-    parsedGraph.figKiwiVersion = figKiwiVersion
-    parsedGraph.figSchemaDeflated = figSchemaDeflated
-    graph = request.options?.populate === 'first-page' ? parsedGraph : undefined
-    respond({ type: 'graph', graph: serializeSceneGraph(parsedGraph) })
+    const opened = openReaderSession(request.buffer, request.options?.populate)
+    const archiveInfo = opened.session.archiveRecordInfo()
+    archive = createFigArchiveOperations(archiveBytes, () => archiveInfo)
+    respond({ type: 'page-manifest', pages: opened.pages })
+    session =
+      request.options?.populate === 'first-page' || request.options?.populate === 'none'
+        ? opened
+        : undefined
+    respond({
+      type: 'graph',
+      graph: serializeSceneGraph(opened.graph),
+      checkpoint: opened.checkpoint(),
+      archiveInfo
+    })
   } catch (error) {
     respond({ type: 'graph', error: error instanceof Error ? error.message : String(error) })
   }

@@ -1,6 +1,7 @@
+import { sceneNodeToJSX, selectionToJSX } from '@open-pencil/design-jsx'
 import { parsePenFile } from '@open-pencil/pen'
 
-import { sceneNodeToJSX, selectionToJSX } from '#core/design-jsx'
+import { layoutAuthoredNodes } from '#core/layout'
 
 import { exportFigFile, parseFigFile } from './formats/fig'
 import type { PPTXExportOptions } from './formats/pptx'
@@ -224,6 +225,11 @@ export const penFormat: IOFormatAdapter<'pen'> = {
   async readDocument(input) {
     const text = new TextDecoder().decode(input.data)
     const graph = parsePenFile(text)
+    // A .pen file stores its layout intent, not the sizes and positions it implies.
+    layoutAuthoredNodes(
+      graph,
+      graph.getPages().map((page) => page.id)
+    )
     return { graph, sourceFormat: 'pen' }
   }
 }
@@ -394,7 +400,8 @@ export const tailwindJSXFormat: IOFormatAdapter<'tailwind-jsx'> = {
     const target = resolveExportNodes(request)
     if (!target) throw new Error('Nothing to export')
     const { sceneNodesToTailwindJSX } = await import('@open-pencil/dom-css/export')
-    const data = sceneNodesToTailwindJSX(request.graph, target.nodeIds)
+    const { vectorElement } = await import('#core/io/formats/html/vectors')
+    const data = sceneNodesToTailwindJSX(request.graph, target.nodeIds, { vectorElement })
     if (!data) throw new Error('Nothing to export')
     return {
       format: 'tailwind-jsx',
