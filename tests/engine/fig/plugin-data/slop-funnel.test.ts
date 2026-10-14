@@ -4,9 +4,11 @@ import { resolve } from 'node:path'
 
 import { parseFigFile, exportFigFile, initCodec } from '@open-pencil/core'
 
+import { testPath } from '#tests/helpers/paths'
+
 setDefaultTimeout(60_000)
 
-const FIXTURES = resolve(import.meta.dir, '../../../fixtures')
+const FIXTURES = testPath('fixtures')
 
 describe('slop-funnel.fig', () => {
   test('pluginID casing is consistent after round-trip', async () => {
