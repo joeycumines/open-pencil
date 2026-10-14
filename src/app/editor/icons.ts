@@ -8,9 +8,11 @@ import IconGrid from '~icons/lucide/grid-3x3'
 import IconGroup from '~icons/lucide/group'
 import IconHand from '~icons/lucide/hand'
 import IconSection from '~icons/lucide/layout-grid'
+import IconMessageCircle from '~icons/lucide/message-circle'
 import IconMinus from '~icons/lucide/minus'
 import IconMousePointer from '~icons/lucide/mouse-pointer'
 import IconPenTool from '~icons/lucide/pen-tool'
+import IconPencil from '~icons/lucide/pencil'
 import IconRows from '~icons/lucide/rows-3'
 import IconSmile from '~icons/lucide/smile'
 import IconSquare from '~icons/lucide/square'
@@ -33,8 +35,10 @@ export const toolIcons: Record<Tool, Component> = {
   POLYGON: IconTriangle,
   STAR: IconStar,
   PEN: IconPenTool,
+  PENCIL: IconPencil,
   TEXT: IconType,
-  HAND: IconHand
+  HAND: IconHand,
+  COMMENT: IconMessageCircle
 }
 
 export const NODE_ICONS: Partial<Record<string, typeof IconSquare>> = {

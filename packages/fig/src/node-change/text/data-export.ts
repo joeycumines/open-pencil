@@ -5,6 +5,8 @@ import type { CharacterStyleOverride, SceneNode } from '@open-pencil/scene-graph
 import { applyFontFeaturesToKiwi } from '../font/features'
 import { weightToFigmaStyle } from '../font/style'
 import { stringToFigmaAxisTag } from '../font/variations'
+import { exportTextLines } from './lines'
+import { FIGMA_AUTO_LINE_HEIGHT } from './values'
 
 export function fontVariationToKiwi(variation: SceneNode['fontVariations'][number]) {
   const axisTag = stringToFigmaAxisTag(variation.axis)
@@ -57,10 +59,14 @@ function textStyleOverrideToKiwi(
   if (style.letterSpacing !== undefined) {
     override.letterSpacing = { value: style.letterSpacing, units: 'PIXELS' }
   }
-  if (style.lineHeight !== undefined && style.lineHeight !== null) {
-    override.lineHeight = { value: style.lineHeight, units: 'PIXELS' }
+  if (style.lineHeight !== undefined) {
+    override.lineHeight =
+      style.lineHeight === null
+        ? { ...FIGMA_AUTO_LINE_HEIGHT }
+        : { value: style.lineHeight, units: 'PIXELS' }
   }
   applyTextDecorationOverrideFields(override, style, fillToKiwiPaint)
+  if (style.textCase) override.textCase = style.textCase
   if (style.fills && style.fills.length > 0) {
     override.fillPaints = style.fills.map(fillToKiwiPaint)
   }
@@ -90,24 +96,34 @@ function collectTextStyleOverrides(node: SceneNode): {
   return { charIds, styleMap }
 }
 
+/** The character styles written to the override table, each with its index there. */
+export function textStyleOverrides(
+  node: SceneNode
+): { id: number; style: CharacterStyleOverride }[] {
+  return [...collectTextStyleOverrides(node).styleMap.values()]
+}
+
+/** The style each character is written with, as an index into its override table. */
+export function characterStyleIDs(node: SceneNode): number[] {
+  return collectTextStyleOverrides(node).charIds
+}
+
 export function exportTextData(
   node: SceneNode,
-  textLines: (text: string) => NonNullable<NodeChange['textData']>['lines'],
   fillToKiwiPaint: (fill: SceneNode['fills'][number]) => Paint
 ): NodeChange['textData'] {
-  if (node.styleRuns.length === 0) {
-    return { characters: node.text, lines: textLines(node.text) }
-  }
-
   const { charIds, styleMap } = collectTextStyleOverrides(node)
-  const overrideTable = [...styleMap.values()].map(({ id, style }) =>
+  const characterOverrides = [...styleMap.values()].map(({ id, style }) =>
     textStyleOverrideToKiwi(id, style, node, fillToKiwiPaint)
   )
-
-  return {
+  // Paragraph spacing shares the override table, numbered after the character styles.
+  const paragraphs = exportTextLines(node, styleMap.size + 1)
+  const overrideTable = [...characterOverrides, ...paragraphs.overrides]
+  const data: NonNullable<NodeChange['textData']> = {
     characters: node.text,
-    lines: textLines(node.text),
-    characterStyleIDs: charIds,
-    styleOverrideTable: overrideTable
+    lines: paragraphs.lines
   }
+  if (node.styleRuns.length > 0) data.characterStyleIDs = charIds
+  if (overrideTable.length > 0) data.styleOverrideTable = overrideTable
+  return data
 }

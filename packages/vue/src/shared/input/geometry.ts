@@ -1,18 +1,22 @@
-import { CORNER_ROTATE_ZONE, HANDLE_HIT_RADIUS } from '@open-pencil/core/constants'
+import { HANDLE_HIT_RADIUS, LAYER_HIT_PAD } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
 import {
   createSceneGeometry,
   selectionHandleRect,
+  hasTransformHandles,
   rotationHandleLayout,
+  transformZoneAt,
+  type CornerPosition,
+  type HandlePosition,
   type SceneGeometry,
-  type RotationPreview
+  type RotationPreview,
+  type TransformZone
 } from '@open-pencil/core/geometry'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
-import resizeCursorSVG from '#vue/shared/assets/resize-cursor.svg?raw'
-import rotateCursorSVG from '#vue/shared/assets/rotate-cursor.svg?raw'
-import type { CornerPosition, HandlePosition } from '#vue/shared/input/types'
+import resizeCursorSVG from '#vue/shared/assets/cursors/resize.svg?raw'
+import rotateCursorSVG from '#vue/shared/assets/cursors/rotate.svg?raw'
 
 export function getPointerCoords(e: MouseEvent, canvas: HTMLCanvasElement | null, editor: Editor) {
   if (!canvas) return { sx: 0, sy: 0, cx: 0, cy: 0 }
@@ -49,18 +53,12 @@ export function hitTestInEditorScope(
 
   const renderer = editor.renderer
   if (!renderer) return null
-  if (scopeId) {
-    if (!editor.graph.getNode(scopeId)) {
-      editor.state.enteredContainerId = null
-    } else {
-      return deep
-        ? editor.graph.hitTestDeep(cx, cy, scopeId)
-        : editor.graph.hitTestSelectable(cx, cy, scopeId, editor.state.selectedIds)
-    }
-  }
+  const pad = LAYER_HIT_PAD / renderer.zoom
+  if (scopeId && !editor.graph.getNode(scopeId)) editor.state.enteredContainerId = null
+  const scope = editor.state.enteredContainerId ?? editor.state.currentPageId
   return deep
-    ? editor.graph.hitTestDeep(cx, cy, editor.state.currentPageId)
-    : editor.graph.hitTestSelectable(cx, cy, editor.state.currentPageId, editor.state.selectedIds)
+    ? editor.graph.hitTestDeep(cx, cy, scope, pad)
+    : editor.graph.hitTestSelectable(cx, cy, scope, editor.state.selectedIds, pad)
 }
 
 export function isInsideEditorContainerBounds(
@@ -162,6 +160,18 @@ function getCursorAngleFromHandle(
   return (angle + 360) % 360
 }
 
+/** The resize or rotation zone of a selected layer under a canvas point, in its own frame. */
+function transformZoneOf(
+  cx: number,
+  cy: number,
+  node: SceneNode,
+  geometry: SceneGeometry,
+  zoom: number
+): TransformZone | null {
+  const pointer = geometry.toLocal(node, { x: cx, y: cy })
+  return pointer ? transformZoneAt(pointer, selectionHandleRect(node), zoom) : null
+}
+
 export function getHitHandleByMatrix(
   cx: number,
   cy: number,
@@ -174,27 +184,11 @@ export function getHitHandleByMatrix(
   rotation: number
 } | null {
   const geometry = createSceneGeometry(graph, preview)
-  const handles = geometry.handles(node, selectionHandleRect(node))
-
-  const CORNER_R = HANDLE_HIT_RADIUS / zoom
-  for (const [key, p] of Object.entries(handles)) {
-    const handleKey = key as HandlePosition
-
-    const dx = cx - p.x
-    const dy = cy - p.y
-
-    if (dx * dx + dy * dy <= CORNER_R * CORNER_R) {
-      const angle = getCursorAngleFromHandle(handleKey, node, geometry)
-
-      return {
-        handle: handleKey,
-        rotation: angle
-      }
-    }
-  }
-
-  return null
+  const zone = transformZoneOf(cx, cy, node, geometry, zoom)
+  if (zone?.kind !== 'resize') return null
+  return { handle: zone.handle, rotation: getCursorAngleFromHandle(zone.handle, node, geometry) }
 }
+
 export function hitTestTopRotationHandleByMatrix(
   cx: number,
   cy: number,
@@ -203,6 +197,8 @@ export function hitTestTopRotationHandleByMatrix(
   zoom: number = 1,
   preview?: RotationPreview | null
 ): boolean {
+  const rect = selectionHandleRect(node)
+  if (!hasTransformHandles(rect.width * zoom, rect.height * zoom)) return false
   const geometry = createSceneGeometry(graph, preview)
   const handle = geometry.toWorld(node, rotationHandleLayout(node, geometry, zoom).handle)
   const radius = HANDLE_HIT_RADIUS / zoom
@@ -219,47 +215,8 @@ export function hitTestCornerRotationByMatrix(
   zoom: number = 1,
   preview?: RotationPreview | null
 ): CornerPosition | null {
-  const geometry = createSceneGeometry(graph, preview)
-  const handles = geometry.handles(node, selectionHandleRect(node))
-  const pointer = geometry.toLocal(node, { x: cx, y: cy })
-  if (!pointer) return null
-
-  const HANDLE_R = HANDLE_HIT_RADIUS / zoom
-  const ROTATE_R = CORNER_ROTATE_ZONE / zoom
-
-  const corners: Array<{ key: CornerPosition; p: Vector }> = [
-    { key: 'nw', p: handles.nw },
-    { key: 'ne', p: handles.ne },
-    { key: 'se', p: handles.se },
-    { key: 'sw', p: handles.sw }
-  ]
-
-  for (const { key, p } of corners) {
-    const local = geometry.toLocal(node, p)
-    if (!local) continue
-    const dx = pointer.x - local.x
-    const dy = pointer.y - local.y
-    const d = Math.hypot(dx, dy)
-
-    if (d > HANDLE_R && d <= ROTATE_R) {
-      switch (key) {
-        case 'nw':
-          if (dx < 0 && dy < 0) return key
-          break
-        case 'ne':
-          if (dx > 0 && dy < 0) return key
-          break
-        case 'se':
-          if (dx > 0 && dy > 0) return key
-          break
-        case 'sw':
-          if (dx < 0 && dy > 0) return key
-          break
-      }
-    }
-  }
-
-  return null
+  const zone = transformZoneOf(cx, cy, node, createSceneGeometry(graph, preview), zoom)
+  return zone?.kind === 'rotate' ? zone.corner : null
 }
 
 const rotationCursorCache = new Map<number, string>()

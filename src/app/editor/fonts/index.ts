@@ -81,6 +81,8 @@ async function getTauriFonts(): Promise<TauriFontFamily[]> {
       .then(({ invoke }) => invoke<TauriFontFamily[]>('list_system_fonts'))
       .then((fonts) => {
         tauriFontsCache = fonts
+        // The weight list and family switches read each family's faces from these.
+        fontManager.setHostFontCatalog(fonts)
         return fonts
       })
       .catch(() => [])

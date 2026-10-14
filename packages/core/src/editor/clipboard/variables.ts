@@ -1,4 +1,11 @@
-import type { SceneGraph, SceneNode, Variable, VariableCollection } from '@open-pencil/scene-graph'
+import {
+  remapStyleRunReferences,
+  styleRunReferences,
+  type SceneGraph,
+  type SceneNode,
+  type Variable,
+  type VariableCollection
+} from '@open-pencil/scene-graph'
 
 export interface ClipboardVariables {
   activeModes: Array<[string, string]>
@@ -23,7 +30,10 @@ export function captureClipboardVariables(
       if (typeof value === 'object' && 'aliasId' in value) visit(value.aliasId)
     }
   }
-  for (const node of nodes) for (const id of Object.values(node.boundVariables)) visit(id)
+  for (const node of nodes) {
+    for (const id of Object.values(node.boundVariables)) visit(id)
+    for (const id of styleRunReferences(node.styleRuns).variables) visit(id)
+  }
   const activeModes: Array<[string, string]> = []
   for (const collectionId of collections.keys()) {
     const modeId = graph.activeMode.get(collectionId)
@@ -112,4 +122,8 @@ export function remapClipboardVariableBindings(
     const id = node[key]
     if (id && styleIds.has(id)) node[key] = styleIds.get(id) ?? id
   }
+  node.styleRuns = remapStyleRunReferences(node.styleRuns, {
+    variable: (id) => variables.get(id) ?? id,
+    style: (id) => styleIds.get(id) ?? id
+  })
 }

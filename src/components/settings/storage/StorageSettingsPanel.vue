@@ -19,6 +19,7 @@ import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSaveFeedback from '@/components/settings/layout/SettingsSaveFeedback.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
 import ProviderSettingsField from '@/components/settings/provider/ProviderSettingsField.vue'
+import CloudWaitlistSection from '@/components/settings/storage/CloudWaitlistSection.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 import AppInput from '@/components/ui/input/AppInput.vue'
@@ -105,28 +106,34 @@ async function testConnection() {
     @submit.prevent="save"
   >
     <SettingsPage data-test-id="settings-storage-panel">
-      <SettingsSection v-if="!editing">
-        <template #title>{{ settings.storage }}</template>
-        <template #description>{{ provider.description }}</template>
-        <AppActionRow @click="edit">
-          {{ provider.label }}
-          <template #description>{{
-            configured ? settings.configured : settings.notConfigured
-          }}</template>
-          <template #trailing
-            >{{ settings.edit }}<icon-lucide-chevron-right class="size-3.5"
-          /></template>
-        </AppActionRow>
-        <AppButton
-          class="self-start"
-          variant="outline"
-          :disabled="!configured"
-          data-test-id="settings-storage-open-workspace"
-          @click="openWorkspace"
-          >{{ storage.openWorkspace }}</AppButton
-        >
-        <p v-if="!configured" class="text-[11px] text-muted">{{ settings.configureStorageHint }}</p>
-      </SettingsSection>
+      <!-- Sections are spaced as other multi-section pages space them. -->
+      <div v-if="!editing" class="flex flex-col gap-6">
+        <SettingsSection>
+          <template #title>{{ settings.storage }}</template>
+          <template #description>{{ provider.description }}</template>
+          <AppActionRow @click="edit">
+            {{ provider.label }}
+            <template #description>{{
+              configured ? settings.configured : settings.notConfigured
+            }}</template>
+            <template #trailing
+              >{{ settings.edit }}<icon-lucide-chevron-right class="size-3.5"
+            /></template>
+          </AppActionRow>
+          <AppButton
+            class="self-start"
+            variant="outline"
+            :disabled="!configured"
+            data-test-id="settings-storage-open-workspace"
+            @click="openWorkspace"
+            >{{ storage.openWorkspace }}</AppButton
+          >
+          <p v-if="!configured" class="text-[11px] text-muted">
+            {{ settings.configureStorageHint }}
+          </p>
+        </SettingsSection>
+        <CloudWaitlistSection />
+      </div>
       <SettingsSection v-else>
         <template #title>{{ settings.storage }}</template>
         <template #description>{{ settings.saveChangesDescription }}</template>

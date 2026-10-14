@@ -8,6 +8,8 @@
   "polygon": "Polígono",
   "star": "Estrella",
   "pen": "Pluma",
+  "pencil": "Lápiz",
   "text": "Texto",
-  "hand": "Mano"
+  "hand": "Mano",
+  "comment": "Comentario"
 }

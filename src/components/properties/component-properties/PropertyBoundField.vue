@@ -11,6 +11,7 @@ import { usePanelMessages } from '@open-pencil/vue'
 
 import IconButton from '@/components/ui/button/IconButton.vue'
 import { menuItem, useMenuUI } from '@/components/ui/menu/menu'
+import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 
 import PropertyTypeIcon from './PropertyTypeIcon.vue'
@@ -49,18 +50,20 @@ const chip =
     </DropdownMenuTrigger>
     <DropdownMenuPortal>
       <DropdownMenuContent side="bottom" align="end" :side-offset="4" :class="menu.content">
-        <DropdownMenuItem :class="item" @select="binding.goToProperty()">
-          <icon-lucide-crosshair :class="menu.icon" />
-          {{ panels.goToComponentProperty }}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          :class="item"
-          :disabled="!binding.editable.value"
-          @select="binding.bind(null)"
-        >
-          <icon-lucide-unlink :class="menu.icon" />
-          {{ panels.detachComponentProperty }}
-        </DropdownMenuItem>
+        <MenuScrollArea>
+          <DropdownMenuItem :class="item" @select="binding.goToProperty()">
+            <icon-lucide-crosshair :class="menu.icon" />
+            {{ panels.goToComponentProperty }}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            :class="item"
+            :disabled="!binding.editable.value"
+            @select="binding.bind(null)"
+          >
+            <icon-lucide-unlink :class="menu.icon" />
+            {{ panels.detachComponentProperty }}
+          </DropdownMenuItem>
+        </MenuScrollArea>
       </DropdownMenuContent>
     </DropdownMenuPortal>
   </DropdownMenuRoot>

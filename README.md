@@ -36,7 +36,7 @@ Requires macOS 13 or later with current Safari updates, Windows 10 or later, or 
 - **Image vectorization** — convert image layers into editable vector layers with Recraft or fal.ai
 - **Design-to-code export** — export selections as JSX/Tailwind, generate token outputs, and map designs into component-oriented code workflows
 - **Vue SDK for custom editors** — headless components and composables for embedding OpenPencil into other apps or building workflow-specific editing surfaces. [Read the SDK docs →](https://openpencil.dev/programmable/sdk/)
-- **Real-time collaboration** — P2P via WebRTC, no server, no account. Cursors, presence, follow mode
+- **Real-time collaboration** — P2P via WebRTC, no server, no account. Cursors, presence, follow mode, voice calls
 - **Auto layout & CSS Grid** — flex and grid layout via Yoga WASM, with gap, padding, alignment, track sizing
 - **~15 MB desktop app** — Tauri v2 for macOS, Windows, Linux. Also runs in the browser as a PWA
 
@@ -206,12 +206,15 @@ Share a link to co-edit in real time. No server, no account — peers connect di
 2. Share the generated link (`app.openpencil.dev/share/<room-id>`)
 3. Collaborators see your cursor, selection, and edits in real time
 4. Click a peer's avatar to follow their viewport
+5. Click the headphones beside the avatars to start or join the room's voice call
 
 ## Why
 
 Figma is a closed platform that actively fights programmatic access. Their MCP server is read-only. [figma-use](https://github.com/dannote/figma-use) added full read/write automation via CDP — then [Figma 126 killed CDP](https://forum.figma.com/report-a-problem-6/remote-debugging-port-not-working-in-figma-desktop-126-1-2-50858). Your design files are in a proprietary binary format that only their software can fully read. Your workflows break when they decide to ship a point release.
 
-OpenPencil is the alternative: open source (MIT), reads .fig files natively, every operation is scriptable, and your data never leaves your machine.
+OpenPencil is the alternative: open source (MIT), local-first, reads .fig files natively, and every operation is scriptable.
+
+Official builds send one anonymous ping a day and, only if you agree, usage stats; the [privacy page](https://openpencil.dev/overview/privacy) lists every field and how to turn it off.
 
 See the [roadmap](https://openpencil.dev/development/roadmap) for product direction and current Figma compatibility gaps.
 

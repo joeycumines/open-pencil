@@ -1,9 +1,9 @@
 import { join, resolve } from 'node:path'
 
+import { releaseTagSchema } from '#release/version'
 import { releasePaths as packageReleasePaths } from '#release/workflow'
 import * as v from 'valibot'
 
-export const releaseTagSchema = v.pipe(v.string(), v.regex(/^v\d+\.\d+\.\d+$/))
 export const commitSchema = v.pipe(v.string(), v.regex(/^[a-f0-9]{40}$/))
 export const sha256Schema = v.pipe(v.string(), v.regex(/^[a-f0-9]{64}$/))
 

@@ -3,12 +3,13 @@ import type { EditorCommandId } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
 import { clearRecentFiles, forgetRecentFile, recentLocalFileAt } from '@/app/recent-files'
-import { createSharedEditorMenuActions } from '@/app/shell/menu/editor-actions'
+import { runFocusedCommand } from '@/app/shell/commands/focused'
+import { createSharedEditorMenuActions } from '@/app/shell/menu/actions/editor'
+import { createSelectionMenuActions } from '@/app/shell/menu/actions/selection'
 import { openFileDialog, openFileFromPath } from '@/app/shell/menu/files'
 import { useNativeMenuEvents } from '@/app/shell/menu/native-events'
 import { OPEN_RECENT_EVENT_PREFIX, watchRecentFilesMenu } from '@/app/shell/menu/recent-files'
 import { APP_MENU_SCHEMA, type AppMenuEntry } from '@/app/shell/menu/schema'
-import { createSelectionMenuActions } from '@/app/shell/menu/selection-actions'
 import { SHELL_MENU_IDS } from '@/app/shell/menu/shell'
 import { useAppTheme } from '@/app/shell/theme'
 import { saveDocumentToStorage } from '@/app/storage/workspace/save'
@@ -84,7 +85,7 @@ export function useEditorMenu() {
     }
     if (SHELL_MENU_IDS.has(id)) return
     if (COMMAND_MENU_IDS.has(id as EditorCommandId)) {
-      runCommand(id as EditorCommandId)
+      runFocusedCommand(store, runCommand, id as EditorCommandId)
       return
     }
     actions[id]?.()

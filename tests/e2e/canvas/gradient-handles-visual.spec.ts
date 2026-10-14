@@ -1,5 +1,5 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
-import { gradientDriver } from '#tests/helpers/canvas/gradient-driver'
+import { gradientDriver } from '#tests/helpers/canvas/gradient/driver'
 
 // Figma desktop 126: a linear gradient shows its line, end dots, and stop squares; radial and
 // diamond add a centre and a second radius dot; angular draws its ellipse with squares outside it.

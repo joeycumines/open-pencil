@@ -48,13 +48,14 @@ function isHidden(graph: SceneGraph, nodeId: string): boolean {
 export function useDesignCheckPanel(options: {
   active: () => boolean
   list: Readonly<Ref<HTMLElement | null>>
+  initialScope?: DesignCheckScope
 }) {
   const store = useEditorStore()
   const messages = useDesignCheckMessages()
   const presetLabels = usePresetLabels()
   const check = store.designCheck
 
-  const scope = ref<DesignCheckScope>('page')
+  const scope = ref<DesignCheckScope>(options.initialScope ?? 'page')
   const visibleSeverities = ref<DesignIssueSeverity[]>([...DESIGN_ISSUE_SEVERITIES])
   /** Explicit open state per rule; suggestions start collapsed, problems start open. */
   const openGroups = reactive(new Map<string, boolean>())

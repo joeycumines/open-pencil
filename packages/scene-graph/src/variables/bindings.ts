@@ -2,7 +2,7 @@ import { copyFills, copyStrokes } from '../copy'
 import type { SceneGraph } from '../index'
 import { hasInstanceOverride } from '../instances'
 import type { Color } from '../primitives'
-import type { Fill, SceneNode, Stroke } from '../types'
+import type { Fill, SceneNode, Stroke, StyleRun, VariableValue } from '../types'
 import type { VariableModeFallback } from '../variables'
 import { NUMERIC_FIELDS, isNumericVariableBindingField } from './fields'
 export { isNumericVariableBindingField } from './fields'
@@ -58,6 +58,41 @@ export function resolvedNumericBindings(
 }
 
 /**
+ * The text a variable bound to text content shows: a string as it is, and a number or boolean
+ * as Figma writes it, since Figma lets either be text content.
+ */
+export function variableText(value: VariableValue | undefined): string | undefined {
+  if (typeof value === 'string') return value
+  if (typeof value === 'boolean') return String(value)
+  if (typeof value === 'number' && Number.isFinite(value)) return numberText(value)
+  return undefined
+}
+
+const INT32_MIN = -2_147_483_648
+const INT32_MAX = 2_147_483_647
+
+/** How near a whole number a value must be for Figma to write it as one. */
+const WHOLE_NUMBER_TOLERANCE = 1e-6
+
+/**
+ * A number as Figma desktop 126 writes it as text: one within a millionth of a whole number as
+ * that integer, clamped to 32 bits, and anything else with two decimals, its sign kept and an
+ * exact tie rounded to even, as C's `%.2f` does (0.125 is "0.12", 0.999 is "1.00", -0.004 is
+ * "-0.00").
+ */
+function numberText(value: number): string {
+  const whole = Math.round(value)
+  if (Math.abs(value - whole) < WHOLE_NUMBER_TOLERANCE)
+    return String(Math.min(INT32_MAX, Math.max(INT32_MIN, whole)) || 0)
+  const scaled = Math.abs(value) * 100
+  const floor = Math.floor(scaled)
+  const tie = scaled - floor === 0.5
+  const cents = tie ? floor + (floor % 2) : Math.round(scaled)
+  const sign = value < 0 ? '-' : ''
+  return `${sign}${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`
+}
+
+/**
  * The text and visibility a node's string and boolean bindings resolve to in its mode, for the
  * fields whose stored value differs. Text or visibility an instance overrides, which typing in a
  * layer or toggling its eye records, keeps its own value, as an overridden width or height does.
@@ -75,11 +110,48 @@ export function resolvedValueBindings(
     if (!variableId || hasInstanceOverride(graph, node.id, field)) return undefined
     return graph.resolveVariableForNode(node.id, variableId, fallback)
   }
-  const text = node.type === 'TEXT' ? resolve('text') : undefined
-  if (typeof text === 'string' && text !== node.text) updates.text = text
+  const text = node.type === 'TEXT' ? variableText(resolve('text')) : undefined
+  if (text !== undefined && text !== node.text) updates.text = text
   const visible = resolve('visible')
   if (typeof visible === 'boolean' && visible !== node.visible) updates.visible = visible
   return updates
+}
+
+/** Fields of a range of characters a bound number gives its value; the rest need fonts loaded. */
+const NUMERIC_RUN_FIELDS = ['fontSize', 'fontWeight', 'letterSpacing', 'lineHeight'] as const
+
+/**
+ * The runs a text's character bindings resolve to in its mode, when a bound number differs from
+ * what its characters hold. Bound font families and styles are left as stored, as the text's own.
+ */
+export function resolvedRunBindings(
+  graph: SceneGraph,
+  node: SceneNode,
+  fallback: VariableModeFallback = 'active'
+): Pick<Partial<SceneNode>, 'styleRuns'> {
+  const styleRuns = node.styleRuns.map((run): StyleRun => {
+    const bound = run.style.boundVariables
+    if (!bound) return run
+    let style = run.style
+    for (const field of NUMERIC_RUN_FIELDS) {
+      const variableId = bound[field]
+      if (!variableId) continue
+      const value = graph.resolveNumberVariableForNode(node.id, variableId, fallback)
+      if (value === undefined || !Number.isFinite(value) || style[field] === value) continue
+      style = { ...style, [field]: value }
+    }
+    return style === run.style ? run : { ...run, style }
+  })
+  const changed = styleRuns.some((run, index) => run !== node.styleRuns[index])
+  return changed ? { styleRuns } : {}
+}
+
+/** The variables a node binds, its own and its characters'. */
+function boundVariableIds(node: SceneNode): string[] {
+  return [
+    ...Object.values(node.boundVariables),
+    ...node.styleRuns.flatMap((run) => Object.values(run.style.boundVariables ?? {}))
+  ].filter((id): id is string => typeof id === 'string')
 }
 
 /**
@@ -157,13 +229,42 @@ function subtreeNodes(graph: SceneGraph, roots: Iterable<string>): SceneNode[] {
   return nodes
 }
 
+/**
+ * The collections whose variables the layers in these subtrees resolve: those they bind, and
+ * those the bound variables alias, so a mode set on the subtrees can change what they show.
+ */
+export function collectionsBoundIn(graph: SceneGraph, roots: Iterable<string>): Set<string> {
+  const pending = subtreeNodes(graph, roots).flatMap(boundVariableIds)
+  const seen = new Set<string>()
+  const collections = new Set<string>()
+  for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const variable = graph.variables.get(id)
+    if (!variable) continue
+    collections.add(variable.collectionId)
+    for (const value of Object.values(variable.valuesByMode)) {
+      if (typeof value === 'object' && 'aliasId' in value) pending.push(value.aliasId)
+    }
+  }
+  return collections
+}
+
+/**
+ * The layers a change to these variables reaches: those binding one of them, or a variable that
+ * aliases one, on the layer itself or on its characters.
+ */
+export function layersUsingVariables(graph: SceneGraph, ids: Iterable<string>): SceneNode[] {
+  const variables = variablesResolvingThrough(graph, ids)
+  return [...graph.getAllNodes()].filter((node) =>
+    boundVariableIds(node).some((id) => variables.has(id))
+  )
+}
+
 function scopedNodes(graph: SceneGraph, scope: BindingScope | undefined): Iterable<SceneNode> {
   if (!scope) return graph.getAllNodes()
   if ('subtrees' in scope) return subtreeNodes(graph, scope.subtrees)
-  const variables = variablesResolvingThrough(graph, scope.variables)
-  return [...graph.getAllNodes()].filter((node) =>
-    Object.values(node.boundVariables).some((id) => variables.has(id))
-  )
+  return layersUsingVariables(graph, scope.variables)
 }
 
 /**
@@ -176,7 +277,8 @@ export function reconcileVariableBindings(graph: SceneGraph, scope?: BindingScop
   for (const node of scopedNodes(graph, scope)) {
     const updates = {
       ...resolvedNumericBindings(graph, node),
-      ...resolvedValueBindings(graph, node)
+      ...resolvedValueBindings(graph, node),
+      ...resolvedRunBindings(graph, node)
     }
     if (Object.keys(updates).length === 0) continue
     graph.updateNode(node.id, updates)

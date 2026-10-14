@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useClipboard } from '@vueuse/core'
 import { computed, ref } from 'vue'
 
 import { useI18n } from '@open-pencil/vue'
 
 import { diagnostics } from '@/app/diagnostics'
 import { diagnosticsEnvironment } from '@/app/diagnostics/environment'
+import { saveDiagnosticsReport } from '@/app/diagnostics/save'
 import {
   DIAGNOSTICS_RETENTION_MAX,
   DIAGNOSTICS_RETENTION_MIN,
@@ -23,6 +25,7 @@ import PresetNumberField from '@/components/ui/input/PresetNumberField.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
 const { common, diagnostics: diagnosticMessages } = useI18n()
+const { copy: copyText, copied } = useClipboard({ copiedDuring: 1500 })
 const clearOpen = ref(false)
 
 const {
@@ -55,12 +58,18 @@ async function clearDiagnostics() {
 }
 
 async function exportDiagnostics() {
-  const text = await diagnostics.export(diagnosticsEnvironment())
   try {
-    await navigator.clipboard.writeText(text)
-    toast.info(diagnosticMessages.value.copied)
+    await copyText(await diagnostics.export(diagnosticsEnvironment()))
   } catch {
     toast.error(diagnosticMessages.value.copyFailed)
+  }
+}
+
+async function saveDiagnostics() {
+  try {
+    await saveDiagnosticsReport()
+  } catch {
+    toast.error(diagnosticMessages.value.saveFailed)
   }
 }
 </script>
@@ -120,8 +129,13 @@ async function exportDiagnostics() {
       }}</span>
       <div class="flex items-center gap-1.5">
         <AppButton size="xs" color="neutral" variant="ghost" @click="exportDiagnostics"
-          ><template #leading><icon-lucide-copy /></template
-          >{{ diagnosticMessages.copy }}</AppButton
+          ><template #leading
+            ><icon-lucide-check v-if="copied" /><icon-lucide-copy v-else /></template
+          >{{ copied ? common.copied : diagnosticMessages.copy }}</AppButton
+        >
+        <AppButton size="xs" color="neutral" variant="ghost" @click="saveDiagnostics"
+          ><template #leading><icon-lucide-download /></template
+          >{{ diagnosticMessages.save }}</AppButton
         >
         <AppButton
           size="xs"

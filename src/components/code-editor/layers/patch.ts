@@ -56,7 +56,7 @@ export function layerPatch(state: EditorState, snippet: LayerSnippet): Transacti
     const tag = node && openingTagOf(node)
     if (!node || !tag || next.tag !== base.tag) continue
     patchAttributes(ctx, tag, base, next)
-    if (base.text !== next.text) patchText(ctx, node, next.text)
+    if (base.text !== next.text) patchText(ctx, node, base.text, next.text)
     patchChildren(ctx, node, element, elements, base, next)
   }
   if (bases.size === 0) return null

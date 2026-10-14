@@ -1,19 +1,28 @@
 import { SkiaRenderer } from '@open-pencil/core/canvas'
+import { setPageBackgrounds } from '@open-pencil/core/figma-api'
 import { exportFigFile, initCanvasKit } from '@open-pencil/core/io'
 import { computeAllLayouts, installTextMeasurer } from '@open-pencil/core/layout'
 import { fontManager, prepareGraphFonts } from '@open-pencil/core/text'
 import { SceneGraph } from '@open-pencil/scene-graph'
+import { parseColor } from '@open-pencil/scene-graph/color'
 
-import { createAnnouncementSection } from './document/announcement/section'
-import { createControlsSection } from './document/controls/section'
-import { createPaintSection } from './document/paint/section'
-import { createComponentsSection } from './document/sections/components'
-import { createDemoVariables } from './document/sections/variables'
-import { createTypographySection } from './document/typography/section'
+import { createTipComponent } from './document/callout'
+import { arrangeChapters, type ChapterContext } from './document/chapters/chapter'
+import { createCodeChapter } from './document/chapters/code'
+import { createControlsChapter } from './document/chapters/controls'
+import { createHelloChapter } from './document/chapters/hello'
+import { createLintChapter } from './document/chapters/lint'
+import { createModesChapter } from './document/chapters/modes'
+import { createShadersChapter } from './document/chapters/shaders'
+import { createSlotsChapter } from './document/chapters/slots'
+import { createYoursChapter } from './document/chapters/yours'
+import { createTheme, PAGE_BACKGROUND } from './document/theme'
+import { drawShaderStills } from './shaders/stills'
 
-const PAGE_ORIGIN = 60
-const PAGE_GAP = 64
-const INTER_STYLES = ['Regular', 'Medium', 'SemiBold', 'Bold']
+const INTER_STYLES = ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']
+
+/** The one page the tour is on. */
+export const PAGE_NAME = 'Tour'
 
 /** A renderer on a 1×1 surface, for measuring text while laying the document out. */
 export async function measuringRenderer() {
@@ -41,34 +50,46 @@ export async function withMeasuredText<T>(
   }
 }
 
-/** Builds every page of the demo into a fresh graph, laid out with `renderer`'s text metrics. */
-function buildDemoGraph(renderer: SkiaRenderer): Promise<SceneGraph> {
+/**
+ * Builds the tour into a fresh graph, laid out with `renderer`'s text metrics: one page whose
+ * chapters stack top to bottom as sections.
+ */
+export function buildDemoGraph(renderer: SkiaRenderer): Promise<SceneGraph> {
   return withMeasuredText(renderer, async () => {
     const graph = new SceneGraph()
-    const [first] = graph.getPages()
-    graph.updateNode(first.id, { name: '01 · Components & variables' })
-    const typography = graph.addPage('02 · Typography')
-    const paint = graph.addPage('03 · Paint & effects')
-    const controls = graph.addPage('04 · Controls')
+    const theme = createTheme(graph)
+    const [page] = graph.getPages()
+    graph.updateNode(page.id, { name: PAGE_NAME })
+    setPageBackgrounds(graph, page, [
+      { type: 'SOLID', color: parseColor(PAGE_BACKGROUND), opacity: 1, visible: true }
+    ])
 
-    const announcement = await createAnnouncementSection(graph, first.id)
-    graph.updateNode(announcement.rootId, { x: PAGE_ORIGIN, y: PAGE_ORIGIN })
-    computeAllLayouts(graph, first.id)
-    await createComponentsSection(graph, first.id, {
-      x: PAGE_ORIGIN,
-      y: PAGE_ORIGIN + (graph.getNode(announcement.rootId)?.height ?? 0) + PAGE_GAP
-    })
-    createDemoVariables(graph)
-    await createTypographySection(graph, typography.id)
-    await createPaintSection(graph, paint.id)
-    await createControlsSection(graph, controls.id)
-
-    const pages = graph.getPages()
-    await prepareGraphFonts(
+    // The tip every chapter uses; the last chapter takes it in under its own content.
+    const tip = await createTipComponent(graph, theme, page.id)
+    const context: ChapterContext = {
       graph,
-      pages.map((page) => page.id)
+      theme,
+      pageId: page.id,
+      tipId: tip.id,
+      whereSlotId: tip.whereSlotId
+    }
+
+    // Main components first, so the chapters before them can place instances.
+    const parts = await createControlsChapter(context)
+    const player = await createSlotsChapter(context, parts)
+    await createHelloChapter(context, player)
+    await createModesChapter(context, player)
+    await createShadersChapter(context)
+    await createCodeChapter(context, player)
+    await createLintChapter(context)
+    await createYoursChapter(context)
+    arrangeChapters(
+      graph,
+      graph.getChildren(page.id).filter((node) => node.type === 'SECTION')
     )
-    for (const page of pages) computeAllLayouts(graph, page.id)
+
+    await prepareGraphFonts(graph, [page.id])
+    computeAllLayouts(graph, page.id)
     return graph
   })
 }
@@ -76,5 +97,7 @@ function buildDemoGraph(renderer: SkiaRenderer): Promise<SceneGraph> {
 /** The demo document as `.fig` bytes, as `/demo` opens it. */
 export async function buildDemoDocument(): Promise<Uint8Array> {
   const { ck, renderer } = await measuringRenderer()
-  return exportFigFile(await buildDemoGraph(renderer), ck, renderer)
+  const graph = await buildDemoGraph(renderer)
+  await drawShaderStills(graph)
+  return exportFigFile(graph, ck, renderer)
 }

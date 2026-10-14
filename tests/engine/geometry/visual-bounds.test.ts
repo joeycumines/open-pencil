@@ -4,7 +4,8 @@ import type { Vector } from '@open-pencil/scene-graph'
 import type { VisualBoundsNode } from '@open-pencil/scene-graph/geometry'
 import {
   computeDescendantVisualBounds,
-  computeVisualBounds
+  computeVisualBounds,
+  strokeOverflow
 } from '@open-pencil/scene-graph/geometry'
 
 function commandsBlobFromPoints(points: Vector[]): Uint8Array {
@@ -532,5 +533,46 @@ describe('computeVisualBounds', () => {
     expect(multiEffect.width).toBe(noEffects.width + 13 + 15) // 50 + 28 = 78
     expect(multiEffect.y).toBe(noEffects.y - 5)
     expect(multiEffect.height).toBe(noEffects.height + 5 + 5) // 60 + 10 = 70
+  })
+})
+
+describe('strokeOverflow at mitered corners', () => {
+  const stroke = {
+    type: 'SOLID' as const,
+    color: { r: 0, g: 0, b: 0, a: 1 },
+    weight: 10,
+    opacity: 1,
+    visible: true,
+    align: 'CENTER' as const
+  }
+  const zero = { x: 0, y: 0 }
+  /** An open chevron whose apex is a 40° corner. */
+  const half = Math.tan((20 * Math.PI) / 180) * 100
+  const chevron = {
+    vertices: [
+      { x: -half, y: 100 },
+      { x: 0, y: 0 },
+      { x: half, y: 100 }
+    ],
+    segments: [
+      { start: 0, end: 1, tangentStart: zero, tangentEnd: zero },
+      { start: 1, end: 2, tangentStart: zero, tangentEnd: zero }
+    ],
+    regions: []
+  }
+
+  test('reaches the miter tip, as Figma’s render bounds do', () => {
+    // Half the weight over sin(20°): 14.6.
+    expect(strokeOverflow([stroke], 'NONE', chevron, { strokeJoin: 'MITER' })).toBeCloseTo(
+      5 / Math.sin((20 * Math.PI) / 180),
+      6
+    )
+  })
+
+  test('stays at half the weight for round joins and past the miter limit', () => {
+    expect(strokeOverflow([stroke], 'NONE', chevron, { strokeJoin: 'ROUND' })).toBe(5)
+    expect(
+      strokeOverflow([stroke], 'NONE', chevron, { strokeJoin: 'MITER', strokeMiterLimit: 2 })
+    ).toBe(5)
   })
 })

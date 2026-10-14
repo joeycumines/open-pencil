@@ -1,29 +1,47 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { useAutomationMessages, useCommonMessages, useSettingsMessages } from '@open-pencil/vue'
+import {
+  useAIMessages,
+  useAutomationMessages,
+  useCommonMessages,
+  useSettingsMessages
+} from '@open-pencil/vue'
 
+import { useMCPServerSetup } from '@/app/ai/agents/setup'
+import { restartFixesMCPFailure } from '@/app/automation/mcp/failure'
 import {
   mcpAuthenticationEnabled,
   mcpRootDirectory,
   mcpSelectionOnly
 } from '@/app/automation/mcp/preferences'
-import { mcpRuntime } from '@/app/automation/mcp/runtime'
+import { localMCPAvailable, mcpRuntime } from '@/app/automation/mcp/runtime'
 import { useMCPSettings } from '@/app/automation/mcp/settings/use'
+import { needsMCPInstall } from '@/app/automation/mcp/setup-prompt'
 import { openToolAccessSettings } from '@/app/automation/tool-access/settings/use'
 import { isTauri } from '@/app/tauri/env'
 import SettingsGroup from '@/components/settings/layout/SettingsGroup.vue'
+import SettingsLink from '@/components/settings/layout/SettingsLink.vue'
 import SettingsRow from '@/components/settings/layout/SettingsRow.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
+import AppAlert from '@/components/ui/feedback/AppAlert.vue'
+import AppStatus from '@/components/ui/feedback/AppStatus.vue'
 import AppCopyField from '@/components/ui/input/AppCopyField.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
+import { DESKTOP_DOWNLOAD_URL, MCP_SERVER_DOCS_URL } from '@/constants'
 
 import MCPFailureAlert from './MCPFailureAlert.vue'
 
 const automation = useAutomationMessages()
 const settings = useSettingsMessages()
 const common = useCommonMessages()
+const ai = useAIMessages()
+const available = localMCPAvailable()
+const restarting = computed(() => mcpRuntime.status === 'starting' || mcpRuntime.checking)
+const alertRestarts = computed(() =>
+  Boolean(mcpRuntime.failure && restartFixesMCPFailure(mcpRuntime.failure))
+)
 const statusMessage = computed(
   () =>
     ({
@@ -34,100 +52,141 @@ const statusMessage = computed(
       error: automation.value.statusError
     })[mcpRuntime.status]
 )
+const statusTone = computed(
+  () =>
+    (
+      ({
+        idle: 'neutral',
+        starting: 'pending',
+        running: 'success',
+        stopped: 'neutral',
+        error: 'error'
+      }) as const
+    )[mcpRuntime.status]
+)
 const { restart, chooseRootDirectory } = useMCPSettings()
+// Checked only while the failure is one an install fixes.
+const serverSetup = useMCPServerSetup(() =>
+  Boolean(mcpRuntime.failure && needsMCPInstall(mcpRuntime.failure))
+)
 </script>
 
 <template>
   <SettingsSection data-test-id="settings-mcp-automation-panel">
     <template #title>{{ automation.localServer }}</template>
-    <template #description>{{ automation.description }}</template>
-    <SettingsGroup>
-      <SettingsRow :label="automation.status"
-        ><span class="text-xs text-surface" role="status">{{ statusMessage }}</span></SettingsRow
-      >
-      <div class="px-3 py-2.5">
-        <p class="mb-1 text-xs font-medium text-surface">{{ automation.address }}</p>
-        <AppCopyField
-          look="plain"
-          :value="mcpRuntime.endpoint"
-          :copy-label="common.copy"
-          :copied-label="common.copied"
-        />
-      </div>
-      <SettingsRow v-if="mcpRuntime.version" :label="automation.version"
-        ><code class="text-xs text-surface">{{ mcpRuntime.version }}</code></SettingsRow
-      >
-      <SettingsRow
-        :label="automation.authentication"
-        :description="automation.authenticationDescription"
-      >
-        <AppSwitch
-          v-model="mcpAuthenticationEnabled"
-          :label="automation.authentication"
-          data-test-id="settings-mcp-authentication"
-        />
-      </SettingsRow>
-      <SettingsRow
-        :label="automation.selectionScope"
-        :description="automation.selectionScopeDescription"
-      >
-        <AppSwitch
-          v-model="mcpSelectionOnly"
-          :label="automation.selectionScope"
-          data-test-id="settings-mcp-selection-scope"
-        />
-      </SettingsRow>
-      <div class="flex flex-col gap-2 px-3 py-2.5">
-        <p class="text-xs font-medium text-surface">{{ automation.rootDirectory }}</p>
-        <p class="break-all font-mono text-xs text-surface">
-          {{ mcpRootDirectory || automation.rootDirectoryDefault }}
-        </p>
-        <p class="text-xs leading-relaxed text-muted">
-          {{ automation.rootDirectoryDescription }}
-        </p>
-        <div v-if="mcpRootDirectory || isTauri()" class="flex flex-wrap gap-2">
-          <AppButton
-            v-if="mcpRootDirectory"
-            size="xs"
-            variant="outline"
-            @click="mcpRootDirectory = ''"
-            >{{ automation.useDefaultRoot }}</AppButton
-          >
-          <AppButton
-            v-if="isTauri()"
-            size="xs"
-            variant="outline"
-            data-test-id="settings-mcp-root-directory"
-            @click="chooseRootDirectory"
-            >{{ automation.chooseRootDirectory }}</AppButton
-          >
-        </div>
-      </div>
-    </SettingsGroup>
-    <MCPFailureAlert
-      v-if="mcpRuntime.failure"
-      :failure="mcpRuntime.failure"
-      :restarting="mcpRuntime.status === 'starting' || mcpRuntime.checking"
-      :externally-managed="mcpRuntime.externallyManaged"
-      @restart="restart"
-    />
-    <div>
-      <AppButton variant="link" @click="openToolAccessSettings('mcp')">{{
-        settings.toolAccess
-      }}</AppButton>
-    </div>
-    <!-- The failure alert carries its own restart action. -->
-    <div v-if="!mcpRuntime.failure">
+    <template #description>
+      {{ automation.description }}
+      <SettingsLink :href="MCP_SERVER_DOCS_URL">{{ common.learnMore }}</SettingsLink>
+    </template>
+    <!-- While the alert offers Restart as its fix, it is the only Restart on the page. -->
+    <template v-if="available && !alertRestarts" #actions>
       <AppButton
-        color="primary"
-        variant="solid"
+        variant="outline"
         :disabled="mcpRuntime.externallyManaged"
-        :loading="mcpRuntime.status === 'starting' || mcpRuntime.checking"
+        :loading="restarting"
         data-test-id="settings-mcp-restart"
         @click="restart"
       >
         {{ mcpRuntime.externallyManaged ? automation.externallyManaged : automation.restart }}
       </AppButton>
-    </div>
+    </template>
+    <AppAlert v-if="!available" :heading="automation.localServerDesktopOnly">
+      <template #actions>
+        <SettingsLink :href="DESKTOP_DOWNLOAD_URL">{{ ai.aiSetupGetDesktop }}</SettingsLink>
+      </template>
+    </AppAlert>
+    <template v-else>
+      <SettingsGroup>
+        <SettingsRow :label="automation.status">
+          <AppStatus :tone="statusTone">{{ statusMessage }}</AppStatus>
+        </SettingsRow>
+        <SettingsRow :label="automation.address">
+          <!-- Below the label on one line, so a long address truncates instead of overflowing. -->
+          <template #description>
+            <AppCopyField
+              look="plain"
+              :value="mcpRuntime.endpoint"
+              :copy-label="common.copy"
+              :copied-label="common.copied"
+              :ui="{ root: 'mt-1', value: 'truncate' }"
+            />
+          </template>
+        </SettingsRow>
+        <SettingsRow v-if="mcpRuntime.version" :label="automation.version">
+          <code class="text-xs text-surface">{{ mcpRuntime.version }}</code>
+        </SettingsRow>
+        <SettingsRow
+          :label="automation.authentication"
+          :description="automation.authenticationDescription"
+        >
+          <AppSwitch
+            v-model="mcpAuthenticationEnabled"
+            :label="automation.authentication"
+            data-test-id="settings-mcp-authentication"
+          />
+        </SettingsRow>
+        <SettingsRow
+          :label="automation.selectionScope"
+          :description="automation.selectionScopeDescription"
+        >
+          <AppSwitch
+            v-model="mcpSelectionOnly"
+            :label="automation.selectionScope"
+            data-test-id="settings-mcp-selection-scope"
+          />
+        </SettingsRow>
+        <SettingsRow :label="automation.rootDirectory">
+          <template #description>
+            <p class="mt-1 font-mono text-xs break-all text-surface">
+              {{ mcpRootDirectory || automation.rootDirectoryDefault }}
+            </p>
+            <p class="mt-1 text-xs leading-relaxed text-muted">
+              {{ automation.rootDirectoryDescription }}
+            </p>
+          </template>
+          <div v-if="mcpRootDirectory || isTauri()" class="flex flex-wrap justify-end gap-2">
+            <AppButton
+              v-if="mcpRootDirectory"
+              size="xs"
+              variant="outline"
+              @click="mcpRootDirectory = ''"
+              >{{ automation.useDefaultRoot }}</AppButton
+            >
+            <AppButton
+              v-if="isTauri()"
+              size="xs"
+              variant="outline"
+              data-test-id="settings-mcp-root-directory"
+              @click="chooseRootDirectory"
+              >{{ automation.chooseRootDirectory }}</AppButton
+            >
+          </div>
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsGroup>
+        <SettingsRow
+          :label="settings.toolAccess"
+          :description="automation.mcpToolAccessDescription"
+        >
+          <AppButton
+            size="xs"
+            variant="outline"
+            data-test-id="settings-mcp-tool-access"
+            @click="openToolAccessSettings('mcp')"
+            >{{ settings.edit }}</AppButton
+          >
+        </SettingsRow>
+      </SettingsGroup>
+      <MCPFailureAlert
+        v-if="mcpRuntime.failure"
+        :failure="mcpRuntime.failure"
+        :setup="serverSetup.state.value"
+        :restarting="restarting"
+        :externally-managed="mcpRuntime.externallyManaged"
+        @install="serverSetup.install"
+        @restart="restart"
+        @check="serverSetup.check"
+      />
+    </template>
   </SettingsSection>
 </template>

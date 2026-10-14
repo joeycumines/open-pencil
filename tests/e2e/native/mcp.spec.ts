@@ -73,21 +73,10 @@ function mcpFailureDetail(): Promise<string | null> {
   })
 }
 
-/**
- * Restart is offered by the healthy-state button and by the failure alert, so
- * click whichever one is currently rendered.
- */
+/** Restart lives in the Local server section header, whether or not the server failed. */
 function clickRestart(): Promise<void> {
   return browser.execute(() => {
-    const panel = document.querySelector<HTMLElement>(
-      '[data-test-id="settings-mcp-automation-panel"]'
-    )
-    for (const button of panel?.querySelectorAll<HTMLButtonElement>('button') ?? []) {
-      if (button.textContent?.includes('MCP server') && button.offsetParent !== null) {
-        button.click()
-        return
-      }
-    }
+    document.querySelector<HTMLButtonElement>('[data-test-id="settings-mcp-restart"]')?.click()
   })
 }
 

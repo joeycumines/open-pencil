@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 
-import { CORNER_ROTATE_ZONE, HANDLE_HIT_RADIUS } from '@open-pencil/core/constants'
+import { TRANSFORM_ZONE } from '@open-pencil/core/geometry'
 
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 import { expectDefined } from '#tests/helpers/assert'
@@ -178,7 +178,8 @@ for (const angle of [-32, 32]) {
       if (!store) throw new Error('Editor unavailable')
       return { zoom: store.state.zoom, panX: store.state.panX, panY: store.state.panY }
     })
-    const cornerOffset = (HANDLE_HIT_RADIUS + CORNER_ROTATE_ZONE) / (2 * Math.SQRT2)
+    const cornerOffset =
+      (TRANSFORM_ZONE.resizeReach + TRANSFORM_ZONE.rotateReach) / (2 * Math.SQRT2)
     const centerX = bounds.x + viewport.panX + 390 * viewport.zoom
     const centerY = bounds.y + viewport.panY + 310 * viewport.zoom
     const dx = -150 * viewport.zoom - cornerOffset
@@ -232,5 +233,35 @@ for (const angle of [-32, 32]) {
     } finally {
       await editor.page.mouse.up()
     }
+  })
+}
+
+// Figma desktop 126 draws neither handles nor a size label on a layer under 10 screen pixels both
+// ways, and both on a larger one.
+for (const [name, size] of [
+  ['tiny-layer-selected', 9],
+  ['small-layer-selected', 16]
+] as const) {
+  test(`a selected ${size} px layer ${size < 10 ? 'has no handles or size label' : 'has handles and its size'}`, async () => {
+    await editor.page.evaluate((side) => {
+      const store = window.openPencil?.getStore?.()
+      if (!store) throw new Error('OpenPencil store not initialized')
+      const dot = store.graph.createNode('RECTANGLE', store.state.currentPageId, {
+        x: 200,
+        y: 200,
+        width: side,
+        height: side,
+        fills: [
+          { type: 'SOLID', color: { r: 0.8, g: 0.8, b: 0.8, a: 1 }, visible: true, opacity: 1 }
+        ]
+      })
+      store.state.zoom = 1
+      store.state.panX = 0
+      store.state.panY = 0
+      store.select([dot.id])
+      store.requestRender()
+    }, size)
+    await editor.canvas.waitForRender()
+    await expectCanvas(name)
   })
 }

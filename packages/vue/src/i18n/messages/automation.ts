@@ -15,10 +15,16 @@ export const automationMessageDefaults = {
     'Choose tools advertised by the local server to connected agents and clients.',
   aiToolsNotice:
     'Changes apply to your next message. Tool switches are not a sandbox: enabled script tools can still perform other design operations.',
-  mcpFailureNotInstalled: 'MCP automation is not installed',
-  mcpFailureNotInstalledHint: params(
-    'Install {package} globally with your package manager, then restart OpenPencil.'
+  mcpFailureNotInstalled: 'MCP server is not installed',
+  mcpFailureNotInstalledHint:
+    'To keep the OpenPencil download small, the MCP server is installed separately.',
+  mcpFailureOutdated: 'MCP server does not match this version of OpenPencil',
+  mcpFailureOutdatedHint: params(
+    'The installed MCP server is {running}, and this version of OpenPencil needs {version}. The server is installed separately to keep the download small, so it does not update with the app.'
   ),
+  mcpInstallByHand: 'Install it from a terminal, or copy a prompt that asks your agent to do it.',
+  mcpCopyAgentPrompt: 'Copy prompt for your agent',
+  mcpUpdating: 'Updating…',
   mcpFailurePermission: 'OpenPencil cannot start the MCP server',
   mcpFailurePermissionHint:
     'The system denied the command. Reinstall OpenPencil with its shell permissions, or start the server manually.',
@@ -30,17 +36,18 @@ export const automationMessageDefaults = {
   mcpFailureRejectedHint: 'Restart the MCP server to issue a new token.',
   mcpFailureMalformed: 'MCP server returned an unexpected response',
   mcpFailureMalformedHint:
-    'The configured version and the running server may not match. Update both and restart OpenPencil.',
+    'Restart it. If this keeps happening, copy the details and report the problem.',
   mcpFailureUnreachable: 'MCP server is not reachable',
   mcpFailureUnreachableHint: params(
-    'Nothing is listening at {endpoint}. Check that the address is free, then start the server.'
+    'Nothing answers at {endpoint}. Restart the server; if another app uses this address, close it first.'
   ),
   mcpFailureUnknown: 'MCP server could not start',
   mcpFailureUnknownHint: 'Start it again, or check the diagnostic details below.',
   mcpFailureDetails: 'Details',
   mcpFailureCopy: 'Copy details',
-  mcpFailureCopied: 'Diagnostic details copied.',
   localServer: 'Local server',
+  localServerDesktopOnly:
+    'The local MCP server runs with the OpenPencil desktop app. In the browser, use WebMCP below.',
   webmcpDescription:
     'Let browser agents use this document directly, without a local MCP server or bearer token. Local server settings do not apply here.',
   browserAccess: 'Browser agent access',
@@ -51,9 +58,9 @@ export const automationMessageDefaults = {
   accessInspectDescription: 'Agents can inspect the document but cannot change it.',
   accessEditDescription:
     'Agents can also edit existing properties, text, and variable values. Edits are undoable; creating or deleting content, scripts, and file access are excluded.',
+  webmcpFailed: 'WebMCP could not start',
   webmcpUnsupported:
     'This browser does not expose WebMCP. Use a supported Chrome version and enable WebMCP testing, then relaunch the browser.',
-  webmcpSetup: 'WebMCP setup guide',
   noMatchingTools: 'No tools match your search.',
   connections: 'MCP connections',
   connectionsDescription: 'Give ACP agents access to trusted remote tools and services.',

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
 import type { UIMessage } from 'ai'
+import { expect } from 'storybook/test'
 
 import ChatMessage from './ChatMessage.vue'
 
@@ -29,6 +30,55 @@ const reasoningMessage: UIMessage = {
   ]
 }
 
+/** A reply stopped mid-call, as the chat settles it: nothing reads as running any more. */
+const stoppedMessage: UIMessage = {
+  id: 'stopped-message',
+  role: 'assistant',
+  metadata: { stopped: true },
+  parts: [
+    { type: 'reasoning', text: 'Laying out a month grid.', state: 'done' },
+    {
+      type: 'tool-render',
+      toolCallId: 'stopped-call',
+      state: 'output-error',
+      input: { jsx: '<Frame name="Calendar" />' },
+      errorText: 'The reply ended before this call finished. It did not change the document.'
+    }
+  ]
+}
+
+/** A reply with one of its two edits undone, by Undo in the editor or the chat's Revert. */
+const partlyUndoneMessage: UIMessage = {
+  id: 'partly-undone-message',
+  role: 'assistant',
+  metadata: {
+    undo: {
+      edits: [
+        { tool: 'node_resize', toolCallId: 'resize' },
+        { tool: 'set_opacity', toolCallId: 'fade' }
+      ],
+      undone: ['fade']
+    }
+  },
+  parts: [
+    {
+      type: 'tool-node_resize',
+      toolCallId: 'resize',
+      state: 'output-available',
+      input: { id: '0:1', width: 200, height: 60 },
+      output: { id: '0:1' }
+    },
+    {
+      type: 'tool-set_opacity',
+      toolCallId: 'fade',
+      state: 'output-available',
+      input: { id: '0:1', value: 0.5 },
+      output: { id: '0:1' }
+    },
+    { type: 'text', text: 'Widened the card and faded it.' }
+  ]
+}
+
 type ChatMessageStoryArgs = {
   message: UIMessage
   streaming?: boolean
@@ -53,3 +103,25 @@ export const User: Story = { args: { message: userMessage } }
 export const Assistant: Story = { args: { message: assistantMessage } }
 export const Reasoning: Story = { args: { message: reasoningMessage } }
 export const Streaming: Story = { args: { message: assistantMessage, streaming: true } }
+
+export const Stopped: Story = {
+  args: { message: stoppedMessage },
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('[data-slot="chat-turn-stopped"]')).toBeVisible()
+    // The stopped reply's reasoning no longer reads as running.
+    await expect(
+      canvasElement.querySelector('[data-slot="chat-reasoning-trigger"]')
+    ).not.toHaveAttribute('data-streaming')
+  }
+}
+
+export const PartlyUndone: Story = {
+  args: { message: partlyUndoneMessage },
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('[data-slot="chat-turn-undone"]')).toBeVisible()
+    const undone = canvasElement.querySelectorAll(
+      '[data-slot="chat-tool-call"][data-undone="true"]'
+    )
+    await expect(undone).toHaveLength(1)
+  }
+}

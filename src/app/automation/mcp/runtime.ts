@@ -206,9 +206,14 @@ export function createMCPRuntimeService(dependencies: MCPRuntimeDependencies) {
   }
 }
 
+/** The local server runs with the desktop app, and in development with the dev server. */
+export function localMCPAvailable(): boolean {
+  return import.meta.env.DEV || isTauri()
+}
+
 const appMCPRuntime = createMCPRuntimeService({
   connect: (getStore, authToken) => connectAutomation(getStore, authToken).disconnect,
-  canConnect: () => import.meta.env.DEV || isTauri(),
+  canConnect: localMCPAvailable,
   readHealth: readAutomationHealth,
   setToolDescriptors: setMCPToolDescriptors,
   spawn: spawnMCPIfNeeded,

@@ -1,12 +1,23 @@
 import { fromUint8Array } from 'js-base64'
 
-import type { Effect, Fill, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import {
+  imageMimeType,
+  type Effect,
+  type Fill,
+  type SceneGraph,
+  type SceneNode
+} from '@open-pencil/scene-graph'
 import {
   colorToHex,
   colorToDisplayCSS,
   getDefaultRenderColorSpace,
   type RenderColorSpace
 } from '@open-pencil/scene-graph/color'
+import {
+  gradientPoint,
+  invertGradientTransform,
+  isIdentityGradientTransform
+} from '@open-pencil/scene-graph/gradient'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { svg, type SVGNode } from './node'
@@ -58,45 +69,55 @@ function createGradientDef(
 
   const id = nextDefId(ctx, 'grad')
 
+  // Gradient space in bounding-box units, mapped onto the layer as the canvas draws it.
+  const toLayer = invertGradientTransform(t)
+  const transform = isIdentityGradientTransform(toLayer)
+    ? undefined
+    : `matrix(${[toLayer.m00, toLayer.m10, toLayer.m01, toLayer.m11, toLayer.m02, toLayer.m12].map((v) => round(v, 6)).join(' ')})`
+
   if (fill.type === 'GRADIENT_LINEAR') {
-    const startX = round(t.m02 * 100)
-    const startY = round(t.m12 * 100)
-    const endX = round((t.m00 + t.m02) * 100)
-    const endY = round((t.m10 + t.m12) * 100)
     return {
       id,
       node: svg(
         'linearGradient',
         {
           id,
-          x1: `${startX}%`,
-          y1: `${startY}%`,
-          x2: `${endX}%`,
-          y2: `${endY}%`,
-          gradientUnits: 'objectBoundingBox'
+          x1: 0,
+          y1: 0.5,
+          x2: 1,
+          y2: 0.5,
+          gradientUnits: 'objectBoundingBox',
+          gradientTransform: transform
         },
         ...stopNodes
       )
     }
   }
 
+  // SVG has no diamond gradient, so a diamond exports as the radial one it is closest to.
   if (fill.type === 'GRADIENT_RADIAL' || fill.type === 'GRADIENT_DIAMOND') {
-    const cx = round(t.m02 * 100)
-    const cy = round(t.m12 * 100)
-    const r = round(Math.hypot(t.m00, t.m10) * 100)
     return {
       id,
       node: svg(
         'radialGradient',
-        { id, cx: `${cx}%`, cy: `${cy}%`, r: `${r}%`, gradientUnits: 'objectBoundingBox' },
+        {
+          id,
+          cx: 0.5,
+          cy: 0.5,
+          r: 0.5,
+          gradientUnits: 'objectBoundingBox',
+          gradientTransform: transform
+        },
         ...stopNodes
       )
     }
   }
 
+  // Nor an angular one: it exports as a radial gradient around its centre.
   if (fill.type === 'GRADIENT_ANGULAR') {
-    const cx = round(t.m02 * node.width)
-    const cy = round(t.m12 * node.height)
+    const center = gradientPoint(t, { x: 0.5, y: 0.5 })
+    const cx = round(center.x * node.width)
+    const cy = round(center.y * node.height)
     const r = Math.max(node.width, node.height)
     return {
       id,
@@ -118,7 +139,7 @@ function createImagePattern(
 
   const id = nextDefId(ctx, 'img')
   const base64 = fromUint8Array(data)
-  const mime = detectImageMime(data)
+  const mime = imageMimeType(data)
 
   return {
     id,
@@ -138,13 +159,6 @@ function createImagePattern(
       })
     )
   }
-}
-
-function detectImageMime(data: Uint8Array): string {
-  if (data[0] === 0x89 && data[1] === 0x50) return 'image/png'
-  if (data[0] === 0xff && data[1] === 0xd8) return 'image/jpeg'
-  if (data[0] === 0x52 && data[1] === 0x49) return 'image/webp'
-  return 'image/png'
 }
 
 export function createFilterDef(

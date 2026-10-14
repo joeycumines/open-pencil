@@ -1,0 +1,4 @@
+POSTHOG_KEY=phc_development
+# Cloudflare's Turnstile test secret, which accepts every token and reports example.com.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+TURNSTILE_HOSTNAMES=example.com

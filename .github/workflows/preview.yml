@@ -26,6 +26,9 @@ jobs:
       - name: Format check
         run: bun run format:check
 
+      # The demo document's shader fills are drawn at build time in a headless Chromium.
+      - run: bunx playwright install --with-deps chromium
+
       - run: bun run build
 
       - name: Upload preview artifact

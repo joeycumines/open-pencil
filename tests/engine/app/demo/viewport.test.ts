@@ -1,48 +1,52 @@
 import { expect, spyOn, test } from 'bun:test'
 
 import { createEditor } from '@open-pencil/core/editor'
-import { SceneGraph } from '@open-pencil/scene-graph'
 
-import { fitDemoPagesOnFirstVisit } from '@/app/demo/viewport'
+import { showFirstChapter } from '@/app/demo/viewport'
 
-test('fits only the first visit and preserves a custom viewport on return', async () => {
+test('zooms to the topmost section with air around it', () => {
   const editor = createEditor()
-  const originalPage = editor.state.currentPageId
-  const next = editor.graph.addPage('Next')
-  editor.graph.createNode('FRAME', next.id, { x: 1000, y: 1000, width: 100, height: 100 })
-  const fit = spyOn(editor, 'zoomToFit')
-  const stop = fitDemoPagesOnFirstVisit(editor, [next.id])
+  const pageId = editor.state.currentPageId
+  editor.graph.createNode('SECTION', pageId, {
+    name: '2 · Later',
+    x: 0,
+    y: 2000,
+    width: 800,
+    height: 600
+  })
+  editor.graph.createNode('SECTION', pageId, {
+    name: '1 · First',
+    x: 100,
+    y: 50,
+    width: 1000,
+    height: 700
+  })
+  editor.graph.createNode('FRAME', pageId, {
+    name: 'Loose',
+    x: -500,
+    y: -500,
+    width: 10,
+    height: 10
+  })
+  const zoom = spyOn(editor, 'zoomToBounds')
   try {
-    await editor.switchPage(next.id)
-    expect(fit).toHaveBeenCalledTimes(1)
-    editor.pan(120, 80)
-    const viewport = { panX: editor.state.panX, panY: editor.state.panY, zoom: editor.state.zoom }
-    await editor.switchPage(originalPage)
-    await editor.switchPage(next.id)
-    expect(fit).toHaveBeenCalledTimes(1)
-    expect({ panX: editor.state.panX, panY: editor.state.panY, zoom: editor.state.zoom }).toEqual(
-      viewport
-    )
+    showFirstChapter(editor)
+    expect(zoom).toHaveBeenCalledWith(20, -30, 1180, 830)
   } finally {
-    stop()
-    fit.mockRestore()
+    zoom.mockRestore()
     editor.dispose()
   }
 })
 
-test('stops fitting after the demo graph is replaced', async () => {
+test('leaves the view alone on a page without sections', () => {
   const editor = createEditor()
-  const replacement = new SceneGraph()
-  const nextReplacement = replacement.addPage('User document')
-  const fit = spyOn(editor, 'zoomToFit')
-  const stop = fitDemoPagesOnFirstVisit(editor, [nextReplacement.id])
+  editor.graph.createNode('FRAME', editor.state.currentPageId, { width: 10, height: 10 })
+  const zoom = spyOn(editor, 'zoomToBounds')
   try {
-    editor.replaceGraph(replacement)
-    await editor.switchPage(nextReplacement.id)
-    expect(fit).not.toHaveBeenCalled()
+    showFirstChapter(editor)
+    expect(zoom).not.toHaveBeenCalled()
   } finally {
-    stop()
-    fit.mockRestore()
+    zoom.mockRestore()
     editor.dispose()
   }
 })

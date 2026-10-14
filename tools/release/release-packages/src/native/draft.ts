@@ -1,3 +1,4 @@
+import { isPrerelease } from '#release/version'
 import * as v from 'valibot'
 
 import type { ReleaseIdentity } from './context.ts'
@@ -29,4 +30,9 @@ export function assertDraftReplacement(
       `Refusing to remove unexpected draft assets: ${unexpected.map((asset) => asset.name).join(', ')}`
     )
   }
+}
+
+/** A pre-release is never GitHub's latest release, which the desktop updater and download links follow. */
+export function releaseChannelArgs(version: string): string[] {
+  return isPrerelease(version) ? ['--prerelease', '--latest=false'] : []
 }

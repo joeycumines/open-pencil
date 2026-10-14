@@ -33,7 +33,11 @@ export function convertFigmaDerivedTextGlyphs(
 ): DerivedTextGlyph[] {
   if (!derivedTextData || isUnshapedOpenPencilText(derivedTextData, characters)) return []
   const glyphs: DerivedTextGlyph[] = []
-  for (const glyph of derivedTextData.glyphs ?? []) {
+  // Truncated text is laid out whole, with an ellipsis glyph where it is cut; Figma hides the
+  // glyphs from `truncationStartIndex` on, so they are not drawn here either.
+  const truncation = derivedTextData.truncationStartIndex ?? -1
+  const saved = derivedTextData.glyphs ?? []
+  for (const glyph of truncation >= 0 ? saved.slice(0, truncation) : saved) {
     const commandsBlob = glyph.commandsBlob === undefined ? undefined : blobs[glyph.commandsBlob]
     // Layout written without outlines, or with some missing, would draw text with gaps.
     if (!commandsBlob) return []

@@ -32,9 +32,12 @@ function squareCommandsBlob(): Uint8Array {
   return blob
 }
 
-/** The highest coverage on the underline rows at column `x` of a rendered text layer. */
+/**
+ * The highest coverage on the underline row at column `x` of a rendered text layer: 10px text
+ * on a baseline at 12 is underlined from 13.99 to 14.67, as Figma places it.
+ */
 function underlineAlpha(pixels: ArrayLike<number>, width: number, x: number): number {
-  return Math.max(...[15, 16].map((y) => pixels[(y * width + x) * 4 + 3]))
+  return pixels[(14 * width + x) * 4 + 3]
 }
 
 describe('derived text decorations', () => {
@@ -49,7 +52,14 @@ describe('derived text decorations', () => {
       textDecoration: 'UNDERLINE',
       fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 }, opacity: 1, visible: true }],
       derivedTextGlyphs: [
-        { commandsBlob: squareCommandsBlob(), x: 2, y: 12, fontSize: 10, advance: 10 }
+        {
+          commandsBlob: squareCommandsBlob(),
+          x: 2,
+          y: 12,
+          fontSize: 10,
+          firstCharacter: 0,
+          advance: 10
+        }
       ]
     })
     const surface = expectDefined(ck.MakeSurface(1, 1), 'surface')

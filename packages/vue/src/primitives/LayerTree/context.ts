@@ -13,6 +13,8 @@ export interface LayerNode {
   icon?: boolean
   visible: boolean
   locked: boolean
+  /** The variable modes set on the layer itself, which Figma tags its row with. */
+  modeIds?: string[]
   children?: LayerNode[]
 }
 

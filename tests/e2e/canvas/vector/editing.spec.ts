@@ -1,4 +1,5 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
+import { vectorEditDriver } from '#tests/helpers/canvas/vector-edit/driver'
 
 const editor = useEditorSetupWithClear('/?test&no-chrome&no-rulers')
 
@@ -279,4 +280,18 @@ test('dragging a vector point snaps to sibling bounds and clears guides on relea
   await editor.page.mouse.up()
 
   editor.canvas.assertNoErrors()
+})
+
+test('Enter opens a selected vector’s path, but not one an instance draws from its component', async () => {
+  const scene = vectorEditDriver(() => editor.page)
+  const ids = await scene.build()
+  const editedAfterEnter = async (id: string) => {
+    await scene.select(id)
+    await editor.page.keyboard.press('Enter')
+    const edited = await scene.editedNode()
+    await scene.closeEdit()
+    return edited
+  }
+  expect(await editedAfterEnter(ids.vector)).toBe(ids.vector)
+  expect(await editedAfterEnter(ids.copy)).toBeNull()
 })

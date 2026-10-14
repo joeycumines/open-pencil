@@ -4,14 +4,20 @@
 
 ## Canonical release workflow
 
-`.github/workflows/build.yml` runs on a new stable tag, or through `workflow_dispatch` with an existing `vX.Y.Z` tag. A dispatch uses the selected workflow revision but builds the immutable application commit resolved from that tag. The source must be an ancestor of `origin/master`.
+`.github/workflows/build.yml` runs on a new release tag, or through `workflow_dispatch` with an existing one. Release tags are stable `vX.Y.Z` or beta pre-releases `vX.Y.Z-beta.N` (`src/version.ts`). A dispatch uses the selected workflow revision but builds the immutable application commit resolved from that tag. The source must be an ancestor of `origin/master`.
 
 1. **Plan:** resolve the source commit and generate the native matrix from `native/catalog.ts`.
 2. **Frontend:** build packages and the desktop frontend once; prepare and pack npm archives without rebuilding. Archive `dist`, desktop icons, and generated menus together and record its SHA-256.
-3. **Native:** five independent jobs check out that same source, verify and extract the shared inputs, then build through Node's Tauri CLI launcher. A generated config sets only `build.beforeBuildCommand` to `null`; the checked-in local build hook is unchanged. No native job uploads release assets.
+3. **Native:** five independent jobs check out that same source, verify and extract the shared inputs, then build through Node's Tauri CLI launcher. A generated config sets `build.beforeBuildCommand` to `null` and, for a beta, the numeric MSI version `X.Y.Z.N`; the checked-in local build hook is unchanged. No native job uploads release assets.
 4. **Publish:** require the complete matrix with identical source/workflow/run/attempt/frontend identity. Verify file inventories, hashes, every updater signature and the release version it records (the desktop updater sets `requireSignedVersion`), and exact source changelog notes. Generate the updater JSON, source/workflow manifest, and checksums; attest and verify the complete output set. Verify npm consumers and publish the original tarballs with npm provenance. Replace every expected draft asset, then download and verify all uploaded bytes.
 
 Workflow tooling is checked out separately in `.pipeline` and installed from its own frozen lockfile where it runs. Application dependency installation and builds remain owned by the tagged checkout; rebuilding an older tag must not accidentally execute its older release orchestration. Dependency installation is not frontend/package compilation.
+
+## Pre-releases
+
+A `vX.Y.Z-beta.N` tag runs the same workflow. npm packages publish under the `next` dist-tag, so `latest` stays on the last stable release, and the draft is marked pre-release and never latest. The desktop updater and download links follow GitHub's latest release, and the Homebrew cask only matches stable tags, so neither picks up a beta. The app and docs deploy workflows skip pre-release tags. The changelog section is headed `## X.Y.Z-beta.N — YYYY-MM-DD` like any release.
+
+## Draft publication
 
 The workflow leaves the GitHub Release **draft**. After successful verification, publish it with the exact tagged changelog body and publish any accompanying security advisory separately. Never move a release tag to repair CI.
 

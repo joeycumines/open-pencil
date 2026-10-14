@@ -4,13 +4,16 @@ import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { createAutoLayoutValueEdit } from '#vue/canvas/auto-layout/value-edit'
 import { createGuideInput, selectedTopLevelGuideFrameId } from '#vue/canvas/guides/input'
 import { createCanvasLabelEdit } from '#vue/canvas/labels/edit'
 import { handlePenDragMove, updatePenHover } from '#vue/canvas/pen/input'
+import { finishPencilDrag, handlePencilDragMove } from '#vue/canvas/pencil/input'
 import { createCanvasPointer } from '#vue/canvas/pointer/use'
 import { createTextEditInput } from '#vue/canvas/text-edit/input'
 import { handleToolMouseDown } from '#vue/canvas/tools/input'
 import { createCanvasTransformInput } from '#vue/canvas/transform/input'
+import { finishMarquee } from '#vue/canvas/transform/marquee'
 import {
   handleBendHandleMove,
   handleNodeEditPointerUp,
@@ -21,8 +24,9 @@ import { createClickCounter } from '#vue/shared/input/click-count'
 import { handleDrawMove } from '#vue/shared/input/draw'
 import { handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
 import { setupPanZoom } from '#vue/shared/input/pan-zoom'
-import { applyResize, commitResizePreview } from '#vue/shared/input/resize'
+import { applyResize, cancelResizePreview, commitResizePreview } from '#vue/shared/input/resize'
 import { updateHoverCursor } from '#vue/shared/input/select'
+import { resolveShapeHandleHover } from '#vue/shared/input/shape-handles'
 import { useSpaceHeld } from '#vue/shared/input/space-key'
 import type { DragState } from '#vue/shared/input/types'
 import { handleNodeEditMove } from '#vue/shared/input/vector'
@@ -54,14 +58,9 @@ export function useCanvasInput(
   const canvasLabelEdit = createCanvasLabelEdit(editor)
   const cursorOverride = ref<string | null>(null)
   /** Whether the primary button is held on a preview control, such as a slider thumb. */
-  const autoLayoutPaddingEdit = ref<{
-    nodeId: string
-    side: 'top' | 'right' | 'bottom' | 'left'
-    value: number
-    previous: number
-  } | null>(null)
+  const valueEdit = createAutoLayoutValueEdit(editor)
   const selectedIdsBeforeClickSequence = ref<ReadonlySet<string>>(new Set())
-  const lastPointer = ref<{ cx: number; cy: number } | null>(null)
+  const lastPointer = ref<{ cx: number; cy: number; sx: number; sy: number } | null>(null)
   const pointerInside = ref(false)
   let altHeld = false
   let metaHeld = false
@@ -110,6 +109,7 @@ export function useCanvasInput(
     editor.setAutoLayoutHover(
       mode === 'off' ? resolveAutoLayoutHover(pointer.cx, pointer.cy, editor) : null
     )
+    editor.setShapeHandleHover(resolveShapeHandleHover(editor, pointer.sx, pointer.sy, altHeld))
   }
 
   function updateModifier(code: string, held: boolean) {
@@ -165,68 +165,14 @@ export function useCanvasInput(
     handleMarqueeMove
   } = createCanvasTransformInput(editor, setDrag)
 
-  function paddingValue(node: SceneNode, side: 'top' | 'right' | 'bottom' | 'left') {
-    if (side === 'top') return node.paddingTop
-    if (side === 'right') return node.paddingRight
-    if (side === 'bottom') return node.paddingBottom
-    return node.paddingLeft
-  }
-
-  function paddingKey(side: 'top' | 'right' | 'bottom' | 'left') {
-    if (side === 'top') return 'paddingTop' as const
-    if (side === 'right') return 'paddingRight' as const
-    if (side === 'bottom') return 'paddingBottom' as const
-    return 'paddingLeft' as const
-  }
-
-  function startAutoLayoutPaddingEdit(e: MouseEvent): boolean {
-    const { cx, cy } = getCoords(e)
-    const hover = resolveAutoLayoutHover(cx, cy, editor)
-    if (hover?.kind !== 'padding' && hover?.kind !== 'padding-value') return false
-    if (!hover.side) return false
-    const node = editor.graph.getNode(hover.nodeId)
-    if (!node) return false
-    const value = paddingValue(node, hover.side)
-    autoLayoutPaddingEdit.value = {
-      nodeId: node.id,
-      side: hover.side,
-      value,
-      previous: value
-    }
-    e.preventDefault()
-    e.stopPropagation()
-    return true
-  }
-
-  function updateAutoLayoutPaddingEdit(value: number) {
-    const edit = autoLayoutPaddingEdit.value
-    if (!edit || !Number.isFinite(value)) return
-    const next = Math.max(0, value)
-    autoLayoutPaddingEdit.value = { ...edit, value: next }
-    editor.updateNode(edit.nodeId, { [paddingKey(edit.side)]: next })
-  }
-
-  function commitAutoLayoutPaddingEdit(value: number) {
-    const edit = autoLayoutPaddingEdit.value
-    if (!edit || !Number.isFinite(value)) {
-      autoLayoutPaddingEdit.value = null
-      return
-    }
-    const next = Math.max(0, value)
-    editor.updateNode(edit.nodeId, { [paddingKey(edit.side)]: edit.previous })
-    editor.updateNodeWithUndo(edit.nodeId, { [paddingKey(edit.side)]: next }, 'Update padding')
-    autoLayoutPaddingEdit.value = null
-  }
-
-  function cancelAutoLayoutPaddingEdit() {
-    const edit = autoLayoutPaddingEdit.value
-    if (edit) editor.updateNode(edit.nodeId, { [paddingKey(edit.side)]: edit.previous })
-    autoLayoutPaddingEdit.value = null
-  }
-
   function onDblClick(e: MouseEvent) {
     if (editor.state.play) return
-    if (startAutoLayoutPaddingEdit(e)) return
+    const { cx, cy } = getCoords(e)
+    if (valueEdit.start(cx, cy)) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     onTextDblClick(e)
   }
 
@@ -239,10 +185,8 @@ export function useCanvasInput(
       return
     }
     editor.setMeasurementMode('off')
-    const paddingEdit = autoLayoutPaddingEdit.value
-    if (paddingEdit) {
-      commitAutoLayoutPaddingEdit(paddingEdit.value)
-    }
+    const openValueEdit = valueEdit.edit.value
+    if (openValueEdit) valueEdit.commit(openValueEdit.value)
     if (!editor.state.editingTextId) canvasRef.value?.focus()
     editor.setHoveredNode(null)
     const { sx, sy, cx, cy } = getCoords(e)
@@ -280,7 +224,7 @@ export function useCanvasInput(
     if (!isEnabled()) return
     pointerInside.value = true
     const coords = getCoords(e)
-    lastPointer.value = { cx: coords.cx, cy: coords.cy }
+    lastPointer.value = { cx: coords.cx, cy: coords.cy, sx: coords.sx, sy: coords.sy }
     if (onCursorMove) {
       onCursorMove(coords.cx, coords.cy)
     }
@@ -293,8 +237,9 @@ export function useCanvasInput(
     }
 
     if (!drag.value) {
-      const { cx, cy } = coords
+      const { cx, cy, sx, sy } = coords
       updateNodeEditHover(editor, cx, cy)
+      editor.setShapeHandleHover(resolveShapeHandleHover(editor, sx, sy, e.altKey))
     }
 
     if (!drag.value && editor.state.activeTool === 'SELECT') {
@@ -324,7 +269,7 @@ export function useCanvasInput(
 
     const { sx, sy, cx, cy } = getCoords(e)
 
-    if (d.type === 'gradient') {
+    if (d.type === 'gradient' || d.type === 'shape-handle') {
       d.update(sx, sy, e.shiftKey)
       return
     }
@@ -361,6 +306,11 @@ export function useCanvasInput(
 
     if (d.type === 'pen-drag') {
       handlePenDragMove(d, cx, cy, spaceHeld.value, e, editor)
+      return
+    }
+
+    if (d.type === 'pencil-drag') {
+      handlePencilDragMove(cx, cy, e.shiftKey, editor)
       return
     }
 
@@ -406,15 +356,16 @@ export function useCanvasInput(
       }
       drag.value = null
       return
-    } else if (d.type === 'rotate') {
+    } else if (d.type === 'pencil-drag') finishPencilDrag(editor)
+    else if (d.type === 'rotate') {
       const preview = editor.state.rotationPreview
       if (preview?.nodeId === d.nodeId && preview.angle !== d.origRotation) {
         editor.updateNode(d.nodeId, { rotation: preview.angle })
         editor.commitRotation(d.nodeId, d.origRotation)
       }
       if (editor.state.rotationPreview === preview) editor.setRotationPreview(null)
-    } else if (d.type === 'draw' || d.type === 'gradient') d.commit()
-    else if (d.type === 'marquee') editor.setMarquee(null)
+    } else if (d.type === 'draw' || d.type === 'gradient' || d.type === 'shape-handle') d.commit()
+    else if (d.type === 'marquee') finishMarquee(editor, d)
 
     drag.value = null
     cursorOverride.value = null
@@ -425,16 +376,28 @@ export function useCanvasInput(
     editor.setSnapGuides([])
     editor.setLayoutInsertIndicator(null)
     editor.setDropTarget(null)
+    editor.setShapeHandleHover(null)
     guideInput.clearHoverAndPreview()
   }
 
+  /** Drops what a resize or pencil stroke showed without changing the document. */
+  function discardDrawnPreview(d: DragState) {
+    if (d.type === 'resize') cancelResizePreview(d, editor)
+    else if (d.type === 'pencil-drag') editor.pencilCancel()
+  }
+
   function cancelPointerInteraction() {
+    if (drag.value) discardDrawnPreview(drag.value)
     if (drag.value?.type === 'rotate') {
       const rotation = drag.value
       drag.value = null
       if (editor.state.rotationPreview?.nodeId === rotation.nodeId) editor.setRotationPreview(null)
     }
-    if (drag.value?.type === 'draw' || drag.value?.type === 'gradient') {
+    if (
+      drag.value?.type === 'draw' ||
+      drag.value?.type === 'gradient' ||
+      drag.value?.type === 'shape-handle'
+    ) {
       const drawing = drag.value
       drag.value = null
       drawing.cancel()
@@ -524,6 +487,7 @@ export function useCanvasInput(
     if (!drag.value) {
       editor.setHoveredNode(null)
       editor.setHoveredGuide(null)
+      editor.setShapeHandleHover(null)
     }
   })
   useEventListener(
@@ -547,7 +511,9 @@ export function useCanvasInput(
   const stopPlayListeners = (['selection:changed', 'page:changed', 'graph:replaced'] as const).map(
     (event) =>
       editor.onEditorEvent(event, () => {
-        if (drag.value?.type === 'draw' || drag.value?.type === 'rotate') cancelPointerInteraction()
+        const type = drag.value?.type
+        if (type === 'draw' || type === 'rotate' || type === 'shape-handle')
+          cancelPointerInteraction()
       })
   )
   onScopeDispose(() => {
@@ -565,12 +531,12 @@ export function useCanvasInput(
     updateCanvasLabelEdit: canvasLabelEdit.update,
     commitCanvasLabelEdit: canvasLabelEdit.commit,
     cancelCanvasLabelEdit: canvasLabelEdit.cancel,
-    autoLayoutPaddingEdit,
-    updateAutoLayoutPaddingEdit,
-    commitAutoLayoutPaddingEdit,
-    cancelAutoLayoutPaddingEdit,
+    autoLayoutValueEdit: valueEdit.edit,
+    updateAutoLayoutValueEdit: valueEdit.update,
+    commitAutoLayoutValueEdit: valueEdit.commit,
+    cancelAutoLayoutValueEdit: valueEdit.cancel,
     cleanupInteractions() {
-      cancelAutoLayoutPaddingEdit()
+      valueEdit.cancel()
       cancelPointerInteraction()
       pointerInside.value = false
       resetMeasurementModifiers()

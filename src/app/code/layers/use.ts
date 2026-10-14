@@ -51,7 +51,9 @@ export function useCodeLayers(source: Readonly<Ref<CodeSource>>) {
   }
 
   /** Design JSX for a layer added on the canvas, with the layer of each of its elements. */
-  function snippet(nodeId: string): { code: string; layerIds: string[] } | null {
+  function snippet(
+    nodeId: string
+  ): { code: string; layerIds: ReadonlyArray<string | null> } | null {
     const { code, layerIds } = selectionToJSXWithLayers([nodeId], store.graph)
     return code ? { code, layerIds } : null
   }

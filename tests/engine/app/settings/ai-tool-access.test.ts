@@ -29,6 +29,26 @@ test('AI catalog includes exposed extended tools while preserving compact defaul
   expect(defaults).toContain('get_components')
   expect(defaults).toContain('list_libraries')
   expect(defaults).toContain('insert_library_component')
+  for (const name of [
+    'get_comments',
+    'add_comment',
+    'reply_to_comment',
+    'resolve_comment',
+    'list_variables',
+    'create_collection',
+    'create_variable',
+    'set_variable',
+    'bind_variable',
+    'lint',
+    'lint_fix',
+    'export_image',
+    'list_pages',
+    'create_page'
+  ]) {
+    expect(defaults).toContain(name)
+  }
+  // Moving the view stays the user's choice.
+  expect(defaults).not.toContain('switch_page')
   expect(defaults).not.toContain('create_component')
   expect(enabledAIToolDefinitions({ create_component: true }).map((tool) => tool.name)).toContain(
     'create_component'

@@ -1,0 +1,940 @@
+{
+  "source": {
+    "tool": "Figma clipboard, copied over CDP",
+    "captured": "2026-10-11",
+    "font": "Inter Regular as Figma ships it"
+  },
+  "note": "Figma saves each underline and strikethrough as rects in derivedTextData.decorations and draws saved text from them.",
+  "cases": [
+    {
+      "name": "deco-decorations",
+      "text": "Solid dotted wavy coloured thick offset strike",
+      "fontSize": 24,
+      "textDecoration": "NONE",
+      "textDecorationStyle": "SOLID",
+      "styleRuns": [
+        {
+          "start": 0,
+          "length": 6,
+          "style": {
+            "textDecoration": "UNDERLINE"
+          }
+        },
+        {
+          "start": 6,
+          "length": 6,
+          "style": {
+            "textDecoration": "UNDERLINE",
+            "textDecorationStyle": "DOTTED"
+          }
+        },
+        {
+          "start": 12,
+          "length": 1,
+          "style": {
+            "textDecoration": "UNDERLINE"
+          }
+        },
+        {
+          "start": 13,
+          "length": 4,
+          "style": {
+            "textDecoration": "UNDERLINE",
+            "textDecorationStyle": "WAVY"
+          }
+        },
+        {
+          "start": 17,
+          "length": 1,
+          "style": {
+            "textDecoration": "UNDERLINE"
+          }
+        },
+        {
+          "start": 18,
+          "length": 8,
+          "style": {
+            "textDecoration": "UNDERLINE",
+            "textDecorationFills": [
+              {
+                "type": "SOLID",
+                "color": {
+                  "r": 0.10000000149011612,
+                  "g": 0.4000000059604645,
+                  "b": 0.949999988079071,
+                  "a": 1
+                },
+                "opacity": 1,
+                "visible": true,
+                "blendMode": "NORMAL"
+              }
+            ]
+          }
+        },
+        {
+          "start": 26,
+          "length": 1,
+          "style": {
+            "textDecoration": "UNDERLINE"
+          }
+        },
+        {
+          "start": 27,
+          "length": 5,
+          "style": {
+            "textDecoration": "UNDERLINE",
+            "textDecorationThickness": 4
+          }
+        },
+        {
+          "start": 32,
+          "length": 1,
+          "style": {
+            "textDecoration": "UNDERLINE"
+          }
+        },
+        {
+          "start": 33,
+          "length": 6,
+          "style": {
+            "textDecoration": "UNDERLINE",
+            "textUnderlineOffset": 8
+          }
+        },
+        {
+          "start": 40,
+          "length": 6,
+          "style": {
+            "textDecoration": "STRIKETHROUGH"
+          }
+        }
+      ],
+      "glyphs": [
+        {
+          "x": 0,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 0,
+          "rotation": 0,
+          "advance": 15.306818962097168,
+          "outline": 0
+        },
+        {
+          "x": 15.3046875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 1,
+          "rotation": 0,
+          "advance": 14.318182468414307,
+          "outline": 1
+        },
+        {
+          "x": 29.625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 2,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 2
+        },
+        {
+          "x": 35.3203125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 3,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 3
+        },
+        {
+          "x": 41.015625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 4,
+          "rotation": 0,
+          "advance": 14.897727012634277,
+          "outline": 4
+        },
+        {
+          "x": 55.921875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 5,
+          "rotation": 0,
+          "advance": 6.75,
+          "outline": 5
+        },
+        {
+          "x": 62.671875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 6,
+          "rotation": 0,
+          "advance": 14.897727012634277,
+          "outline": 4
+        },
+        {
+          "x": 77.578125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 7,
+          "rotation": 0,
+          "advance": 14.318182468414307,
+          "outline": 1
+        },
+        {
+          "x": 91.8984375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 8,
+          "rotation": 0,
+          "advance": 8.727272987365723,
+          "outline": 6
+        },
+        {
+          "x": 100.6171875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 9,
+          "rotation": 0,
+          "advance": 8.727272987365723,
+          "outline": 6
+        },
+        {
+          "x": 109.1953125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 10,
+          "rotation": 0,
+          "advance": 13.977272987365723,
+          "outline": 7
+        },
+        {
+          "x": 123.1640625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 11,
+          "rotation": 0,
+          "advance": 14.897727012634277,
+          "outline": 4
+        },
+        {
+          "x": 138.0703125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 12,
+          "rotation": 0,
+          "advance": 6.75,
+          "outline": 5
+        },
+        {
+          "x": 144.8203125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 13,
+          "rotation": 0,
+          "advance": 19.5,
+          "outline": 8
+        },
+        {
+          "x": 164.3203125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 14,
+          "rotation": 0,
+          "advance": 13.53409194946289,
+          "outline": 9
+        },
+        {
+          "x": 177.375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 15,
+          "rotation": 0,
+          "advance": 13.363636493682861,
+          "outline": 10
+        },
+        {
+          "x": 190.734375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 16,
+          "rotation": 0,
+          "advance": 13.363636493682861,
+          "outline": 11
+        },
+        {
+          "x": 204.09375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 17,
+          "rotation": 0,
+          "advance": 6.75,
+          "outline": 5
+        },
+        {
+          "x": 210.84375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 18,
+          "rotation": 0,
+          "advance": 13.397727012634277,
+          "outline": 12
+        },
+        {
+          "x": 224.25,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 19,
+          "rotation": 0,
+          "advance": 14.318182468414307,
+          "outline": 1
+        },
+        {
+          "x": 238.5703125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 20,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 2
+        },
+        {
+          "x": 244.265625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 21,
+          "rotation": 0,
+          "advance": 14.318182468414307,
+          "outline": 1
+        },
+        {
+          "x": 258.5859375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 22,
+          "rotation": 0,
+          "advance": 13.943182468414307,
+          "outline": 13
+        },
+        {
+          "x": 272.53125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 23,
+          "rotation": 0,
+          "advance": 8.93181824684143,
+          "outline": 14
+        },
+        {
+          "x": 281.0625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 24,
+          "rotation": 0,
+          "advance": 13.977272987365723,
+          "outline": 7
+        },
+        {
+          "x": 295.03125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 25,
+          "rotation": 0,
+          "advance": 14.897727012634277,
+          "outline": 4
+        },
+        {
+          "x": 309.9375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 26,
+          "rotation": 0,
+          "advance": 6.75,
+          "outline": 5
+        },
+        {
+          "x": 316.6875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 27,
+          "rotation": 0,
+          "advance": 8.727272987365723,
+          "outline": 6
+        },
+        {
+          "x": 325.6875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 28,
+          "rotation": 0,
+          "advance": 14.181818962097168,
+          "outline": 15
+        },
+        {
+          "x": 339.8671875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 29,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 3
+        },
+        {
+          "x": 345.5625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 30,
+          "rotation": 0,
+          "advance": 13.397727012634277,
+          "outline": 12
+        },
+        {
+          "x": 358.96875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 31,
+          "rotation": 0,
+          "advance": 13.056818962097168,
+          "outline": 16
+        },
+        {
+          "x": 372.0234375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 32,
+          "rotation": 0,
+          "advance": 6.75,
+          "outline": 5
+        },
+        {
+          "x": 378.7734375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 33,
+          "rotation": 0,
+          "advance": 14.318182468414307,
+          "outline": 1
+        },
+        {
+          "x": 393.09375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 34,
+          "rotation": 0,
+          "advance": 8.659091234207153,
+          "outline": 17
+        },
+        {
+          "x": 401.7421875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 35,
+          "rotation": 0,
+          "advance": 8.659091234207153,
+          "outline": 17
+        },
+        {
+          "x": 409.8515625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 36,
+          "rotation": 0,
+          "advance": 12.54545545578003,
+          "outline": 18
+        },
+        {
+          "x": 422.390625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 37,
+          "rotation": 0,
+          "advance": 13.977272987365723,
+          "outline": 7
+        },
+        {
+          "x": 436.359375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 38,
+          "rotation": 0,
+          "advance": 8.727272987365723,
+          "outline": 6
+        },
+        {
+          "x": 445.078125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 39,
+          "rotation": 0,
+          "advance": 6.75,
+          "outline": 5
+        },
+        {
+          "x": 451.828125,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 40,
+          "rotation": 0,
+          "advance": 12.54545545578003,
+          "outline": 18
+        },
+        {
+          "x": 464.3671875,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 41,
+          "rotation": 0,
+          "advance": 8.727272987365723,
+          "outline": 6
+        },
+        {
+          "x": 473.0859375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 42,
+          "rotation": 0,
+          "advance": 8.93181824684143,
+          "outline": 14
+        },
+        {
+          "x": 482.015625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 43,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 3
+        },
+        {
+          "x": 487.7109375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 44,
+          "rotation": 0,
+          "advance": 13.056818962097168,
+          "outline": 16
+        },
+        {
+          "x": 500.2265625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 45,
+          "rotation": 0,
+          "advance": 13.977272987365723,
+          "outline": 7
+        }
+      ],
+      "figmaRects": [
+        {
+          "x": 0,
+          "y": 27.772727966308594,
+          "w": 62.671875,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 138.0703125,
+          "y": 27.772727966308594,
+          "w": 6.75,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 204.09375,
+          "y": 27.772727966308594,
+          "w": 6.75,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 309.9375,
+          "y": 27.772727966308594,
+          "w": 6.75,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 372.0234375,
+          "y": 27.772727966308594,
+          "w": 6.75,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 62.671875,
+          "y": 27.772727966308594,
+          "w": 75.3984375,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 144.8203125,
+          "y": 27.772727966308594,
+          "w": 46.9322509765625,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 195.9505615234375,
+          "y": 27.772727966308594,
+          "w": 8.1431884765625,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 210.84375,
+          "y": 27.772727966308594,
+          "w": 99.09375,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 316.6875,
+          "y": 27.772727966308594,
+          "w": 55.3359375,
+          "h": 4
+        },
+        {
+          "x": 378.7734375,
+          "y": 31,
+          "w": 66.3046875,
+          "h": 1.6363639831542969
+        },
+        {
+          "x": 451.828125,
+          "y": 15.142045021057129,
+          "w": 62.375732421875,
+          "h": 1.6363649368286133
+        }
+      ]
+    },
+    {
+      "name": "skip-Inter-24",
+      "text": "gypj",
+      "fontSize": 24,
+      "textDecoration": "UNDERLINE",
+      "textDecorationStyle": "SOLID",
+      "styleRuns": [],
+      "glyphs": [
+        {
+          "x": 0,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 0,
+          "rotation": 0,
+          "advance": 14.625,
+          "outline": 19
+        },
+        {
+          "x": 14.625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 1,
+          "rotation": 0,
+          "advance": 13.363636493682861,
+          "outline": 11
+        },
+        {
+          "x": 27.984375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 2,
+          "rotation": 0,
+          "advance": 14.625,
+          "outline": 20
+        },
+        {
+          "x": 42.609375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 3,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 21
+        }
+      ],
+      "figmaRects": [
+        {
+          "x": 0,
+          "y": 27.772727966308594,
+          "w": 2.8948864936828613,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 11.347301483154297,
+          "y": 27.772727966308594,
+          "w": 3.6413345336914062,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 20.495738983154297,
+          "y": 27.772727966308594,
+          "w": 7.696022033691406,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 33.4723014831543,
+          "y": 27.772727966308594,
+          "w": 7.500709533691406,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 45.5582389831543,
+          "y": 27.772727966308594,
+          "w": 2.7443199157714844,
+          "h": 1.636362075805664
+        }
+      ]
+    },
+    {
+      "name": "skip-Inter-96",
+      "text": "gypj",
+      "fontSize": 96,
+      "textDecoration": "UNDERLINE",
+      "textDecorationStyle": "SOLID",
+      "styleRuns": [],
+      "glyphs": [
+        {
+          "x": 0,
+          "y": 92.90908813476562,
+          "fontSize": 96,
+          "firstCharacter": 0,
+          "rotation": 0,
+          "advance": 58.5,
+          "outline": 19
+        },
+        {
+          "x": 58.5,
+          "y": 92.90908813476562,
+          "fontSize": 96,
+          "firstCharacter": 1,
+          "rotation": 0,
+          "advance": 53.454545974731445,
+          "outline": 11
+        },
+        {
+          "x": 111.9375,
+          "y": 92.90908813476562,
+          "fontSize": 96,
+          "firstCharacter": 2,
+          "rotation": 0,
+          "advance": 58.5,
+          "outline": 20
+        },
+        {
+          "x": 170.4375,
+          "y": 92.90908813476562,
+          "fontSize": 96,
+          "firstCharacter": 3,
+          "rotation": 0,
+          "advance": 22.772728443145752,
+          "outline": 21
+        }
+      ],
+      "figmaRects": [
+        {
+          "x": 0,
+          "y": 112.09091186523438,
+          "w": 11.609375,
+          "h": 6.545448303222656
+        },
+        {
+          "x": 45.359375,
+          "y": 112.09091186523438,
+          "w": 14.6015625,
+          "h": 6.545448303222656
+        },
+        {
+          "x": 81.953125,
+          "y": 112.09091186523438,
+          "w": 30.8515625,
+          "h": 6.545448303222656
+        },
+        {
+          "x": 133.84375,
+          "y": 112.09091186523438,
+          "w": 30.09375,
+          "h": 6.545448303222656
+        },
+        {
+          "x": 182.1796875,
+          "y": 112.09091186523438,
+          "w": 11.030548095703125,
+          "h": 6.545448303222656
+        }
+      ]
+    },
+    {
+      "name": "skip-WAVY-24",
+      "text": "gypj",
+      "fontSize": 24,
+      "textDecoration": "UNDERLINE",
+      "textDecorationStyle": "WAVY",
+      "styleRuns": [],
+      "glyphs": [
+        {
+          "x": 0,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 0,
+          "rotation": 0,
+          "advance": 14.625,
+          "outline": 19
+        },
+        {
+          "x": 14.625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 1,
+          "rotation": 0,
+          "advance": 13.363636493682861,
+          "outline": 11
+        },
+        {
+          "x": 27.984375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 2,
+          "rotation": 0,
+          "advance": 14.625,
+          "outline": 20
+        },
+        {
+          "x": 42.609375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 3,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 21
+        }
+      ],
+      "figmaRects": [
+        {
+          "x": 0,
+          "y": 27.772727966308594,
+          "w": 3.549431800842285,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 10.692755699157715,
+          "y": 27.772727966308594,
+          "w": 4.95042610168457,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 19.84119415283203,
+          "y": 27.772727966308594,
+          "w": 9.005111694335938,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 32.81775665283203,
+          "y": 27.772727966308594,
+          "w": 8.809799194335938,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 44.90369415283203,
+          "y": 27.772727966308594,
+          "w": 3.39886474609375,
+          "h": 1.636362075805664
+        }
+      ]
+    },
+    {
+      "name": "skip-DOTTED-24",
+      "text": "gypj",
+      "fontSize": 24,
+      "textDecoration": "UNDERLINE",
+      "textDecorationStyle": "DOTTED",
+      "styleRuns": [],
+      "glyphs": [
+        {
+          "x": 0,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 0,
+          "rotation": 0,
+          "advance": 14.625,
+          "outline": 19
+        },
+        {
+          "x": 14.625,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 1,
+          "rotation": 0,
+          "advance": 13.363636493682861,
+          "outline": 11
+        },
+        {
+          "x": 27.984375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 2,
+          "rotation": 0,
+          "advance": 14.625,
+          "outline": 20
+        },
+        {
+          "x": 42.609375,
+          "y": 23.227272033691406,
+          "fontSize": 24,
+          "firstCharacter": 3,
+          "rotation": 0,
+          "advance": 5.693182110786438,
+          "outline": 21
+        }
+      ],
+      "figmaRects": [
+        {
+          "x": 0,
+          "y": 27.772727966308594,
+          "w": 3.549431800842285,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 10.692755699157715,
+          "y": 27.772727966308594,
+          "w": 4.95042610168457,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 19.84119415283203,
+          "y": 27.772727966308594,
+          "w": 9.005111694335938,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 32.81775665283203,
+          "y": 27.772727966308594,
+          "w": 8.809799194335938,
+          "h": 1.636362075805664
+        },
+        {
+          "x": 44.90369415283203,
+          "y": 27.772727966308594,
+          "w": 3.39886474609375,
+          "h": 1.636362075805664
+        }
+      ]
+    }
+  ],
+  "outlines": [
+    "AAEvuvg+6aILPwNedPU+XXQZP4wu3j5GFyE/A7voxj4vuig/RhelPi+6KD8DGF2MPi+6KD/ponM+L7okPwO76E4+L7ogP4wuOj4vuhk/A3XRJT4vuhI/ddElPnXRCT8DddElPhhdAj8AADQ+AAD6PgOji0I+XnTvPkYXWT4YXeg+A+mibz5edOE+jC6EPrvo3D4Do4uQPqOL2D666Jo+ddHVPgIvusA+6aLLPgPSRc8+ddHHPkYX4T5GF8E+A0YX8z4YXbo+L7oBPy+6rj4DAAAKP9JFoz4YXQ8/0kWRPgMvuhQ/o4t+Pi+6FD+MLko+Ay+6FD910Q0+ddEMP4wuuj0DAAAFP110MT110es+jC56PAN10c0+XnRRvLrooj5edFG8A3XRdT5edFG80kU7PumiSzwDRhcBPowuGj3SRb89XXSpPQOMLno9uugCPi+6aD0AAEA+AtJFFz4AAEA+A7roGj510RU+6aIzPhhd9D0DL7pMPnXRvT276HI+uuiiPQMvuow+L7qIPbrooj4vuog9Ay+6vD4vuog90kXRPowuqj0DddHlPhhdzD110fE+GF0EPgN10f0+uugiPnXR/T7poks+A3XR/T4vunA+XnTzPgAAhD4DRhfpPumijz6MLtg+uuiWPgPSRcc+jC6ePumisz7poqM+AnXRhT4vurA+AxhdND7SRb0+XXQBPqOL1D4DRhedPXXR6z5GF509L7oIPwNGF509GF0YPy+64D0AACQ/A6OLEj4vui8/AABMPowuNj8DuuiCPi+6PD+ji6Y+L7o8PwOji8o+L7o8P6OL5j7SRTY/A9JFAT+76C8/XXQJP3XRJD8DL7oRPy+6GT+MLhI/6aILPwIvuvg+6aILPwA=",
+    "AAEvupg+jC46vAN10WU+jC46vC+6LD676MI8AwAA6D1edHE9AACoPYwu+j0DXnRRPXXRPT5edFE9jC6KPgNedFE9ddG1PgAAqD0YXdY+AwAA6D276PY+L7osPl10BD8DddFlPl10DT8vupg+XXQNPwOji74+XXQNP7vo2j5ddAQ/A1509z676PY+6aIDPxhd1j4D6aILP3XRtT7pogs/jC6KPgPpogs/ddE9PumiAz+MLvo9A1509z5edHE9u+jaPrvowjwDo4u+PowuOrwvupg+jC46vAABL7qYPrrogj0DXXS1Prrogj0AAMg+ddG9PQOji9o+L7r4PV504z4YXSw+Axhd7D4YXVw+GF3sPowuij4DGF3sPowupj5edOM+GF2+PgOji9o+o4vWPgAAyD5edOU+A110tT4YXfQ+L7qYPhhd9D4DAAB4Phhd9D676FI+XnTlPgN10S0+o4vWPgAAHD4YXb4+A4wuCj6MLqY+jC4KPowuij4DjC4KPhhdXD4AABw+GF0sPgN10S0+L7r4PbvoUj510b09AwAAeD666II9L7qYPrrogj0A",
+    "AAEYXSQ+jC46PwIYXSQ+AAAAAAJGF509AAAAAAJGF509jC46PwIYXSQ+jC46PwA=",
+    "AAFGF509AAAAAAJGF5096aILPwIYXSQ+6aILPwIYXSQ+AAAAAAJGF509AAAAAAABGF30PbroIj8DjC7CPbroIj910Z09jC4nPwMYXXQ9XXQrPxhddD1ddDE/AxhddD1ddDc/ddGdPS+6Oz8DjC7CPQAAQD8YXfQ9AABAPwPSRRM+AABAP0YXJT4vujs/A9JFNz5ddDc/0kU3Pl10MT8D0kU3Pl10Kz9GFyU+jC4nPwPSRRM+uugiPxhd9D266CI/AA==",
+    "AAEvupA+jC46vAPpols+jC46vIwuJj5GF708A1504T1GF209RhelPQAA+D0DXnRRPUYXPT5edFE9uuiKPgNedFE9u+i2PkYXpT3SRdc+A1504T3povc+o4smPumiBD8DGF1cPl10DT9ddJE+XXQNPwMvuqw+XXQNP6OLvD666Ag/A6OLzD5ddAQ/u+jUPl50/T4DXnTdPowu8j6MLuI+u+jqPgJ10eU+u+jqPgJ10eU+jC46PwIYXQg/jC46PwIYXQg/AAAAAALSRec+AAAAAALSRec+6aKrPQKMLuI+6aKrPQNedN0+RheNPS+61D5GFz09AwAAzD676MI8ddG7PnXRxTsD6aKrPowuOrwvupA+jC46vAABo4uWPrrogj0DGF2wPrrogj2MLsI+L7q4PQMAANQ+0kXvPdJF3T7poic+A6OL5j4AAFg+o4vmPumiiz4Do4vmPrvoqj5edN0+GF3CPgMYXdQ+AADaPqOLwj5GF+c+Ay+6sD4YXfQ+o4uWPhhd9D4Do4t2Phhd9D6MLlI+GF3mPgOMLi4+o4vYPgAAHD4vusA+A4wuCj5GF6k+jC4KPumiiz4DjC4KPumiWz4YXRw+u+gqPgO76C4+Rhf1PbvoUj7pors9A9JFdz666II9o4uWPrrogj0A",
+    "AA==",
+    "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"
+  ]
+}

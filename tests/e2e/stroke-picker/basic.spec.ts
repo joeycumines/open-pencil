@@ -94,9 +94,8 @@ test('stroke picker hsb saturation and brightness sliders update stroke color on
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
     const nodes = Array.from(store.graph.nodes.values())
-    const card =
-      nodes.find((node) => node.name === 'Card' && node.type === 'COMPONENT') ??
-      nodes.find((node) => node.name === 'Card')
+    // The Lint chapter's button keeps a hard-coded fill on purpose, for the rules to find.
+    const card = nodes.find((node) => node.name === 'Frame 3' && node.type === 'FRAME')
     if (!card) throw new Error('Card not found')
     let owner: SceneNode | undefined = card
     while (owner && owner.type !== 'CANVAS') {

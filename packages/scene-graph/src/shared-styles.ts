@@ -16,7 +16,8 @@ const STYLE_TYPES = {
   grid: 'GRID'
 } as const satisfies Record<SharedStyleKind, SharedStyleType>
 
-const TEXT_STYLE_KEYS = new Set<keyof SceneNode>([
+/** The fields a text style gives what uses it; changing one leaves the style. */
+export const SHARED_TEXT_STYLE_FIELDS = [
   'fontFamily',
   'fontWeight',
   'italic',
@@ -26,7 +27,9 @@ const TEXT_STYLE_KEYS = new Set<keyof SceneNode>([
   'textDecoration',
   'textCase',
   'fontFeatures'
-])
+] as const satisfies readonly (keyof SceneNode)[]
+
+const TEXT_STYLE_KEYS = new Set<keyof SceneNode>(SHARED_TEXT_STYLE_FIELDS)
 
 export function sharedStyleRefKey(kind: SharedStyleKind): (typeof STYLE_REF_KEYS)[SharedStyleKind] {
   return STYLE_REF_KEYS[kind]

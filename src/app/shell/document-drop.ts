@@ -2,6 +2,9 @@ import { useEventListener } from '@vueuse/core'
 
 import { filterCanvasFiles } from '@open-pencil/vue'
 
+import { getActiveEditorStoreOrNull } from '@/app/editor/active-store'
+import { isDesignTokenFileName } from '@/app/editor/tokens/design-tokens'
+import { importTokenFiles } from '@/app/editor/tokens/dialog'
 import { openDesignFile, openDesignFileBatch } from '@/app/shell/menu/files'
 
 interface DroppedFile {
@@ -40,8 +43,9 @@ function droppedFiles(transfer: DataTransfer): DroppedFile[] {
 
 /**
  * Opens documents dropped anywhere on the window in new tabs, as File → Open does. Images and
- * SVG files stay with the canvas, which places them; any other file reports that it cannot be
- * opened instead of being ignored.
+ * SVG files stay with the canvas, which places them; design token files open the variables
+ * import of the document in view; any other file reports that it cannot be opened instead of
+ * being ignored.
  */
 export function useDocumentDrop() {
   useEventListener(window, 'dragover', (event: DragEvent) => {
@@ -55,9 +59,18 @@ export function useDocumentDrop() {
     // Without this the browser would navigate away to show the file.
     event.preventDefault()
     // Classify each file itself: `getAsFile()` may return a new `File`, not one from `files`.
-    const documents = droppedFiles(event.dataTransfer).filter(
+    const dropped = droppedFiles(event.dataTransfer).filter(
       ({ file }) => filterCanvasFiles([file]).length === 0
     )
+    // Token files are imported into the open document's variables, as its Import button does.
+    const tokens = dropped.filter(({ file }) => isDesignTokenFileName(file.name))
+    const store = getActiveEditorStoreOrNull()
+    if (tokens.length > 0 && store)
+      importTokenFiles(
+        store,
+        tokens.map(({ file }) => file)
+      )
+    const documents = dropped.filter((entry) => !store || !tokens.includes(entry))
     if (documents.length === 0) return
     void openDesignFileBatch(
       documents,

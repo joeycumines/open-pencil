@@ -1,0 +1,37 @@
+name: Deploy feedback service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - packages/feedback/**
+  workflow_dispatch:
+
+concurrency:
+  group: feedback-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Typecheck and test against a local D1
+        run: bun run test:feedback
+
+      # Migrations run before the new code, so it never queries a table that is not there yet.
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: packages/feedback
+          packageManager: bun
+          command: |
+            d1 migrations apply feedback --remote
+            deploy

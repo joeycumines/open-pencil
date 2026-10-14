@@ -4,16 +4,21 @@ import {
   parseAutoLayoutDirection,
   parseCounterAxisAlign,
   parsePrimaryAxisAlign,
+  withShaderPaints,
   type Fill,
-  type SceneNode
+  type SceneNode,
+  type ShaderPaint
 } from '@open-pencil/scene-graph'
 import { colorToFill } from '@open-pencil/scene-graph/color'
 import { parseCSSGridTracks, parseCSSNumber } from '@open-pencil/scene-graph/css'
 import type { Color, JSONObject } from '@open-pencil/scene-graph/primitives'
 
 import { applyEffectOverrides } from './overrides/effects'
+import { fillFromValue, isColor, isFillValue } from './overrides/fills'
 import { applyStateOverrides } from './overrides/state'
 import { applyStrokeOverrides } from './overrides/strokes'
+import { applyTextDetailOverrides, AUTO } from './overrides/text'
+import { isShaderFill } from './paints'
 import { DESIGN_JSX_STYLE_KEYS, designJSXProp } from './schema'
 
 const WEIGHT_MAP: Record<string, number> = {
@@ -110,44 +115,38 @@ export function applySizeOverrides(
   return { w, h }
 }
 
-function isFill(value: unknown): value is Fill {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'type' in value &&
-    'color' in value &&
-    'visible' in value
-  )
-}
-
-function isFillValue(value: unknown): value is string | Color | Fill {
-  return typeof value === 'string' || isColor(value) || isFill(value)
-}
-
-function fillFromValue(value: string | Color | Fill): Fill {
-  return isFill(value) ? structuredClone(value) : colorToFill(value)
-}
-
-function isColor(value: unknown): value is Color {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'r' in value &&
-    'g' in value &&
-    'b' in value &&
-    'a' in value
-  )
+/**
+ * Sets the layer's fills, moving each shader paint's preset into the layer's plugin data,
+ * where a shader paint keeps it.
+ */
+function setFills(values: (string | Color | Fill)[], o: Partial<SceneNode>): void {
+  const shaders: ShaderPaint[] = []
+  const fills = values.map((value) => {
+    const fill = fillFromValue(value)
+    if (!isShaderFill(fill)) return fill
+    const { shader, ...paint } = fill
+    if (paint.imageHash) shaders.push({ image: paint.imageHash, preset: shader })
+    return paint
+  })
+  if (fills.length === 0) return
+  o.fills = fills
+  if (shaders.length > 0)
+    o.pluginData = withShaderPaints({ pluginData: o.pluginData ?? [] }, fills, shaders)
 }
 
 function applyFillOverride(props: Record<string, unknown>, o: Partial<SceneNode>): void {
+  // `fills={[]}` paints nothing, which a text, painted black by default, has to say.
+  if (Array.isArray(props.fills) && props.fills.length === 0) {
+    o.fills = []
+    return
+  }
   if (Array.isArray(props.fills)) {
-    const fills = props.fills.filter(isFillValue).map(fillFromValue)
-    if (fills.length > 0) o.fills = fills
+    setFills(props.fills.filter(isFillValue), o)
     return
   }
 
   const bg = designJSXProp(props, 'bg')
-  if (isFillValue(bg)) o.fills = [fillFromValue(bg)]
+  if (isFillValue(bg)) setFills([bg], o)
 }
 
 function applyCornerOverrides(props: Record<string, unknown>, o: Partial<SceneNode>): void {
@@ -375,10 +374,12 @@ function applyTextStyleOverrides(props: Record<string, unknown>, o: Partial<Scen
     o.fills = [colorToFill(props.color)]
   }
 
-  if (props.lineHeight !== undefined) o.lineHeight = props.lineHeight as number
+  if (props.lineHeight === AUTO) o.lineHeight = null
+  else if (props.lineHeight !== undefined) o.lineHeight = props.lineHeight as number
   if (props.letterSpacing !== undefined) o.letterSpacing = props.letterSpacing as number
   if (props.textDecoration !== undefined)
     o.textDecoration = (props.textDecoration as string).toUpperCase() as SceneNode['textDecoration']
+  applyTextDetailOverrides(props, o)
   if (props.textCase !== undefined)
     o.textCase = (props.textCase as string).toUpperCase() as SceneNode['textCase']
   if (props.maxLines !== undefined) {

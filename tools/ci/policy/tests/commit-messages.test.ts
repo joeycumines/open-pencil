@@ -31,6 +31,8 @@ test.each([
   'feat!: change the tool contract',
   `fix: explain the change\n\n${'Detailed rationale. '.repeat(12)}`,
   'Release v0.14.0',
+  'Release v0.16.0-beta.1',
+  'Release v0.16.0-beta.1 (#1089)',
   'Merge pull request #697 from open-pencil/mcp-v2-webmcp'
 ])('accepts supported commit: %s', async (message) => {
   const result = await lint(message)

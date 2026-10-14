@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "open_pencil"
-version = "0.15.1"
+version = "0.16.0"
 dependencies = [
  "fix-path-env",
  "fontique",
@@ -3278,6 +3278,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-plugin-wdio-webdriver",
+ "tokio",
  "url",
  "which",
  "zip 2.4.2",

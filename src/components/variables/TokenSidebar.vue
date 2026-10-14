@@ -5,6 +5,8 @@ import { useI18n } from '@open-pencil/vue'
 
 import type { GroupEntry } from '@/app/editor/tokens/model'
 import IconButton from '@/components/ui/button/IconButton.vue'
+import AppBadge from '@/components/ui/feedback/AppBadge.vue'
+import Tip from '@/components/ui/overlay/Tip.vue'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
 /**
@@ -12,7 +14,8 @@ import tokensPanelTheme from '@/theme/tokens-panel'
  * a group narrows the list to it and the groups inside it.
  */
 const { collections, groups, total } = defineProps<{
-  collections: Array<{ id: string; name: string; count: number }>
+  /** `library` marks a collection copied from a library. */
+  collections: Array<{ id: string; name: string; count: number; library: boolean }>
   groups: GroupEntry[]
   /** Tokens in the active collection, shown beside "All". */
   total: number
@@ -50,6 +53,9 @@ const ui = tv(tokensPanelTheme)()
         @click="activeCollectionId = item.id"
       >
         <span class="truncate">{{ item.name }}</span>
+        <Tip v-if="item.library" :label="variables.libraryCollectionHint">
+          <AppBadge>{{ variables.libraryCollection }}</AppBadge>
+        </Tip>
         <span :class="ui.sidebarCount()">{{ item.count }}</span>
       </button>
     </section>

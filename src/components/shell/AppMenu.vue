@@ -42,6 +42,7 @@ import { useScrollOverflow } from '@/components/shell/useScrollOverflow'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import AppShortcutText from '@/components/ui/menu/AppShortcutText.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
+import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import { IS_TAURI } from '@/constants'
 
 const store = useEditorStore()
@@ -123,69 +124,73 @@ const { overflowStart, overflowEnd, scrollTowardHidden } = useScrollOverflow(men
 
             <MenubarPortal>
               <MenubarContent :side-offset="4" align="start" :class="mainMenuCls.content">
-                <template v-for="(item, i) in menu.items" :key="i">
-                  <MenubarSeparator v-if="isMenuSeparator(item)" :class="menuCls.separator" />
-                  <MenubarSub v-else-if="hasMenuSubItems(item)">
-                    <MenubarSubTrigger :class="menuCls.item" :disabled="menuDisabled(item)">
+                <MenuScrollArea>
+                  <template v-for="(item, i) in menu.items" :key="i">
+                    <MenubarSeparator v-if="isMenuSeparator(item)" :class="menuCls.separator" />
+                    <MenubarSub v-else-if="hasMenuSubItems(item)">
+                      <MenubarSubTrigger :class="menuCls.item" :disabled="menuDisabled(item)">
+                        <span class="flex-1">{{ menuLabel(item) }}</span>
+                        <IconChevronRight class="size-3 text-muted" />
+                      </MenubarSubTrigger>
+                      <MenubarPortal>
+                        <MenubarSubContent :side-offset="4" :class="subMenuCls.content">
+                          <MenuScrollArea>
+                            <template v-for="(sub, j) in menuSubItems(item)" :key="j">
+                              <MenubarSeparator
+                                v-if="isMenuSeparator(sub)"
+                                :class="menuCls.separator"
+                              />
+                              <MenubarCheckboxItem
+                                v-else-if="isMenuCheckbox(sub)"
+                                :model-value="menuChecked(sub)"
+                                :class="menuCls.item"
+                                @update:model-value="updateMenuChecked(sub, $event as boolean)"
+                              >
+                                <span class="flex-1">{{ menuLabel(sub) }}</span>
+                                <MenubarItemIndicator class="text-surface">
+                                  <icon-lucide-check class="size-3.5" />
+                                </MenubarItemIndicator>
+                              </MenubarCheckboxItem>
+                              <MenubarItem
+                                v-else
+                                :class="menuCls.item"
+                                :disabled="menuDisabled(sub)"
+                                @select="runMenuAction(sub)"
+                              >
+                                <span class="flex-1">{{ menuLabel(sub) }}</span>
+                                <AppShortcutText v-if="menuShortcut(sub)">{{
+                                  menuShortcut(sub)
+                                }}</AppShortcutText>
+                              </MenubarItem>
+                            </template>
+                          </MenuScrollArea>
+                        </MenubarSubContent>
+                      </MenubarPortal>
+                    </MenubarSub>
+                    <MenubarCheckboxItem
+                      v-else-if="isMenuCheckbox(item)"
+                      :model-value="menuChecked(item)"
+                      :class="menuCls.item"
+                      @update:model-value="updateMenuChecked(item, $event as boolean)"
+                    >
                       <span class="flex-1">{{ menuLabel(item) }}</span>
-                      <IconChevronRight class="size-3 text-muted" />
-                    </MenubarSubTrigger>
-                    <MenubarPortal>
-                      <MenubarSubContent :side-offset="4" :class="subMenuCls.content">
-                        <template v-for="(sub, j) in menuSubItems(item)" :key="j">
-                          <MenubarSeparator
-                            v-if="isMenuSeparator(sub)"
-                            :class="menuCls.separator"
-                          />
-                          <MenubarCheckboxItem
-                            v-else-if="isMenuCheckbox(sub)"
-                            :model-value="menuChecked(sub)"
-                            :class="menuCls.item"
-                            @update:model-value="updateMenuChecked(sub, $event as boolean)"
-                          >
-                            <span class="flex-1">{{ menuLabel(sub) }}</span>
-                            <MenubarItemIndicator class="text-surface">
-                              <icon-lucide-check class="size-3.5" />
-                            </MenubarItemIndicator>
-                          </MenubarCheckboxItem>
-                          <MenubarItem
-                            v-else
-                            :class="menuCls.item"
-                            :disabled="menuDisabled(sub)"
-                            @select="runMenuAction(sub)"
-                          >
-                            <span class="flex-1">{{ menuLabel(sub) }}</span>
-                            <AppShortcutText v-if="menuShortcut(sub)">{{
-                              menuShortcut(sub)
-                            }}</AppShortcutText>
-                          </MenubarItem>
-                        </template>
-                      </MenubarSubContent>
-                    </MenubarPortal>
-                  </MenubarSub>
-                  <MenubarCheckboxItem
-                    v-else-if="isMenuCheckbox(item)"
-                    :model-value="menuChecked(item)"
-                    :class="menuCls.item"
-                    @update:model-value="updateMenuChecked(item, $event as boolean)"
-                  >
-                    <span class="flex-1">{{ menuLabel(item) }}</span>
-                    <MenubarItemIndicator class="text-surface">
-                      <icon-lucide-check class="size-3.5" />
-                    </MenubarItemIndicator>
-                  </MenubarCheckboxItem>
-                  <MenubarItem
-                    v-else
-                    :class="menuCls.item"
-                    :disabled="menuDisabled(item)"
-                    @select="runMenuAction(item)"
-                  >
-                    <span class="flex-1">{{ menuLabel(item) }}</span>
-                    <AppShortcutText v-if="menuShortcut(item)">{{
-                      menuShortcut(item)
-                    }}</AppShortcutText>
-                  </MenubarItem>
-                </template>
+                      <MenubarItemIndicator class="text-surface">
+                        <icon-lucide-check class="size-3.5" />
+                      </MenubarItemIndicator>
+                    </MenubarCheckboxItem>
+                    <MenubarItem
+                      v-else
+                      :class="menuCls.item"
+                      :disabled="menuDisabled(item)"
+                      @select="runMenuAction(item)"
+                    >
+                      <span class="flex-1">{{ menuLabel(item) }}</span>
+                      <AppShortcutText v-if="menuShortcut(item)">{{
+                        menuShortcut(item)
+                      }}</AppShortcutText>
+                    </MenubarItem>
+                  </template>
+                </MenuScrollArea>
               </MenubarContent>
             </MenubarPortal>
           </MenubarMenu>

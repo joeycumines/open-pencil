@@ -110,6 +110,21 @@ openpencil eval design.fig -w -c '
 
 Names the component does not have fail with an error that lists the ones it has.
 
+Comments people leave with the Comment tool are part of the document, so scripts and agents can read the feedback on a file, act on it, and answer:
+
+```sh
+openpencil eval design.fig -w -c '
+  for (const comment of openpencil.getComments({ resolved: false })) {
+    console.log(comment.author, comment.node?.name, comment.text)
+    comment.reply("Bumped the title to 24px", { author: "Claude" }).resolve()
+  }
+'
+```
+
+- `openpencil.getComments(filter)` lists threads oldest first: all of them, or `{ resolved: false }` for open ones, `{ page }` for one page's, `{ author }` for those a person started or replied to.
+- `openpencil.addComment(text, { node, page, x, y, author })` pins a comment on a layer, which it follows, or at a point of a page; the current page by default. `author` is `"Agent"` when left out.
+- A comment has `id`, `text` (Markdown), `author`, `createdAt`, `resolved`, `page`, `node` (the top-level layer it is pinned to), `position`, and `replies`, and `reply(text, { author })`, `resolve()`, `reopen()`, and `remove()`. `openpencil.getComment(id)` finds one.
+
 ## Supported API surface
 
 The API is intentionally close to Figma's Plugin API, but it maps to OpenPencil's scene graph and file format.
@@ -179,7 +194,9 @@ Common node properties are readable/writable through the proxy, including:
 - Geometry: `x`, `y`, `width`, `height`, `rotation`, `resize(width, height)`
 - Appearance: `fills`, `strokes`, `effects`, `opacity`, `visible`, `locked`, `blendMode`, `clipsContent`
 - Radius: `cornerRadius`, `topLeftRadius`, `topRightRadius`, `bottomRightRadius`, `bottomLeftRadius`
-- Text: `characters`, `fontSize`, `fontName`, `fontWeight`, alignment, line height, letter spacing, style-run helpers
+- Text: `characters`, `fontSize`, `fontName`, `fontWeight`, `fills`, `letterSpacing`, `lineHeight`, and `textDecoration`, which read `figma.mixed` while characters differ and restyle every character when set, and alignment
+- Text ranges: `getStyledTextSegments(fields, start?, end?)`, and `getRange…` / `setRange…` for `FontSize`, `FontName`, `Fills`, `LetterSpacing`, `LineHeight`, `TextDecoration` with its `Style`, `Offset`, `Thickness`, `Color`, and `SkipInk`, `TextCase`, `Hyperlink` (a `{ type: 'URL' | 'NODE', value }` link, or `null`), `TextStyleId` and `FillStyleId` (set with `setRangeTextStyleIdAsync` and `setRangeFillStyleIdAsync`, which give the range the style's fields), and `getRangeBoundVariable` / `setRangeBoundVariable` for the text fields Figma binds, plus `getRangeFontWeight`, `getRangeAllFontNames`, and `getRangeOpenTypeFeatures`. Lengths read in pixels; a percent given to a setter is of the font size
+- Text lists and paragraphs: `getRangeListOptions` / `setRangeListOptions` for bulleted (`UNORDERED`) and numbered (`ORDERED`) items, `getRangeIndentation` / `setRangeIndentation` for nesting (1–5 for list items), `listSpacing`, `paragraphSpacing`, and `paragraphIndent` for the whole text (`figma.mixed` when paragraphs differ) or per paragraph with `getRangeListSpacing` / `setRangeListSpacing`, `getRangeParagraphSpacing` / `setRangeParagraphSpacing`, and `getRangeParagraphIndent` / `setRangeParagraphIndent`, and `hangingList`
 - Auto-layout: `layoutMode`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `itemSpacing`, padding, sizing, and layout positioning fields
 - Stroke helpers: `strokeWeight`, `strokeAlign`, `dashPattern`
 
@@ -192,6 +209,7 @@ Common node properties are readable/writable through the proxy, including:
 - `figma.getNodeByIdAsync(id)` and `instance.getMainComponentAsync()` resolve to the same nodes as `figma.getNodeById(id)` and `instance.mainComponent`, for scripts written for Figma's dynamic-page mode
 - `figma.notify(message)` logs a warning in headless mode
 - `instance.swapComponent(component)` points an instance at another component
+- A layer inside an instance refuses `x`, `y`, `rotation`, `relativeTransform`, `constraints`, `isMask`, and `maskType` with Figma's error, such as `in set_x: This property cannot be overridden in an instance: relative-transform`; those always follow the component. Slot content keeps them, and setting one on a slot's default content makes the instance own the slot
 - `component.createSlot()` adds a slot frame and its `SLOT` property; slot frames read `type: 'SLOT'`, `resetSlot()` brings back an instance slot's component content, and `limitViolations` lists the limits an instance slot breaks. `addComponentProperty` and `editComponentProperty` take a `description` and, for slots, `slotSettings`
 - `figma.viewport`
 

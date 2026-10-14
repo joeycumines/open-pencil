@@ -1,5 +1,7 @@
 import * as OpenTypeSync from 'opentype.js'
 
+import type { FontVariation } from '@open-pencil/scene-graph'
+
 import { fontManager } from './fonts'
 
 export interface OutlineCommand {
@@ -19,14 +21,24 @@ interface OutlinePath {
 interface OutlineGlyph {
   path: OutlinePath
   advanceWidth?: number
-  getPath(x: number, y: number, fontSize: number): OutlinePath
+  getPath(
+    x: number,
+    y: number,
+    fontSize: number,
+    options?: { variation?: Record<string, number> },
+    font?: OutlineFont
+  ): OutlinePath
 }
 
 interface OutlineFont {
   unitsPerEm: number
   ascender: number
   descender: number
-  tables: { os2?: { sTypoLineGap?: number }; fvar?: unknown }
+  tables: {
+    os2?: { sTypoLineGap?: number; yStrikeoutPosition?: number; yStrikeoutSize?: number }
+    post?: { underlinePosition?: number; underlineThickness?: number }
+    fvar?: unknown
+  }
   glyphs: { get(index: number): OutlineGlyph | undefined }
   charToGlyphIndex(char: string): number
   charToGlyph(char: string): OutlineGlyph
@@ -121,6 +133,44 @@ export function measureTextWithOpenType(
   return { width: Math.ceil(singleLineWidth), height: lineH }
 }
 
+/**
+ * Where a font draws its underline and strikethrough, in ems: each line's top edge below the
+ * baseline (negative above it) and its thickness. Figma places an underline's top half its
+ * thickness below the font's underline position, and a strikethrough's top at its strikeout
+ * position.
+ */
+export interface FontDecorationMetrics {
+  underlineTop: number
+  underlineThickness: number
+  strikethroughTop: number
+  strikethroughThickness: number
+}
+
+/** The decoration metrics of a loaded font, or `null` when it is not loaded or lacks them. */
+export function fontDecorationMetricsSync(
+  family: string,
+  style: string
+): FontDecorationMetrics | null {
+  const font = getParsedFont(family, style)
+  const post = font?.tables.post
+  const os2 = font?.tables.os2
+  if (
+    !font ||
+    post?.underlinePosition === undefined ||
+    !post.underlineThickness ||
+    os2?.yStrikeoutPosition === undefined ||
+    !os2.yStrikeoutSize
+  )
+    return null
+  const em = font.unitsPerEm
+  return {
+    underlineTop: (post.underlineThickness / 2 - post.underlinePosition) / em,
+    underlineThickness: post.underlineThickness / em,
+    strikethroughTop: -os2.yStrikeoutPosition / em,
+    strikethroughThickness: os2.yStrikeoutSize / em
+  }
+}
+
 export interface GlyphOutlineMetrics {
   commands: OutlineCommand[]
   x: number
@@ -182,26 +232,47 @@ export function getGlyphOutlineMetricsSync(
   }
 }
 
-/** Outlines of one loaded static font, addressed by the glyph IDs a shaper produced. */
+/** Outlines of one loaded font, addressed by the glyph IDs a shaper produced. */
 export interface GlyphOutlineSource {
   /** Whether the font has a glyph for every code point, so a shaper used it rather than a fallback. */
   covers(text: string): boolean
+  /** The glyph the font maps `character` to, to check a shaper's glyph IDs are this font's. */
+  glyphOf(character: string): number
   outline(glyphId: number, fontSize: number): OutlineCommand[] | null
 }
 
 /**
- * Glyph outlines by glyph ID for a loaded font, or `null` when it is not loaded, cannot be
- * parsed, or is variable: opentype.js draws a variable font's default instance, not the
- * instance a shaper used.
+ * Glyph outlines by glyph ID for a loaded font, or `null` when it is not loaded or cannot be
+ * parsed. A variable font draws the instance at `variations`, the axis values the shaper used.
  */
-export function glyphOutlineSourceSync(family: string, style: string): GlyphOutlineSource | null {
+export function glyphOutlineSourceSync(
+  family: string,
+  style: string,
+  variations: readonly FontVariation[] = []
+): GlyphOutlineSource | null {
   const font = getParsedFont(family, style)
-  if (!font || font.tables.fvar) return null
+  if (!font) return null
+  const variation = font.tables.fvar
+    ? { variation: Object.fromEntries(variations.map(({ axis, value }) => [axis, value])) }
+    : undefined
   return {
     covers: (text) => Array.from(text).every((char) => font.charToGlyphIndex(char) !== 0),
+    glyphOf: (character) => font.charToGlyphIndex(character),
     outline: (glyphId, fontSize) =>
-      font.glyphs.get(glyphId)?.getPath(0, 0, fontSize).commands ?? null
+      font.glyphs.get(glyphId)?.getPath(0, 0, fontSize, variation, font).commands ?? null
   }
+}
+
+/** The advance of glyph `glyphId` of a loaded font at `fontSize`, or `null` when it has none. */
+export function glyphAdvanceSync(
+  family: string,
+  style: string,
+  glyphId: number,
+  fontSize: number
+): number | null {
+  const font = getParsedFont(family, style)
+  const glyph = font?.glyphs.get(glyphId)
+  return font && glyph ? glyphAdvanceWidth(font, glyph, fontSize) : null
 }
 
 export async function probeGlyphOutlineCommands(

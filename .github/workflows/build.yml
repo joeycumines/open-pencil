@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing stable release tag to rebuild without moving it (vX.Y.Z).
+        description: Existing release tag to rebuild without moving it (vX.Y.Z or vX.Y.Z-beta.N).
         required: true
         type: string
   push:
@@ -68,6 +68,9 @@ jobs:
       - name: Install pinned workflow tooling
         run: bun install --cwd .pipeline --frozen-lockfile
       - name: Build shared desktop frontend and package outputs
+        env:
+          # Official releases only: lets the app send its daily ping and, with consent, usage stats.
+          VITE_OPENPENCIL_FEEDBACK: "on"
         run: |
           bun run generate:icons --target desktop
           bun run generate:tauri-menu

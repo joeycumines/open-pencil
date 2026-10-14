@@ -6,7 +6,7 @@ Coding agents need the desktop app; the browser cannot start programs on your co
 
 ## What you need
 
-1. The [OpenPencil desktop app](https://github.com/open-pencil/open-pencil/releases/latest).
+1. The [OpenPencil desktop app](/download).
 2. The agent's ACP program, installed globally (see each agent below).
 3. OpenPencil's MCP server, installed globally. Use the version that matches your app:
 

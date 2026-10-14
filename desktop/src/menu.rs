@@ -41,6 +41,7 @@ struct AppMenuFile {
     about: AppMenuItem,
     #[serde(rename = "check-updates")]
     check_updates: AppMenuItem,
+    settings: AppMenuItem,
     quit: AppMenuItem,
 }
 
@@ -51,6 +52,22 @@ fn app_menu_file() -> tauri::Result<AppMenuFile> {
     ))?)
 }
 
+/// The macOS application menu holds Settings…, so the schema's copy is left out there, along
+/// with a separator it would leave at the end of its menu.
+fn platform_entries(items: &[MenuEntry]) -> Vec<&MenuEntry> {
+    let mut entries: Vec<&MenuEntry> = items
+        .iter()
+        .filter(|entry| !(cfg!(target_os = "macos") && entry.id.as_deref() == Some("settings")))
+        .collect();
+    while entries
+        .last()
+        .is_some_and(|entry| entry.r#type.as_deref() == Some("separator"))
+    {
+        entries.pop();
+    }
+    entries
+}
+
 fn build_submenu<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     label: &str,
@@ -59,7 +76,7 @@ fn build_submenu<R: tauri::Runtime>(
 ) -> tauri::Result<Submenu<R>> {
     let mut builder = SubmenuBuilder::new(app, label);
 
-    for entry in items {
+    for entry in platform_entries(items) {
         if entry.r#type.as_deref() == Some("separator") {
             builder = builder.separator();
             continue;
@@ -240,6 +257,10 @@ pub fn install_app_menu<R: tauri::Runtime>(
         if let Some(accelerator) = &items.check_updates.accelerator {
             check_updates = check_updates.accelerator(accelerator);
         }
+        let mut settings = MenuItemBuilder::new(&items.settings.label).id("settings");
+        if let Some(accelerator) = &items.settings.accelerator {
+            settings = settings.accelerator(accelerator);
+        }
         let mut quit = MenuItemBuilder::new(&items.quit.label).id("quit");
         if let Some(accelerator) = &items.quit.accelerator {
             quit = quit.accelerator(accelerator);
@@ -251,6 +272,8 @@ pub fn install_app_menu<R: tauri::Runtime>(
                 None,
             )?)
             .item(&check_updates.build(app)?)
+            .separator()
+            .item(&settings.build(app)?)
             .separator()
             .item(&PredefinedMenuItem::services(app, None)?)
             .separator()

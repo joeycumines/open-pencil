@@ -308,12 +308,14 @@ function createScopedReader(
     },
     planComponents(
       roots: readonly ReturnType<typeof interpreter.page>[],
-      options: InterpretInstanceOptions = {}
+      options: InterpretInstanceOptions = {},
+      isBuilt?: (id: string) => boolean
     ) {
       return planComponentConstruction(
         roots,
         (id) => sourceInterpreter.component(id, options),
-        index.sources
+        index.sources,
+        isBuilt
       )
     },
     readComponent: sourceInterpreter.component

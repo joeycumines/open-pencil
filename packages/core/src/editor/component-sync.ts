@@ -35,11 +35,6 @@ function componentSyncOrder(graph: SceneGraph, seeds: Set<string>): string[] {
 
 type ComputeLayouts = (graph: SceneGraph, scopeId?: string) => void
 
-/** Pages are `CANVAS` nodes; layout recomputation is scoped to them. */
-function pageIdOf(graph: SceneGraph, nodeId: string): string | null {
-  return graph.closest(nodeId, (node) => node.type === 'CANVAS')?.id ?? null
-}
-
 /**
  * Only the pages that actually changed need layout work: the edited subtrees, the components
  * they belong to, and every instance of those components, which may sit on another page.
@@ -51,7 +46,8 @@ function affectedPageIds(
 ): Set<string> {
   const pageIds = new Set<string>()
   const addPageOf = (nodeId: string) => {
-    const pageId = pageIdOf(graph, nodeId)
+    // Layout recomputation is scoped to pages.
+    const pageId = graph.pageOf(nodeId)
     if (pageId) pageIds.add(pageId)
   }
 
@@ -83,9 +79,7 @@ export function createComponentSyncScheduler(
         const component = graph.closest(id, isComponent)
         if (component) componentIds.add(component.id)
       }
-      for (const compId of componentSyncOrder(graph, componentIds)) {
-        graph.syncInstances(compId)
-      }
+      graph.syncInstancesTogether(componentSyncOrder(graph, componentIds))
       if (componentIds.size > 0) {
         const pageIds = affectedPageIds(graph, ids, componentIds)
         if (pageIds.size === 0) computeLayouts(graph)

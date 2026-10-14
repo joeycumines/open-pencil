@@ -2,16 +2,17 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { isPrerelease } from '#release/version'
 import { createPublicationPlan } from '#release/workflow'
 import { isEqual } from 'es-toolkit'
 import * as v from 'valibot'
 
 import { ARTIFACT_TRANSFER_TIMEOUT_MS, releaseCommands } from './commands.ts'
 import { createReleaseContext } from './context.ts'
-import { assertDraftReplacement, releaseSchema } from './draft.ts'
+import { assertDraftReplacement, releaseChannelArgs, releaseSchema } from './draft.ts'
 import { digestFile } from './manifest.ts'
 
-const { identity, repository, paths } = createReleaseContext()
+const { identity, repository, version, paths } = createReleaseContext()
 const { git, github } = releaseCommands(paths.root)
 
 const releases = v
@@ -53,7 +54,8 @@ if (!release) {
     '--title',
     identity.tag,
     '--notes-file',
-    paths.notes
+    paths.notes,
+    ...releaseChannelArgs(version)
   ])
 } else {
   await github([
@@ -65,7 +67,8 @@ if (!release) {
     '--title',
     identity.tag,
     '--notes-file',
-    paths.notes
+    paths.notes,
+    ...releaseChannelArgs(version)
   ])
 }
 
@@ -85,7 +88,11 @@ await github(
 )
 
 const remote = v.parse(
-  v.object({ isDraft: v.boolean(), assets: v.array(v.object({ name: v.string() })) }),
+  v.object({
+    isDraft: v.boolean(),
+    isPrerelease: v.boolean(),
+    assets: v.array(v.object({ name: v.string() }))
+  }),
   JSON.parse(
     await github([
       'release',
@@ -94,7 +101,7 @@ const remote = v.parse(
       '--repo',
       repository,
       '--json',
-      'isDraft,assets'
+      'isDraft,isPrerelease,assets'
     ])
   )
 )
@@ -102,6 +109,9 @@ const remoteNames = remote.assets.map((asset) => asset.name).sort()
 
 if (!remote.isDraft || !isEqual(remoteNames, names)) {
   throw new Error('Uploaded asset set mismatch')
+}
+if (remote.isPrerelease !== isPrerelease(version)) {
+  throw new Error(`Draft ${identity.tag} has the wrong pre-release flag`)
 }
 
 const temporary = await mkdtemp(join(tmpdir(), 'open-pencil-release-verify-'))

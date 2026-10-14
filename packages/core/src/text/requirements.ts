@@ -1,7 +1,7 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { DEFAULT_FONT_FAMILY } from '#core/constants'
-import { transformTextCase } from '#core/text/case'
+import { shownCharacters } from '#core/text/case'
 import { cjkFallbackScriptForLanguage, type FontFallbackScript } from '#core/text/fallbacks'
 import { weightToStyle } from '#core/text/font/style'
 
@@ -57,19 +57,6 @@ function textLanguageAt(node: SceneNode, index: number): string | null {
   return run?.style.textLanguage ?? node.textLanguage
 }
 
-function transformedCharactersWithSourceOffsets(
-  node: SceneNode
-): Array<{ character: string; sourceIndex: number }> {
-  const result: Array<{ character: string; sourceIndex: number }> = []
-  let sourceIndex = 0
-  for (const sourceCharacter of node.text) {
-    for (const character of transformTextCase(sourceCharacter, node.textCase)) {
-      result.push({ character, sourceIndex })
-    }
-    sourceIndex += sourceCharacter.length
-  }
-  return result
-}
 export interface GraphFontRequirements {
   characters: string
   nodes: SceneNode[]
@@ -88,7 +75,7 @@ export function collectGraphFontRequirements(
     if (!node) return
     nodes.push(node)
     if (node.type === 'TEXT') {
-      for (const { character, sourceIndex } of transformedCharactersWithSourceOffsets(node)) {
+      for (const { character, sourceIndex } of shownCharacters(node)) {
         characters.add(character)
         const script = fallbackScriptForCharacter(character, textLanguageAt(node, sourceIndex))
         if (script) scripts.add(script)

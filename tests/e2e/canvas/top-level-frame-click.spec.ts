@@ -1,5 +1,5 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
-import { clickDepthDriver } from '#tests/helpers/canvas/click-depth-driver'
+import { clickDepthDriver } from '#tests/helpers/canvas/click-depth/driver'
 
 // Matches Figma desktop 126 with the same pointer input: the gaps and padding of a top-level auto
 // layout frame select, highlight, and drag it, while those of a plain top-level frame are background.

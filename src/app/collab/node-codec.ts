@@ -1,11 +1,13 @@
 import { isEqual } from 'es-toolkit/predicate'
 
-import type {
-  Fill,
-  FillType,
-  GeometryPath,
-  SceneNode,
-  SourceMetadata
+import {
+  deserializeInstanceOverrideState,
+  serializeInstanceOverrideState,
+  type Fill,
+  type FillType,
+  type GeometryPath,
+  type SceneNode,
+  type SourceMetadata
 } from '@open-pencil/scene-graph'
 import { copyFills } from '@open-pencil/scene-graph/copy'
 import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defaults'
@@ -42,12 +44,18 @@ type YjsNodeLike = {
   entries(): IterableIterator<[string, unknown]>
 }
 
+/**
+ * A layer's fields as a shared document can hold them. Yjs stores plain JSON, so the instance
+ * overrides, kept in maps, are written as their serialized entries; written as maps they arrived
+ * as empty objects, and the other peers lost every override.
+ */
 export function encodeNodeForYjs(node: SceneNode): Record<string, unknown> {
   const encoded: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(node)) {
     if (DERIVED_NODE_FIELDS.has(key as keyof SceneNode) || TREE_FIELDS.has(key)) continue
     encoded[key] = structuredClone(value)
   }
+  encoded.instanceOverrides = serializeInstanceOverrideState(node.instanceOverrides)
   return encoded
 }
 
@@ -76,6 +84,10 @@ export function decodeNodeFromYjs(ynode: YjsNodeLike): Partial<SceneNode> {
   }
 
   props.source = normalizeSourceMetadata(props.source)
+  // Rooms written before overrides were serialized hold an empty object, which reads as none.
+  if ('instanceOverrides' in props) {
+    props.instanceOverrides = deserializeInstanceOverrideState(props.instanceOverrides)
+  }
   if ('fillGeometry' in props) props.fillGeometry = normalizeGeometryPaths(props.fillGeometry)
   if ('strokeGeometry' in props) props.strokeGeometry = normalizeGeometryPaths(props.strokeGeometry)
   props.textPicture = null

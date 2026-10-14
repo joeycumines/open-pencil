@@ -14,6 +14,18 @@ export interface SelectedNodeState {
   dispose: () => void
 }
 
+/**
+ * The selected layers as the panel shows them: text being edited has the style of its selected
+ * characters, which the panel then edits.
+ */
+export function selectedNodesAsShown(editor: Editor): SceneNode[] {
+  if (editor.state.editingTextId) void editor.state.textSelectionVersion
+  return editor.getSelectedNodes().map((node) => {
+    const style = editor.getTextSelectionStyle(node)
+    return style ? { ...node, ...style } : node
+  })
+}
+
 /** Selected-node copies with property-level preview tracking; never proxies the graph. */
 export function createSelectedNodeState(
   editor: Editor,
@@ -31,7 +43,7 @@ export function createSelectedNodeState(
     void revision.value
     void editor.state.sceneVersion
     void editor.state.currentPageId
-    return editor.getSelectedNodes().map((node) => shallowReactive(structuredClone(node)))
+    return selectedNodesAsShown(editor).map((node) => shallowReactive(structuredClone(node)))
   })
   const byId = computed(() => new Map(nodes.value.map((node) => [node.id, node])))
   const node = computed(() => (nodes.value.length === 1 ? nodes.value[0] : null))

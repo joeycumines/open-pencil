@@ -5,7 +5,9 @@ import { toUint8Array } from 'js-base64'
 import {
   buildComponentPropIndex,
   exportCanvasGuides,
+  figImageEntries,
   importCanvasGuides,
+  parseGuidOrNull,
   stringToGuid,
   type FigNodeChangeExportRuntime
 } from '@open-pencil/fig/node-change'
@@ -18,7 +20,8 @@ import {
   renameBehaviourProperties,
   withBehaviour,
   type PluginDataEntry,
-  type SceneGraph
+  type SceneGraph,
+  type SceneNode
 } from '@open-pencil/scene-graph'
 import { fractionalPosition } from '@open-pencil/scene-graph/order-keys'
 import type { GUID } from '@open-pencil/scene-graph/primitives'
@@ -51,14 +54,6 @@ export interface CanvasExportEntry {
   page: FigExportPage
   canvasGuid: GUID
   canvasNc: KiwiNodeChange
-}
-
-function collectImageEntries(graph: SceneGraph): Array<{ name: string; data: Uint8Array }> {
-  const entries: Array<{ name: string; data: Uint8Array }> = []
-  for (const [hash, data] of graph.images) {
-    entries.push({ name: `images/${hash}`, data })
-  }
-  return entries
 }
 
 const THUMBNAIL_WIDTH = 512
@@ -102,6 +97,15 @@ function ownGuid(
   return sourceGuidValues.has(key) || assignedGuidValues.has(key) ? null : guid
 }
 
+/**
+ * Whether a layer was opened from a file. A style keeps an ID of its own in `source.id`, which
+ * only names a saved record when it spells a GUID; one made by token import or paste does not.
+ */
+function savedFromFile(node: SceneNode): boolean {
+  if (!node.source.id) return false
+  return node.sharedStyleType === null || parseGuidOrNull(node.source.id) !== null
+}
+
 function assignOwnLayerGuids(
   graph: SceneGraph,
   sourceGuidValues: ReadonlySet<string>,
@@ -109,7 +113,7 @@ function assignOwnLayerGuids(
   assignedGuidValues: Set<string>
 ): void {
   for (const node of graph.nodes.values()) {
-    if (node.source.id || node.id === graph.rootId || nodeIdToGuid.has(node.id)) continue
+    if (savedFromFile(node) || node.id === graph.rootId || nodeIdToGuid.has(node.id)) continue
     const guid = ownGuid(node.id, sourceGuidValues, assignedGuidValues)
     if (!guid) continue
     nodeIdToGuid.set(node.id, guid)
@@ -121,7 +125,8 @@ function assignOwnLayerGuids(
  * The first local ID the counter can mint in sessions 0 and 1: past every saved GUID and every
  * ID that layers, collections, modes, variables and component properties are saved under.
  */
-function firstUnclaimedLocalId(graph: SceneGraph, propertyIds: readonly string[]): number {
+/** The first local ID above every GUID the graph's layers, variables, and properties claim. */
+export function firstUnclaimedLocalId(graph: SceneGraph, propertyIds: readonly string[]): number {
   const ids = [...propertyIds]
   for (const node of graph.nodes.values()) ids.push(node.source.id || node.id)
   for (const [collectionId, collection] of graph.variableCollections) {
@@ -137,7 +142,16 @@ function firstUnclaimedLocalId(graph: SceneGraph, propertyIds: readonly string[]
   return last + 1
 }
 
-function collectComponentPropertyIds(graph: SceneGraph): string[] {
+/** The GUIDs layers keep from the file they were read from, which variables must not take. */
+export function layerSourceGuids(graph: SceneGraph): Set<string> {
+  const guids = new Set<string>()
+  for (const node of graph.nodes.values()) {
+    if (node.source.id) guids.add(node.source.id)
+  }
+  return guids
+}
+
+export function collectComponentPropertyIds(graph: SceneGraph): string[] {
   const ids = new Set<string>()
   for (const node of graph.getAllNodes()) {
     for (const definition of node.componentPropertyDefinitions) ids.add(definition.id)
@@ -337,14 +351,16 @@ export interface FigExportSetup {
 }
 
 export interface FigExportSetupOptions {
+  /** Saved identities on pages that may not be loaded; new layer IDs must not claim them. */
+  archiveRecordIds?: readonly string[]
   /** The first local ID a new GUID may take, above every GUID the target archive holds. */
   nextLocalId?: number
   /** The target archive's blobs, so the indices of new blobs follow theirs. */
   blobs?: Uint8Array[]
   /**
    * The layer each archive GUID belongs to; only that layer writes the archive's record. Writing
-   * into an archive also gives new layers and pages counter GUIDs, past every GUID it holds,
-   * rather than their graph IDs, which a record on a page not loaded may already use.
+   * into an archive preserves new layers' numeric graph IDs when unclaimed across all pages;
+   * incompatible or colliding IDs fall back to counter GUIDs past the archive's reserved range.
    */
   recordOwners?: ReadonlyMap<string, string>
   /** Writing into an archive: the variables, collections and modes it holds keep their GUIDs. */
@@ -379,10 +395,8 @@ export async function prepareFigExport(
   const modeIdToGuid = new Map<string, GUID>()
   const propertyIdToGuid = new Map<string, GUID>()
 
-  const nodeSourceGuidValues = new Set<string>()
-  for (const node of graph.nodes.values()) {
-    if (node.source.id) nodeSourceGuidValues.add(node.source.id)
-  }
+  const nodeSourceGuidValues = layerSourceGuids(graph)
+  const reservedLayerGuids = new Set([...nodeSourceGuidValues, ...(options.archiveRecordIds ?? [])])
   const propertyIds = collectComponentPropertyIds(graph)
   // Before any canvas, variable or layer takes a counter GUID, so none collides.
   localIdCounter.value = Math.max(
@@ -398,8 +412,8 @@ export async function prepareFigExport(
     localIdCounter,
     nodeIdToGuid,
     assignedGuidValues,
-    nodeSourceGuidValues,
-    !options.recordOwners
+    reservedLayerGuids,
+    true
   )
   // Archive records keep their GUIDs: claim them before any copy that kept one can.
   for (const [guid, nodeId] of options.recordOwners ?? []) {
@@ -418,7 +432,9 @@ export async function prepareFigExport(
     modeIdToGuid,
     assignedGuidValues,
     nodeSourceGuidValues,
-    archived ? (id) => archived.has(id) : undefined
+    archived
+      ? (id) => archived.has(id) || ownGuid(id, reservedLayerGuids, assignedGuidValues) !== null
+      : undefined
   )
 
   assignComponentPropertyGuids(
@@ -429,8 +445,7 @@ export async function prepareFigExport(
     nodeSourceGuidValues
   )
   const pluginDataOverrides = renamedBehaviourPluginData(graph, propertyIdToGuid)
-  if (!options.recordOwners)
-    assignOwnLayerGuids(graph, nodeSourceGuidValues, nodeIdToGuid, assignedGuidValues)
+  assignOwnLayerGuids(graph, reservedLayerGuids, nodeIdToGuid, assignedGuidValues)
 
   return {
     graph,
@@ -480,9 +495,13 @@ export interface FigFileExtras {
   images: Array<{ name: string; data: Uint8Array }>
 }
 
-/** The thumbnail, metadata and images a written `.fig` carries besides its records. */
+/**
+ * The thumbnail, metadata and images a written `.fig` carries besides its records, the images
+ * under the names `nameImagesForFigma` gave them in those records.
+ */
 export async function figFileExtras(
   graph: SceneGraph,
+  imageNames: ReadonlyMap<string, string>,
   pageId: string | undefined,
   ck: CanvasKit | undefined,
   renderer: SkiaRenderer | undefined,
@@ -501,5 +520,5 @@ export async function figFileExtras(
     app: 'OpenPencil',
     createdAt: new Date().toISOString()
   })
-  return { thumbnailPNG, metaJSON, images: collectImageEntries(graph) }
+  return { thumbnailPNG, metaJSON, images: figImageEntries(graph.images, imageNames) }
 }

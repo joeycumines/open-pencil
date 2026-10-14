@@ -14,7 +14,11 @@ import IssueGroup from './IssueGroup.vue'
 import SeverityFilters from './SeverityFilters.vue'
 import { useDesignCheckPanel, type DesignCheckScope } from './useDesignCheckPanel'
 
-const { active } = defineProps<{ active: boolean }>()
+const { active, initialScope = 'page' } = defineProps<{
+  active: boolean
+  /** The scope listed first; a host that shows one layer's problems can open on the selection. */
+  initialScope?: DesignCheckScope
+}>()
 
 const messages = useDesignCheckMessages()
 const styles = designCheck()
@@ -33,7 +37,7 @@ const {
   setGroupOpen,
   clearFilters,
   hoverRow
-} = useDesignCheckPanel({ active: () => active, list })
+} = useDesignCheckPanel({ active: () => active, list, initialScope })
 
 const scopeOptions = computed(() => [
   { value: 'page' satisfies DesignCheckScope, label: messages.value.scopePage },

@@ -80,6 +80,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
+      - name: Validate the changelog and its fragments
+        run: bun run check:changelog
       - name: Build documentation type dependencies
         run: bun run build:packages
       - name: Validate documentation and generated references
@@ -171,6 +173,9 @@ jobs:
 
       - name: Validate documentation links and structure
         run: bun run check:docs
+
+      - name: Validate the changelog and its fragments
+        run: bun run check:changelog
 
       - name: Audit critical dependency vulnerabilities
         run: bun run check:audit
@@ -264,9 +269,25 @@ jobs:
       - name: Run ${{ matrix.group }} unit tests
         run: bun tools/dev/unit-tests/src/run.ts "${{ matrix.group }}"
 
+  feedback-tests:
+    name: Feedback service
+    needs: changes
+    if: needs.changes.outputs.scope == 'code'
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Typecheck and test the feedback Worker against a local D1
+        run: bun run test:feedback
+
   result:
     name: CI result
-    needs: [changes, commit-messages, documentation, source-quality, package-quality, repository-quality, storybook, native-test-contracts, unit-tests]
+    needs: [changes, commit-messages, documentation, source-quality, package-quality, repository-quality, storybook, native-test-contracts, unit-tests, feedback-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 3

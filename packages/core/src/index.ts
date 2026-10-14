@@ -160,6 +160,7 @@ export {
   FontManager,
   chooseLocalFontMatch,
   fontManager,
+  fontWeightMatchOrder,
   styleToWeight,
   weightToFigmaStyle,
   weightToStyle,

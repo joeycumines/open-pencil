@@ -50,9 +50,9 @@ export const layerIssueMark = tv({
   },
   variants: {
     severity: {
-      error: { dot: 'bg-issue-error' },
-      warning: { dot: 'bg-issue-warning' },
-      info: { dot: 'bg-issue-info' }
+      error: { dot: 'bg-error' },
+      warning: { dot: 'bg-warning' },
+      info: { dot: 'bg-muted' }
     }
   }
 })
@@ -62,8 +62,8 @@ export const pageIssueBadge = tv({
   base: 'flex h-3.5 min-w-3.5 shrink-0 items-center justify-center rounded-full px-1 text-[9px] leading-none font-semibold tabular-nums',
   variants: {
     severity: {
-      error: 'bg-issue-error text-white',
-      warning: 'bg-issue-warning text-black'
+      error: 'bg-error-fill text-white',
+      warning: 'bg-warning text-panel'
     }
   }
 })

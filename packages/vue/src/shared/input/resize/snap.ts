@@ -1,4 +1,5 @@
 import type { Editor } from '@open-pencil/core/editor'
+import type { HandlePosition } from '@open-pencil/core/geometry'
 import type { SceneNode } from '@open-pencil/scene-graph'
 import { getAxisAlignedWorldBounds, getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
@@ -10,7 +11,7 @@ import {
   worldBoundsNode,
   worldDeltaToParentLocal
 } from '#vue/shared/input/snap'
-import type { DragResize, HandlePosition } from '#vue/shared/input/types'
+import type { DragResize } from '#vue/shared/input/types'
 
 function movesLeft(handle: HandlePosition): boolean {
   return handle.includes('w')

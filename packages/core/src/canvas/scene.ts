@@ -13,9 +13,9 @@ import Matrix from '@open-pencil/scene-graph/matrix'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { createSceneGeometry, nodeOrientationMatrix, projectedNode } from '#core/geometry'
-import { transformTextCase } from '#core/text/case'
+import { shownText } from '#core/text/case'
 import { fontManager } from '#core/text/fonts'
-import { vectorNetworkToCenterlinePath } from '#core/vector'
+import { addStrokeRunToPath, strokeRuns, vectorNetworkToCenterlinePath } from '#core/vector'
 
 import { figmaBlendModeToSkia, needsIsolatedBlendLayer } from './blend'
 import { renderBooleanOperation } from './boolean'
@@ -41,6 +41,7 @@ import {
   normalizeDashPattern
 } from './strokes'
 import { textVerticalOffset, withTextParagraph } from './text'
+import { drawTextLayout } from './text/decorations'
 import {
   canDrawSavedText,
   drawDerivedText,
@@ -655,32 +656,13 @@ function vectorStrokePaths(r: SkiaRenderer, node: SceneNode): Path[] | null {
   const cached = r.vectorStrokePathCache.get(node.id)
   if (cached) return cached
 
-  const paths: Path[] = []
-  for (const segment of node.vectorNetwork.segments) {
-    const start = node.vectorNetwork.vertices[segment.start]
-    const end = node.vectorNetwork.vertices[segment.end]
-
+  // A path per run, so the corners inside a run join and only its open ends take caps.
+  const { segments, vertices } = node.vectorNetwork
+  const paths = strokeRuns(segments).map((run) => {
     const path = new r.ck.PathBuilder()
-    path.moveTo(start.x, start.y)
-    const isStraight =
-      Math.abs(segment.tangentStart.x) < 0.001 &&
-      Math.abs(segment.tangentStart.y) < 0.001 &&
-      Math.abs(segment.tangentEnd.x) < 0.001 &&
-      Math.abs(segment.tangentEnd.y) < 0.001
-    if (isStraight) {
-      path.lineTo(end.x, end.y)
-    } else {
-      path.cubicTo(
-        start.x + segment.tangentStart.x,
-        start.y + segment.tangentStart.y,
-        end.x + segment.tangentEnd.x,
-        end.y + segment.tangentEnd.y,
-        end.x,
-        end.y
-      )
-    }
-    paths.push(path.detachAndDelete())
-  }
+    addStrokeRunToPath(path, run, segments, vertices)
+    return path.detachAndDelete()
+  })
 
   if (paths.length === 0) return null
   r.vectorStrokePathCache.set(node.id, paths)
@@ -921,8 +903,9 @@ function drawPaintedText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): bool
       halfLeading: true,
       foregroundPaint: r.fillPaint
     },
-    (paragraph) => {
-      canvas.drawParagraph(paragraph, 0, textVerticalOffset(node, paragraph.getHeight()))
+    (paragraph, prepared) => {
+      const y = textVerticalOffset(node, paragraph.getHeight())
+      drawTextLayout(r.ck, canvas, node, prepared, y, r.fillPaint)
       return true
     }
   )
@@ -995,20 +978,20 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
     return
   }
   if (r.fontsLoaded && r.fontProvider) {
-    withTextParagraph(r, node, r.fillPaint.getColor(), { halfLeading: true }, (paragraph) => {
-      const paragraphY = textVerticalOffset(node, paragraph.getHeight())
-      canvas.drawParagraph(paragraph, 0, paragraphY)
-    })
+    withTextParagraph(
+      r,
+      node,
+      r.fillPaint.getColor(),
+      { halfLeading: true },
+      (paragraph, prepared) => {
+        const paragraphY = textVerticalOffset(node, paragraph.getHeight())
+        drawTextLayout(r.ck, canvas, node, prepared, paragraphY, r.fillPaint)
+      }
+    )
   } else if (r.textFont) {
     const fontSize = node.fontSize || r.DEFAULT_FONT_SIZE
     const paragraphY = textVerticalOffset(node, fontSize)
-    canvas.drawText(
-      transformTextCase(text, node.textCase),
-      0,
-      paragraphY + fontSize,
-      r.fillPaint,
-      r.textFont
-    )
+    canvas.drawText(shownText(node), 0, paragraphY + fontSize, r.fillPaint, r.textFont)
   }
 
   canvas.restore()

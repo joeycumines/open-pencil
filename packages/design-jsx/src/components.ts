@@ -3,6 +3,8 @@ import {
   type BaseProps,
   type ComponentProps,
   type InstanceProps,
+  type ParagraphProps,
+  type SpanProps,
   type TextProps,
   type TreeNode
 } from './tree'
@@ -22,6 +24,14 @@ export function Frame(props: BaseProps, ...children: Child[]): TreeNode {
 
 export function Text(props: TextProps, ...children: Child[]): TreeNode {
   return withChildren('text', props, children)
+}
+
+export function Span(props: SpanProps, ...children: Child[]): TreeNode {
+  return withChildren('text-span', props, children)
+}
+
+export function Paragraph(props: ParagraphProps, ...children: Child[]): TreeNode {
+  return withChildren('text-paragraph', props, children)
 }
 
 export function Rectangle(props: BaseProps, ...children: Child[]): TreeNode {
@@ -81,6 +91,8 @@ export const Page = Frame
 export const INTRINSIC_ELEMENTS = [
   'frame',
   'text',
+  'text-span',
+  'text-paragraph',
   'rectangle',
   'ellipse',
   'line',

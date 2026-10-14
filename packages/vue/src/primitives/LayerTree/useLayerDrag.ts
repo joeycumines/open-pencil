@@ -14,6 +14,7 @@ import { onScopeDispose, ref, watchEffect, type Ref } from 'vue'
 import type { Editor } from '@open-pencil/core/editor'
 
 import type { LayerDragInstruction } from '#vue/primitives/LayerTree/context'
+import { dropIndex } from '#vue/primitives/LayerTree/model'
 
 interface DragItem {
   id: string
@@ -125,11 +126,12 @@ export function useLayerDrag(
       const targetParent = editor.graph.getNode(targetParentId)
       if (!targetParent) return
       const targetIndex = targetParent.childIds.indexOf(targetId)
+      const at = (index: number) => dropIndex(targetParent.childIds, sourceId, index)
 
       if (inst.type === 'reorder-above') {
-        editor.reorderChildWithUndo(sourceId, targetParentId, targetIndex)
+        editor.reorderChildWithUndo(sourceId, targetParentId, at(targetIndex))
       } else if (inst.type === 'reorder-below') {
-        editor.reorderChildWithUndo(sourceId, targetParentId, targetIndex + 1)
+        editor.reorderChildWithUndo(sourceId, targetParentId, at(targetIndex + 1))
       } else {
         const container = editor.graph.getNode(targetId)
         if (!container || !editor.graph.isContainer(targetId)) return

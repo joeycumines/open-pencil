@@ -1,4 +1,12 @@
-import { FRAGMENT, node, type BaseProps, type TreeNode, type TextProps } from './tree'
+import {
+  FRAGMENT,
+  node,
+  type BaseProps,
+  type ParagraphProps,
+  type SpanProps,
+  type TreeNode,
+  type TextProps
+} from './tree'
 
 export function jsx(type: string | ((props: BaseProps) => TreeNode), props: BaseProps): TreeNode {
   if (typeof type === 'function') {
@@ -21,6 +29,8 @@ export namespace JSX {
   export interface IntrinsicElements {
     frame: BaseProps
     text: TextProps
+    'text-span': SpanProps
+    'text-paragraph': ParagraphProps
     rectangle: BaseProps
     ellipse: BaseProps
     line: BaseProps

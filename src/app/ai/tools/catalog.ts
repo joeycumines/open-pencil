@@ -7,7 +7,24 @@ const defaultNames = new Set([
   ...CORE_TOOLS.map((tool) => tool.name),
   'get_components',
   'list_libraries',
-  'insert_library_component'
+  'insert_library_component',
+  // Scripts cannot discover comments, so without these the model fakes them with layers.
+  'get_comments',
+  'add_comment',
+  'reply_to_comment',
+  'resolve_comment',
+  // Design JSX references variables but cannot create them, and `eval` names differ from Figma's.
+  'list_variables',
+  'create_collection',
+  'create_variable',
+  'set_variable',
+  'bind_variable',
+  'lint',
+  'lint_fix',
+  // Lets the model look at what it built.
+  'export_image',
+  'list_pages',
+  'create_page'
 ])
 
 export const aiToolDefinitions = ALL_TOOLS.filter((tool) => isToolExposed(tool, 'ai'))

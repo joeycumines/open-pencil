@@ -5,7 +5,6 @@ import { SceneGraph } from '@open-pencil/scene-graph'
 import { initCanvasKit } from '#cli/headless'
 import { SkiaRenderer } from '#core/canvas/renderer'
 import {
-  derivedUnderlineRect,
   hasRotatedDerivedGlyphs,
   shouldUseHardDerivedGlyphCoverage,
   snapDerivedGlyphBaseline
@@ -19,6 +18,18 @@ let ck: Awaited<ReturnType<typeof initCanvasKit>>
 beforeAll(async () => {
   ck = await initCanvasKit()
 })
+
+/** Saved glyphs as Figma saves them, one per character with its advance, 8px apart from x 2. */
+function savedGlyphs(text: string) {
+  return Array.from(text, (_, index) => ({
+    commandsBlob: squareCommandsBlob(),
+    x: 2 + index * 8,
+    y: 12,
+    fontSize: 10,
+    firstCharacter: index,
+    advance: 8
+  }))
+}
 
 function useDerivedGlyphFallback(renderer: SkiaRenderer): void {
   renderer.nodeFontReadiness = () => 'exhausted'
@@ -146,15 +157,6 @@ describe('derived text rendering', () => {
     expect(shouldUseHardDerivedGlyphCoverage({ fontSize: 14, fontWeight: 500 })).toBeFalse()
   })
 
-  test('places derived underlines at Figma-like subpixel coverage bounds', () => {
-    expect(derivedUnderlineRect({ width: 70 }, 17)).toEqual({
-      x1: 0,
-      y1: 19.75,
-      x2: 69.25,
-      y2: 20.75
-    })
-  })
-
   test('draws Figma-derived glyphs even when the font is unavailable', async () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
@@ -229,14 +231,7 @@ describe('derived text rendering', () => {
           visible: true
         }
       ],
-      derivedTextGlyphs: [
-        {
-          commandsBlob: squareCommandsBlob(),
-          x: 2,
-          y: 12,
-          fontSize: 10
-        }
-      ]
+      derivedTextGlyphs: savedGlyphs('x')
     })
 
     const surface = expectDefined(ck.MakeSurface(1, 1), 'surface')
@@ -263,8 +258,8 @@ describe('derived text rendering', () => {
         'pixels'
       )
 
-      const underlinedRows = [15, 16].map((y) => pixels[(y * image.width() + 8) * 4 + 3])
-      expect(Math.max(...underlinedRows)).toBeGreaterThan(0)
+      // 10px text on a baseline at 12 is underlined from 13.99 to 14.67, as Figma places it.
+      expect(pixels[(14 * image.width() + 6) * 4 + 3]).toBeGreaterThan(0)
       image.delete()
     } finally {
       surface.delete()
@@ -295,14 +290,7 @@ describe('derived text rendering', () => {
           visible: true
         }
       ],
-      derivedTextGlyphs: [
-        {
-          commandsBlob: squareCommandsBlob(),
-          x: 2,
-          y: 12,
-          fontSize: 10
-        }
-      ]
+      derivedTextGlyphs: savedGlyphs('on off')
     })
 
     const surface = expectDefined(ck.MakeSurface(1, 1), 'surface')
@@ -329,14 +317,8 @@ describe('derived text rendering', () => {
         'pixels'
       )
 
-      const leftUnderlineAlpha = Math.max(
-        pixels[(15 * image.width() + 12) * 4 + 3] ?? 0,
-        pixels[(16 * image.width() + 12) * 4 + 3] ?? 0
-      )
-      const disabledUnderlineAlpha = Math.max(
-        pixels[(15 * image.width() + 45) * 4 + 3] ?? 0,
-        pixels[(16 * image.width() + 45) * 4 + 3] ?? 0
-      )
+      const leftUnderlineAlpha = pixels[(14 * image.width() + 12) * 4 + 3] ?? 0
+      const disabledUnderlineAlpha = pixels[(14 * image.width() + 45) * 4 + 3] ?? 0
       expect(leftUnderlineAlpha).toBeGreaterThan(0)
       expect(disabledUnderlineAlpha).toBe(0)
       image.delete()
@@ -390,14 +372,7 @@ describe('derived text rendering', () => {
           visible: true
         }
       ],
-      derivedTextGlyphs: [
-        {
-          commandsBlob: squareCommandsBlob(),
-          x: 2,
-          y: 12,
-          fontSize: 10
-        }
-      ]
+      derivedTextGlyphs: savedGlyphs('red blue')
     })
 
     const surface = expectDefined(ck.MakeSurface(1, 1), 'surface')

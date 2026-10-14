@@ -2,6 +2,11 @@
 /// <reference types="vite-plugin-pwa/vanillajs" />
 /// <reference types="unplugin-icons/types/vue" />
 
+interface ImportMetaEnv {
+  /** `on` only in official release builds; without it the app sends no pings or usage stats. */
+  readonly VITE_OPENPENCIL_FEEDBACK?: string
+}
+
 declare const __OPENPENCIL_APP_VERSION__: string
 declare const __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__: string | null
 declare const __OPENPENCIL_LOCAL_AUTOMATION_URL__: string

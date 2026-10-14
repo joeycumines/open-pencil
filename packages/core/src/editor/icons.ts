@@ -2,7 +2,7 @@ import { readIcon, type SceneNode } from '@open-pencil/scene-graph'
 import { BLACK } from '@open-pencil/scene-graph/constants'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
-import { restoreSubtree, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
+import { restoreSubtree, snapshotSubtree } from '#core/editor/history/subtree'
 import type { EditorContext } from '#core/editor/types'
 import { pushCreatedSubtreesUndo } from '#core/editor/undo'
 import { detachIcon, placeIcon, recolorIcon, swapIcon } from '#core/icons/render'

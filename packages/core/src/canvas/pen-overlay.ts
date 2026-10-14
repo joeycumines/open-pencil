@@ -160,6 +160,27 @@ function drawPenTangentHandles(
   }
 }
 
+/** The pencil stroke as sampled so far, in the colour and width it will be drawn with. */
+export function drawPencilOverlay(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  pencilState: RenderOverlays['pencilState']
+): void {
+  if (!pencilState) return
+  const [first, ...rest] = pencilState.points
+  const path = new r.ck.PathBuilder()
+  path.moveTo(first.x * r.zoom + r.panX, first.y * r.zoom + r.panY)
+  if (rest.length === 0) path.lineTo(first.x * r.zoom + r.panX, first.y * r.zoom + r.panY)
+  for (const point of rest) path.lineTo(point.x * r.zoom + r.panX, point.y * r.zoom + r.panY)
+  const { color, weight } = pencilState.preview
+  const paint = r.pencilStrokePaint
+  paint.setColor(r.ck.Color4f(color.r, color.g, color.b, color.a))
+  paint.setStrokeWidth(weight * r.zoom)
+  const stroke = path.detachAndDelete()
+  canvas.drawPath(stroke, paint)
+  stroke.delete()
+}
+
 export function drawPenOverlay(
   r: SkiaRenderer,
   canvas: Canvas,

@@ -1,4 +1,5 @@
 import { tryOnScopeDispose, watchImmediate } from '@vueuse/core'
+import { sortBy } from 'es-toolkit'
 import { useFilter } from 'reka-ui'
 import { computed, ref, watch } from 'vue'
 
@@ -58,10 +59,18 @@ export function useFontPicker(options: UseFontPickerOptions) {
   )
   tryOnScopeDispose(cancelLoad)
 
-  const { contains } = useFilter({ sensitivity: 'base' })
+  const { contains, startsWith } = useFilter({ sensitivity: 'base' })
+  /** 0 for the family the search names, 1 for one it begins, 2 for any other match. */
+  function rank(family: string, term: string): number {
+    if (!startsWith(family, term)) return 2
+    return family.length === term.length ? 0 : 1
+  }
+  // Figma lists the family a search names first: "Lora" gives Lora, then Explora.
   const filtered = computed(() => {
-    if (!searchTerm.value) return families.value
-    return families.value.filter((option) => contains(option.family, searchTerm.value))
+    const term = searchTerm.value.trim()
+    if (!term) return families.value
+    const matches = families.value.filter((option) => contains(option.family, term))
+    return sortBy(matches, [(option) => rank(option.family, term)])
   })
 
   async function loadFamilies() {

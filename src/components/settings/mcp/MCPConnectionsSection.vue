@@ -8,12 +8,14 @@ import { mcpConnectionSettings } from '@/app/integrations/mcp'
 import { useMCPConnectionForm } from '@/app/integrations/mcp/settings/form'
 import { useMCPConnectionSettings } from '@/app/integrations/mcp/settings/use'
 import { useSettingsFormGuard } from '@/app/settings/navigation/use'
+import SettingsLink from '@/components/settings/layout/SettingsLink.vue'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { AppAlertDialogRoot, AppDialogFooter, AppDialogHeader } from '@/components/ui/dialog'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
 import AppActionRow from '@/components/ui/list/AppActionRow.vue'
+import { MCP_CONNECTIONS_DOCS_URL } from '@/constants'
 
 import MCPConnectionEditor from './MCPConnectionEditor.vue'
 
@@ -86,11 +88,16 @@ async function remove() {
       <slot />
       <SettingsSection :aria-busy="busy" data-mcp-connections>
         <template #title>{{ automation.connections }}</template>
-        <template #description>{{ automation.connectionsDescription }}</template>
-        <AppButton class="self-start" variant="outline" :loading="busy" @click="startAdd">
-          <template #leading><icon-lucide-plus class="size-3.5" /></template>
-          {{ automation.addConnection }}
-        </AppButton>
+        <template #description>
+          {{ automation.connectionsDescription }}
+          <SettingsLink :href="MCP_CONNECTIONS_DOCS_URL">{{ common.learnMore }}</SettingsLink>
+        </template>
+        <template #actions>
+          <AppButton variant="outline" :loading="busy" @click="startAdd">
+            <template #leading><icon-lucide-plus class="size-3.5" /></template>
+            {{ automation.addConnection }}
+          </AppButton>
+        </template>
         <div v-if="mcpConnectionSettings.connections.length" class="flex flex-col gap-1.5">
           <AppActionRow
             v-for="item in mcpConnectionSettings.connections"
@@ -107,7 +114,7 @@ async function remove() {
             </template>
           </AppActionRow>
         </div>
-        <AppPlaceholder v-else :label="automation.noConnections" />
+        <AppPlaceholder v-else size="compact" :fill="false" :label="automation.noConnections" />
       </SettingsSection>
     </div>
   </SettingsPage>

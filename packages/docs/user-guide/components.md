@@ -118,13 +118,9 @@ Right-click an instance and select **Go to main component**. The editor navigate
 
 ## Live Sync
 
-When you edit a component, all its instances update automatically. Synced properties include:
+When you edit a component, all its instances update automatically, as in Figma: every property an instance does not override follows the component. That covers size, fills, strokes and their weight, alignment, caps, joins, and dashes, effects, opacity, blend mode, corner radii and smoothing, layout settings and grids, clipping, shared styles, and text, from its font and size to letter spacing, line height, case, decoration, alignment, and styled ranges.
 
-- Width and height
-- Fills, strokes, and effects
-- Opacity and corner radii
-- Layout properties (auto layout settings)
-- Clips content setting
+A layer inside an instance also takes its position, rotation, flips, constraints, and mask from the component. Move or rotate a layer in the component and it moves in every instance. When an instance has a different size than its component, the layer is placed by its constraints, so a layer pinned to the right keeps its distance from the right edge. Inside auto layout, the layout places it.
 
 Sync triggers automatically after node updates, moves, and resizes within a component.
 
@@ -134,7 +130,9 @@ Instances can override specific properties without breaking the sync link. When 
 
 ### Overridable Properties
 
-Child-level overrides support: name, text, font size, font weight, font family, plus all visual and layout properties (fills, strokes, effects, opacity, corner radii, size).
+A layer inside an instance can override its name, text, styled ranges, and font, every visual and text property listed above, its size, and whether it is visible or locked. Its position, rotation, flips, constraints, and mask cannot be overridden: they always come from the component. Scripts that set its position, rotation, constraints, or mask get Figma's error. Slot content is the instance's own and stays editable.
+
+Overrides in a `.fig` file come back as overrides when you open it, and are saved the way Figma writes them.
 
 ### New Children
 

@@ -3,7 +3,11 @@ import { ListboxContent, ListboxGroup, ListboxGroupLabel, ListboxItem, ListboxRo
 import { tv } from 'tailwind-variants'
 import { computed, ref, useTemplateRef, type ComponentPublicInstance } from 'vue'
 
-import type { VariableCollection, VariableValue } from '@open-pencil/scene-graph'
+import {
+  isLibraryCollection,
+  type VariableCollection,
+  type VariableValue
+} from '@open-pencil/scene-graph'
 import { useFlatReorderDrag, useI18n } from '@open-pencil/vue'
 
 import {
@@ -13,6 +17,7 @@ import {
   type TokenRow
 } from '@/app/editor/tokens/model'
 import BindingPill from '@/components/ui/binding/BindingPill.vue'
+import Tip from '@/components/ui/overlay/Tip.vue'
 import FillSwatch from '@/components/ui/paint/FillSwatch.vue'
 import TokenCellInput from '@/components/variables/TokenCellInput.vue'
 import TokenRowMenu from '@/components/variables/TokenRowMenu.vue'
@@ -43,6 +48,8 @@ const emit = defineEmits<{
 
 const { variables } = useI18n()
 const ui = tv(tokensPanelTheme)()
+/** Figma does not show a variable the file adds to a library's collection; such a row says so. */
+const libraryCollection = computed(() => isLibraryCollection(collection))
 
 const modes = computed(() =>
   modeIds ? collection.modes.filter((mode) => modeIds.includes(mode.modeId)) : collection.modes
@@ -240,6 +247,19 @@ function dropEdge(id: string) {
                   @cancel="editing = null"
                 />
                 <span v-else class="truncate">{{ row.label }}</span>
+                <Tip
+                  v-if="libraryCollection && !row.variable.key"
+                  :label="variables.addedToLibraryCollection"
+                >
+                  <span
+                    role="img"
+                    :aria-label="variables.addedToLibraryCollection"
+                    class="flex shrink-0 text-warning"
+                    data-test-id="variable-added-to-library"
+                  >
+                    <icon-lucide-triangle-alert class="size-3" aria-hidden="true" />
+                  </span>
+                </Tip>
               </span>
               <span :class="ui.cssStacked()">--{{ row.cssName }}</span>
             </span>

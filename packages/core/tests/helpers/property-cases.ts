@@ -256,6 +256,23 @@ export const PROPERTY_CASES: RoundTripCase[] = [
     textCase: 'UPPER',
     textDecoration: 'UNDERLINE'
   }),
+  leafCase('text decoration details', 'TEXT', {
+    text: 'Link',
+    textDecoration: 'UNDERLINE',
+    textDecorationStyle: 'WAVY',
+    textDecorationFills: [solidFill(BLUE)],
+    textDecorationThickness: 2,
+    textUnderlineOffset: 3,
+    textDecorationSkipInk: false
+  }),
+  leafCase('text paragraph spacing', 'TEXT', {
+    text: 'One\nTwo',
+    paragraphSpacing: 8,
+    listSpacing: 2,
+    paragraphIndent: 4,
+    hangingList: true
+  }),
+  leafCase('text without fills', 'TEXT', { text: 'Hidden', fills: [] }),
   leafCase('text that wraps at a fixed width', 'TEXT', {
     text: 'Wrapped',
     textAutoResize: 'HEIGHT'

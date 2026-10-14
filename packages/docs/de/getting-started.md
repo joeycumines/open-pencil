@@ -8,7 +8,7 @@ Wenn Sie ein eigenes Produkt auf OpenPencil aufbauen möchten, lesen Sie den Ber
 
 ## Desktop-Anwendung
 
-Fertige Versionen für macOS, Windows und Linux finden Sie auf der [Release-Seite](https://github.com/open-pencil/open-pencil/releases/latest).
+Fertige Versionen für macOS, Windows und Linux finden Sie auf der [Download-Seite](/de/download).
 
 | Plattform | Datei |
 | --------------------- | -------------------- |
@@ -18,7 +18,7 @@ Fertige Versionen für macOS, Windows und Linux finden Sie auf der [Release-Seit
 | Windows (ARM) | `.msi` / `.exe` |
 | Linux (x64) | `.AppImage` / `.deb` |
 
-## Systemvoraussetzungen
+## Systemvoraussetzungen {#system-requirements}
 
 OpenPencil rendert mit CanvasKit über WebGL und nutzt aktuelle Webplattform-Funktionen, daher ist eine neuere Browser-Engine erforderlich. Die Webversion unterstützt Chrome 111, Edge 111, Firefox 128 und Safari 16.4 oder neuer; Chromium-basierte Browser wie Brave und Opera richten sich nach ihrer Chrome-Version. Die Desktop-Anwendung rendert im WebView des Systems, daher bestimmt die Engine des Betriebssystems die Untergrenze:
 
@@ -45,7 +45,7 @@ brew uninstall open-pencil/tap/open-pencil
 brew install --cask openpencil
 ```
 
-## Aus dem Quellcode erstellen
+## Aus dem Quellcode erstellen {#building-from-source}
 
 ### Voraussetzungen
 

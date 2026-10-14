@@ -1,5 +1,7 @@
 import {
   collectionPluginDataNodeChange,
+  parseGuidOrNull,
+  variableAlias,
   variableMetadataNodeChange
 } from '@open-pencil/fig/node-change'
 import type { GUID, NodeChange, VariableDataEntry } from '@open-pencil/kiwi/fig/codec'
@@ -8,9 +10,10 @@ import {
   modesDefaultFirst,
   type SceneGraph,
   type SceneNode,
+  type VariableCollectionMode,
   type VariableValue
 } from '@open-pencil/scene-graph'
-import { fractionalPosition } from '@open-pencil/scene-graph/order-keys'
+import { fractionalPosition, orderKeyBetween } from '@open-pencil/scene-graph/order-keys'
 
 import { safeColor } from '#core/kiwi/fig/node-change/serialize'
 
@@ -82,7 +85,29 @@ export function assignVariableGuids(
   }
 }
 
-/** Shared styles live on the internal canvas and need a GUID before any node cites them. */
+/**
+ * Where Figma lists each mode: where the file saved it, and a new mode after the rest. A
+ * collection made in OpenPencil lists its modes in their order.
+ */
+function modeSortPositions(modes: readonly VariableCollectionMode[]) {
+  if (modes.every((mode) => !mode.sortPosition))
+    return modes.map((mode, index) => ({ mode, sortPosition: fractionalPosition(index) }))
+  let last = modes.reduce<string | null>(
+    (highest, mode) =>
+      mode.sortPosition && (!highest || mode.sortPosition > highest) ? mode.sortPosition : highest,
+    null
+  )
+  return modes.map((mode) => {
+    if (mode.sortPosition) return { mode, sortPosition: mode.sortPosition }
+    last = orderKeyBetween(last, null)
+    return { mode, sortPosition: last }
+  })
+}
+
+/**
+ * Shared styles live on the internal canvas and need a GUID before any node cites them. A style
+ * read from Figma keeps the GUID it came with, which its ID spells; the others take new ones.
+ */
 export function assignSharedStyleGuids(
   styles: readonly SceneNode[],
   localIdCounter: { value: number },
@@ -91,6 +116,14 @@ export function assignSharedStyleGuids(
 ): void {
   for (const style of styles) {
     if (nodeIdToGuid.has(style.id)) continue
+    // A style read from Figma keeps its GUID, compared in the form the ID parses to.
+    const imported = style.source.id ? parseGuidOrNull(style.source.id) : null
+    const value = imported ? guidToString(imported) : null
+    if (imported && value && !assignedGuidValues.has(value)) {
+      nodeIdToGuid.set(style.id, imported)
+      assignedGuidValues.add(value)
+      continue
+    }
     let guid: GUID
     do {
       guid = { sessionID: 1, localID: localIdCounter.value++ }
@@ -101,13 +134,14 @@ export function assignSharedStyleGuids(
 }
 
 function variableValueToKiwi(
+  graph: SceneGraph,
   value: VariableValue,
   type: string,
   ids: Map<string, GUID>
 ): VariableDataEntry {
   if (typeof value === 'object' && 'aliasId' in value)
     return {
-      value: { alias: { guid: ids.get(value.aliasId) ?? stringToGuid(value.aliasId) } },
+      value: { alias: variableAlias(graph, value.aliasId, ids) },
       dataType: 'ALIAS',
       resolvedDataType: type
     }
@@ -153,12 +187,16 @@ export function appendVariableNodeChanges(
       phase: 'CREATED',
       strokeAlign: 'CENTER',
       strokeJoin: 'BEVEL',
-      variableSetModes: modesDefaultFirst(collection).map((mode, i) => ({
-        id: modes.get(mode.modeId) ?? stringToGuid(mode.modeId),
-        name: mode.name,
-        sortPosition: fractionalPosition(i)
-      })),
-      pluginData: collectionPluginDataNodeChange(collection, modeKey)
+      variableSetModes: modeSortPositions(modesDefaultFirst(collection)).map(
+        ({ mode, sortPosition }) => ({
+          id: modes.get(mode.modeId) ?? stringToGuid(mode.modeId),
+          name: mode.name,
+          sortPosition
+        })
+      ),
+      pluginData: collectionPluginDataNodeChange(collection, modeKey),
+      key: collection.key,
+      version: collection.version
     })
     for (const id of collection.variableIds) {
       const variable = graph.variables.get(id)
@@ -171,12 +209,15 @@ export function appendVariableNodeChanges(
         phase: 'CREATED',
         strokeAlign: 'CENTER',
         strokeJoin: 'BEVEL',
-        variableSetID: { guid },
+        // A collection with a library key is named by it, as Figma names a library's.
+        variableSetID: collection.key
+          ? { assetRef: { key: collection.key, version: collection.version } }
+          : { guid },
         variableResolvedType: variable.type,
         variableDataValues: {
           entries: Object.entries(variable.valuesByMode).map(([mode, value]) => ({
             modeID: modes.get(mode) ?? stringToGuid(mode),
-            variableData: variableValueToKiwi(value, variable.type, ids)
+            variableData: variableValueToKiwi(graph, value, variable.type, ids)
           }))
         },
         ...variableMetadataNodeChange(variable, modeKey),

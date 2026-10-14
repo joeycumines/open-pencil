@@ -19,6 +19,8 @@ import {
 } from '@/app/collab/shared-tree/fields'
 import type { JoinCollabRoom } from '@/app/collab/transport'
 import type { RemotePeer } from '@/app/collab/types'
+import { bindVariableSync, type YRecords } from '@/app/collab/variables'
+import { attachRoomVoice, type RoomVoice } from '@/app/collab/voice/room'
 import {
   bindCollabGraphEvents,
   createYjsGraphSync,
@@ -40,6 +42,7 @@ export interface RoomSession {
   readonly status: ComputedRef<RoomStatus>
   /** Whether the room's document has reached this tab, from a peer or the saved copy. */
   readonly hasDocument: Readonly<Ref<boolean>>
+  readonly voice: RoomVoice
   updateCursor(x: number, y: number, pageId: string): void
   updateSelection(ids: string[]): void
   /** Writes the tab's whole document into the room and makes its root the room's. */
@@ -59,6 +62,8 @@ export interface RoomSessionOptions {
   store: EditorStore
   origin: RoomOrigin
   joinRoom?: JoinCollabRoom
+  /** Who this tab is in the room; the device's own identity unless a host stands in for one. */
+  identity?: Pick<ReturnType<typeof useCollabIdentity>, 'name' | 'color'>
   openSavedCopy?: (roomId: string, ydoc: Y.Doc) => RoomSavedCopy
   /** How long the tab tries to reach the service that introduces peers before saying it cannot. */
   unreachableMs?: number
@@ -77,16 +82,18 @@ export function openRoomSession({
   store,
   origin,
   joinRoom,
+  identity = useCollabIdentity(),
   openSavedCopy = openIndexedDBCopy,
   unreachableMs = ROOM_UNREACHABLE_MS,
   tickMs = ROOM_STATUS_TICK_MS
 }: RoomSessionOptions): RoomSession {
-  const identity = useCollabIdentity()
   const ydoc = new Y.Doc()
   const awareness = new awarenessProtocol.Awareness(ydoc)
   const ynodes: YNodes = ydoc.getMap('nodes')
   const yimages = ydoc.getMap<Uint8Array>('images')
   const meta = ydoc.getMap<unknown>('meta')
+  const yvariables: YRecords = ydoc.getMap('variables')
+  const ycollections: YRecords = ydoc.getMap('collections')
   const persistence = openSavedCopy(roomId, ydoc)
 
   const peers = shallowRef<RemotePeer[]>([])
@@ -198,6 +205,8 @@ export function openRoomSession({
   })
   const stopAgentSync = publishLocalAgents(store, () => awareness, identity.color)
   const stopAgentPreviews = shareAgentPreviews(store, connection)
+  const voice = attachRoomVoice({ awareness, peers, connection })
+  const variableSync = bindVariableSync({ store, ydoc, yvariables, ycollections })
   const unbindGraphEvents = bindCollabGraphEvents({
     store,
     getYdoc: () => (disposed ? null : ydoc),
@@ -213,6 +222,7 @@ export function openRoomSession({
     peers,
     status,
     hasDocument,
+    voice,
     updateCursor(x, y, pageId) {
       awareness.setLocalStateField('cursor', { x, y, pageId, zoom: store.state.zoom })
     },
@@ -221,6 +231,7 @@ export function openRoomSession({
     },
     shareDocument() {
       sync.syncAllNodesToYjs()
+      variableSync.share()
       writeRoomName(meta, store.state.documentName)
       refreshDocument()
     },
@@ -228,12 +239,14 @@ export function openRoomSession({
       if (disposed) return
       // Unbinding writes an edit still waiting to be sent, so it runs while the room is open.
       unbindGraphEvents()
+      variableSync.dispose()
       disposed = true
       connectionTimer.pause()
       stopNameWatch()
       stopZoomWatch()
       stopAgentSync()
       stopAgentPreviews()
+      voice.dispose()
       meta.unobserve(refreshDocument)
       unregisterYjsObservers()
       // Destroying the awareness can emit a last change; nothing here should react to it.

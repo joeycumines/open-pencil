@@ -28,12 +28,16 @@ test('one context owns release identity and reuses existing npm paths', () => {
   expect(context.identity.sourceCommit).toBe(environment.SOURCE_COMMIT)
 })
 
-test.each(['master', '--help', 'v0.15.0/other', 'v0.15.0\n', 'v0.15'])(
+test.each(['master', '--help', 'v0.15.0/other', 'v0.15.0\n', 'v0.15', 'v0.16.0-rc.1'])(
   'rejects invalid release tag %s',
   (tag) => {
     expect(() => releaseVersion(tag)).toThrow()
   }
 )
+
+test('accepts a beta pre-release tag', () => {
+  expect(releaseVersion('v0.16.0-beta.1')).toBe('0.16.0-beta.1')
+})
 
 test('matrix metadata and target validation share the same catalog', () => {
   expect(desktopTargets).toEqual(desktopBuilds.map((build) => build.target))

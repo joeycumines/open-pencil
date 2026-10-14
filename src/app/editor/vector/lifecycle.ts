@@ -2,10 +2,11 @@ import type { Editor } from '@open-pencil/core/editor'
 import { computeAccurateBounds, regenerateFillGeometry } from '@open-pencil/core/vector'
 import {
   cloneVectorNetwork,
+  slotScope,
   transformVectorNetwork,
-  vectorNetworksEqual
+  vectorNetworksEqual,
+  type VectorNetwork
 } from '@open-pencil/scene-graph'
-import type { VectorNetwork } from '@open-pencil/scene-graph'
 import { getNodeLocalMatrix, getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import Matrix from '@open-pencil/scene-graph/matrix'
 
@@ -21,6 +22,19 @@ export function createVectorEditLifecycle(editor: Editor, state: VectorEditState
   function getNodeEditState() {
     return state.nodeEditState
   }
+
+  // A path whose layer is gone, by undo, a script, or another document, has nothing to edit.
+  const close = () => {
+    state.nodeEditState = null
+    state.snapGuides = []
+    editor.requestRender()
+  }
+  editor.onEditorEvent('node:deleted', (id) => {
+    if (state.nodeEditState?.nodeId === id) close()
+  })
+  editor.onEditorEvent('graph:replaced', () => {
+    if (state.nodeEditState) close()
+  })
 
   function commitNodeEditChanges(es: NonNullable<typeof state.nodeEditState>) {
     const node = editor.graph.getNode(es.nodeId)
@@ -93,6 +107,8 @@ export function createVectorEditLifecycle(editor: Editor, state: VectorEditState
   function enterNodeEditMode(nodeId: string) {
     const node = editor.graph.getNode(nodeId)
     if (node?.type !== 'VECTOR' || !node.vectorNetwork) return
+    // A vector inside an instance draws its component's path, so Figma does not open it.
+    if (node.parentId && slotScope(editor.graph, node.parentId).kind === 'locked') return
 
     const world = getWorldMatrix(node, editor.graph)
     const absNetwork = transformVectorNetwork(world, node.vectorNetwork)

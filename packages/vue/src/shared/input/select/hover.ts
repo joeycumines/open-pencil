@@ -7,6 +7,7 @@ import {
   hitTestCornerRotationByMatrix
 } from '#vue/shared/input/geometry'
 import type { HitTestFns } from '#vue/shared/input/select'
+import { hitTestLabel } from '#vue/shared/input/select/hit'
 import { getNodeEditState } from '#vue/shared/input/vector'
 
 function getResizeCursorForSelection(cx: number, cy: number, editor: Editor): string | null {
@@ -59,10 +60,7 @@ function updateHoveredNode(
 ) {
   const hit = deep
     ? fns.hitTestInScope(cx, cy, true)
-    : (fns.hitTestComponentLabel(cx, cy) ??
-      fns.hitTestSectionTitle(cx, cy) ??
-      fns.hitTestFrameTitle(cx, cy) ??
-      fns.hitTestInScope(cx, cy, false))
+    : (hitTestLabel(cx, cy, fns) ?? fns.hitTestInScope(cx, cy, false))
   const editNodeId = getNodeEditState(editor)?.nodeId
   editor.setHoveredNode(
     hit && !editor.state.selectedIds.has(hit.id) && hit.id !== editNodeId ? hit.id : null
@@ -84,8 +82,10 @@ export function updateHoverCursor(
     return null
   }
 
+  // As a press does: resizing first, then a label, then rotation.
   const cursor =
-    getResizeCursorForSelection(cx, cy, editor) ?? getRotationCursorForSelection(cx, cy, editor)
+    getResizeCursorForSelection(cx, cy, editor) ??
+    (hitTestLabel(cx, cy, fns) ? null : getRotationCursorForSelection(cx, cy, editor))
   updateHoveredNode(cx, cy, editor, fns, deep)
   return cursor
 }

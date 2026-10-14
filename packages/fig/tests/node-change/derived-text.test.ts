@@ -5,7 +5,8 @@ import {
   buildNodeDerivedTextData,
   convertFigmaDerivedTextGlyphs,
   type DerivedTextBuildContext,
-  type ShapedText
+  type ShapedText,
+  type TextDecorationRecord
 } from '#fig/node-change/index'
 
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
@@ -30,12 +31,16 @@ function textNode(props: Partial<SceneNode> = {}): SceneNode {
   })
 }
 
-function context(shaped: ShapedText | null): DerivedTextBuildContext & { blobs: Uint8Array[] } {
+function context(
+  shaped: ShapedText | null,
+  decorations: TextDecorationRecord[] = []
+): DerivedTextBuildContext & { blobs: Uint8Array[] } {
   return {
     digestMap: new Map(),
     blobs: [],
     glyphBlobMap: new Map(),
-    shapeText: () => shaped
+    shapeText: () => shaped,
+    textDecorations: () => decorations
   }
 }
 
@@ -96,6 +101,25 @@ describe('derived text writer', () => {
     expect(writer.blobs).toHaveLength(0)
   })
 
+  test('writes decorations by the style of the characters they decorate', () => {
+    // Figma draws saved text's underlines and strikethroughs from these rects only.
+    const node = textNode({
+      textDecoration: 'UNDERLINE',
+      styleRuns: [{ start: 3, length: 1, style: { textDecoration: 'STRIKETHROUGH' } }]
+    })
+    const rect = { x: 0, y: 14, width: 16, height: 1 }
+    const writer = context(twoLines(SQUARE), [
+      { firstCharacter: 0, ...rect },
+      { firstCharacter: 3, ...rect, y: 22 }
+    ])
+    const data = expectDefined(buildNodeDerivedTextData(node, writer), 'derived text')
+
+    expect(data.decorations).toEqual([
+      { rects: [{ x: 0, y: 14, w: 16, h: 1 }], styleID: 0 },
+      { rects: [{ x: 0, y: 22, w: 16, h: 1 }], styleID: 1 }
+    ])
+  })
+
   test('writes no glyphs for text that could not be shaped', () => {
     const data = expectDefined(buildNodeDerivedTextData(textNode(), context(null)), 'derived')
 
@@ -140,6 +164,47 @@ describe('derived text writer', () => {
     expect(data.glyphs?.map((glyph) => glyph.advance)).toEqual([0.5, 0, 0])
   })
 
+  test('keeps list markers without characters, also for empty items', () => {
+    const blob = new Uint8Array([0])
+    const item = { listType: 'UNORDERED' as const, indentation: 1 }
+    const marker = (y: number) => ({ commandsBlob: blob, x: 7.5, y, fontSize: 16, advance: 9 })
+    // "A", an empty item, then "B": the empty item shows only its marker.
+    const node = textNode({
+      text: 'A\n\nB',
+      textParagraphs: [item, item, item],
+      derivedTextGlyphs: [
+        marker(12),
+        { commandsBlob: blob, x: 24, y: 12, fontSize: 16, firstCharacter: 0 },
+        marker(28),
+        marker(44),
+        { commandsBlob: blob, x: 24, y: 44, fontSize: 16, firstCharacter: 3 }
+      ]
+    })
+    const data = expectDefined(buildNodeDerivedTextData(node, context(null)), 'derived text')
+
+    expect(data.glyphs?.map((glyph) => glyph.firstCharacter)).toEqual([
+      undefined,
+      0,
+      undefined,
+      undefined,
+      3
+    ])
+    expect(data.baselines?.map((line) => [line.firstCharacter, line.endCharacter])).toEqual([
+      [0, 2],
+      [2, 3],
+      [3, 4]
+    ])
+    expect(data.baselines?.[0].position.x).toBe(24)
+
+    const onlyMarkers = textNode({
+      text: '\n',
+      textParagraphs: [item, item],
+      derivedTextGlyphs: [marker(12), marker(28)]
+    })
+    const markers = expectDefined(buildNodeDerivedTextData(onlyMarkers, context(null)), 'markers')
+    expect(markers.glyphs?.map((glyph) => glyph.firstCharacter)).toEqual([undefined, undefined])
+  })
+
   test('names font styles as Figma does', () => {
     const data = buildNodeDerivedTextData(
       textNode({ fontFamily: 'Inter', fontWeight: 600 }),
@@ -181,6 +246,20 @@ function earlierOpenPencilData(characters: string, lineHeight: number): DerivedT
 
 describe('derived text reader', () => {
   const blobs = [new Uint8Array([0])]
+
+  test('leaves out the glyphs Figma hides past the ellipsis of truncated text', () => {
+    // Figma lays truncated text out whole and puts an ellipsis, with no character, where it is
+    // cut; the glyphs after it, from `truncationStartIndex`, are not drawn.
+    const characters = 'Long label'
+    const data = earlierOpenPencilData(characters, 16)
+    data.logicalIndexToCharacterOffsetMap = data.logicalIndexToCharacterOffsetMap?.slice(0, -1)
+    const glyphs = data.glyphs ?? []
+    glyphs.splice(4, 0, { ...glyphs[4], firstCharacter: undefined })
+    data.truncationStartIndex = 5
+
+    const read = convertFigmaDerivedTextGlyphs(data, blobs, characters)
+    expect(read.map((glyph) => glyph.firstCharacter)).toEqual([0, 1, 2, 3, undefined])
+  })
 
   test("keeps a glyph's own advance through reading and saving", () => {
     const characters = 'Table item'

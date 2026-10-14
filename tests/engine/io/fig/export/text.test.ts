@@ -274,7 +274,8 @@ describe('text node export', () => {
     )
 
     expect(textNc.textAutoResize).toBe('NONE')
-    expect(textNc.lineHeight).toBeUndefined()
+    // Auto line height, written as Figma writes it.
+    expect(textNc.lineHeight).toEqual({ value: 100, units: 'PERCENT' })
     expect(textNc.stackChildAlignSelf).toBeUndefined()
   })
 

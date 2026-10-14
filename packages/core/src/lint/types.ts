@@ -100,6 +100,11 @@ export interface LintNode {
   componentId?: string
   text: string
   fontSize: number
+  /**
+   * The size and weight of every stretch of a text layer's characters: one per style run, and
+   * the layer's own where no run covers the text.
+   */
+  textStyles?: { fontSize: number; fontWeight: number }[]
   styleRunCount: number
   boundVariables: Record<string, string>
   fills: Array<{

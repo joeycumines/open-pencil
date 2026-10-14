@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty'
 
-import { FigmaAPI } from '@open-pencil/core/figma-api'
+import { FigmaAPI, flushPendingLayout } from '@open-pencil/core/figma-api'
 import { compileScript } from '@open-pencil/core/tools'
 
 import { isAppMode, requireFile, rpc } from '#cli/app/client'
@@ -9,6 +9,7 @@ import { printError } from '#cli/format'
 import {
   documentWriteOptions,
   loadDocument,
+  measureTextHeadlessly,
   populateWholeDocument,
   writeFigDocument
 } from '#cli/headless'
@@ -70,6 +71,7 @@ export default defineCommand({
     const file = requireFile(args.file)
     const graph = await loadDocument(file)
     populateWholeDocument(graph)
+    await measureTextHeadlessly()
     const figma = new FigmaAPI(graph)
 
     let result: unknown
@@ -86,6 +88,8 @@ export default defineCommand({
 
     if (args.write || args.output) {
       const outPath = args.output ? args.output : file
+      // A script's edits that nothing read yet are laid out before saving, as Figma saves them.
+      flushPendingLayout(graph)
       await writeFigDocument(graph, outPath)
       if (!args.quiet) {
         console.error(`Written to ${outPath}`)

@@ -1,6 +1,7 @@
 import { parseFragment, type DefaultTreeAdapterTypes } from 'parse5'
 
 import { serializeHTML } from '../export/html'
+import { INLINE_TAGS } from '../import/flow'
 import { parseStyleAttribute } from '../import/style-attribute'
 import type { CSSRuntime, DesignDocument, DesignElement, DesignNode } from '../types'
 import { computeHeadlessStyles } from './headless-css'
@@ -19,9 +20,44 @@ function isTextNode(
 
 const NON_RENDERED_TAGS = new Set(['head', 'link', 'meta', 'script', 'style', 'template', 'title'])
 
-function childToDesignNode(node: DefaultTreeAdapterTypes.ChildNode): DesignNode | null {
+function isInlineElement(node: DefaultTreeAdapterTypes.ChildNode | undefined): boolean {
+  return node !== undefined && 'tagName' in node && INLINE_TAGS.has(node.tagName.toLowerCase())
+}
+
+/**
+ * Text, and the spaces in or beside inline elements, which CSS draws among their words; spaces
+ * between blocks lay nothing out, so they are left out.
+ */
+function keepsText(
+  node: DefaultTreeAdapterTypes.TextNode,
+  siblings: readonly DefaultTreeAdapterTypes.ChildNode[],
+  index: number,
+  inInline: boolean
+): boolean {
+  if (node.value.trim().length > 0) return true
+  return (
+    node.value.length > 0 &&
+    (inInline || isInlineElement(siblings[index - 1]) || isInlineElement(siblings[index + 1]))
+  )
+}
+
+function childrenToDesignNodes(
+  nodes: readonly DefaultTreeAdapterTypes.ChildNode[],
+  inInline: boolean
+): DesignNode[] {
+  return nodes
+    .map((node, index) => childToDesignNode(node, index, nodes, inInline))
+    .filter((child): child is DesignNode => child !== null)
+}
+
+function childToDesignNode(
+  node: DefaultTreeAdapterTypes.ChildNode,
+  index: number,
+  siblings: readonly DefaultTreeAdapterTypes.ChildNode[],
+  inInline: boolean
+): DesignNode | null {
   if (isTextNode(node)) {
-    return node.value.trim().length > 0 ? { type: 'text', text: node.value } : null
+    return keepsText(node, siblings, index, inInline) ? { type: 'text', text: node.value } : null
   }
 
   if (!('tagName' in node)) return null
@@ -32,9 +68,7 @@ function childToDesignNode(node: DefaultTreeAdapterTypes.ChildNode): DesignNode 
     type: 'element',
     tagName: node.tagName.toLowerCase(),
     attrs,
-    children: node.childNodes
-      .map(childToDesignNode)
-      .filter((child): child is DesignNode => child !== null)
+    children: childrenToDesignNodes(node.childNodes, isInlineElement(node))
   }
 
   const inlineStyle = parseStyleAttribute(attrs.style)
@@ -47,9 +81,7 @@ function parseHTML(html: string): DesignDocument {
   const fragment = parseFragment(html)
   return {
     type: 'document',
-    children: fragment.childNodes
-      .map(childToDesignNode)
-      .filter((node): node is DesignNode => node !== null)
+    children: childrenToDesignNodes(fragment.childNodes, false)
   }
 }
 

@@ -12,6 +12,7 @@ import { drawLayoutOutlines } from '#core/canvas/overlays/layout-outlines'
 import { drawMeasurementSegment } from '#core/canvas/overlays/measurement'
 import { drawPixelGrid } from '#core/canvas/overlays/pixel-grid'
 import { drawCodeFocus } from '#core/canvas/overlays/selection'
+import { drawShapeHandles } from '#core/canvas/overlays/shape-handles'
 import { drawSlotOutlines } from '#core/canvas/overlays/slots'
 import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
 import { RULER_SIZE } from '#core/constants'
@@ -118,7 +119,18 @@ export function drawOverlayPass(
   // previewing canvas shows neither.
   if (!overlays.playing && editedGradient(graph, overlays.gradientEdit))
     drawGradientHandles(r, canvas, graph, overlays.gradientEdit, overlays.rotationPreview)
-  else r.drawSelection(canvas, graph, selectedIds, overlays)
+  else {
+    r.drawSelection(canvas, graph, selectedIds, overlays)
+    if (!overlays.transforming)
+      drawShapeHandles(
+        r,
+        canvas,
+        graph,
+        selectedIds,
+        overlays.shapeHandleHover,
+        overlays.rotationPreview
+      )
+  }
   if (measuring) r.drawMeasurements(canvas, graph, selectedIds, overlays.hoveredNodeId)
   r.profiler.endPhase('render:selection')
 
@@ -133,6 +145,7 @@ export function drawOverlayPass(
   }
   r.drawNodeEditOverlay(canvas, graph, overlays.nodeEditState)
   r.drawPenOverlay(canvas, overlays.penState)
+  r.drawPencilOverlay(canvas, overlays.pencilState)
   updateIssueMarkers(r, graph, overlays)
   drawIssueMarkers(r, canvas, r.issueMarkers, overlays.designIssues?.hoveredMarkerKey)
   r.drawPresenceCursors(canvas, graph, overlays.presenceCursors)

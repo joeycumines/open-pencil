@@ -1,5 +1,3 @@
-import dedent from 'dedent'
-
 import authoring from './reference/authoring.md?raw'
 import { AUTHORING_EXAMPLES } from './reference/examples'
 import {
@@ -13,15 +11,8 @@ export { AUTHORING_EXAMPLES, type AuthoringExample } from './reference/examples'
 /** Canonical scene-authoring guidance shared by runtime prompts and generated skill references. */
 export const JSX_REFERENCE = [
   authoring.trim(),
-  ...AUTHORING_EXAMPLES.map(
-    ({ title, jsx }) => dedent`
-## ${title}
-
-\`\`\`jsx
-${jsx}
-\`\`\`
-`
-  ),
+  // Examples are written verbatim; dedenting them again would flatten their nesting.
+  ...AUTHORING_EXAMPLES.map(({ title, jsx }) => `## ${title}\n\n\`\`\`jsx\n${jsx}\n\`\`\``),
   '## Supported syntax inventory',
   'Generated from the renderer metadata. This inventory lists accepted names, not arbitrary browser CSS support.',
   `**Elements:** ${DESIGN_JSX_ELEMENTS.map(({ name }) => `\`${name}\``).join(', ')}.`,

@@ -139,12 +139,6 @@ function drawLiveShape(
   if (!inverse) return
   const localNetwork = transformVectorNetwork(inverse, { vertices, segments, regions })
 
-  const invalidatePathCaches = () => {
-    r.vectorPathCache.delete(nodeId)
-    r.fillGeometryCache.delete(nodeId)
-    r.strokeGeometryCache.delete(nodeId)
-  }
-
   // Temporarily patch the node so renderShapeUncached uses our live network;
   // fills draw from fillGeometry blobs, so rebuild those from the live network.
   // Clear strokeGeometry so strokes use the live vector network instead of
@@ -160,7 +154,7 @@ function drawLiveShape(
     node.vectorNetwork = localNetwork
     node.fillGeometry = regenerateFillGeometry(localNetwork, origFillGeometry)
     node.strokeGeometry = []
-    invalidatePathCaches()
+    r.invalidateVectorPath(nodeId)
     canvas.translate(r.panX, r.panY)
     canvas.scale(r.zoom, r.zoom)
     canvas.concat(world)
@@ -172,7 +166,7 @@ function drawLiveShape(
     node.vectorNetwork = origNetwork
     node.fillGeometry = origFillGeometry
     node.strokeGeometry = origStrokeGeometry
-    invalidatePathCaches()
+    r.invalidateVectorPath(nodeId)
   }
 }
 

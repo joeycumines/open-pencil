@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computedAsync } from '@vueuse/core'
+import { computed, watch } from 'vue'
 
 import { playIslandRoots, type PlayState } from '@open-pencil/core/editor'
 import type { ViewportTransform } from '@open-pencil/core/geometry'
+import { tokenStylesheet } from '@open-pencil/dom-css/export'
 
 import { useEditor } from '#vue/editor/context'
 
@@ -25,6 +27,20 @@ const { view, canvas, drawn } = defineProps<{
 
 const placement = computed(() => drawn ?? view)
 const editor = useEditor()
+
+/**
+ * The document's variables as custom properties, which the islands' `var()` references read in
+ * the modes their layers set. Built once for every island while previewing; an island is a
+ * shadow root, so the stylesheet's `:root` is its host.
+ */
+const tokens = new CSSStyleSheet()
+const tokensCSS = computedAsync(async () => {
+  void editor.state.sceneVersion
+  if (!view.play) return ''
+  const { css } = await tokenStylesheet(editor.graph, { format: 'css' })
+  return css.replaceAll(':root', ':host')
+}, '')
+watch(tokensCSS, (css) => tokens.replaceSync(css), { immediate: true })
 
 const islands = computed(() => {
   void editor.state.sceneVersion
@@ -60,6 +76,7 @@ function forwardWheel(event: WheelEvent) {
         :key="island.id"
         :root-id="island.id"
         :revision="view.play.revision"
+        :tokens="tokens"
         class="pointer-events-auto absolute"
         :style="{ left: `${island.position.x}px`, top: `${island.position.y}px` }"
       />

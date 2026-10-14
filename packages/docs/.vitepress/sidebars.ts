@@ -8,6 +8,8 @@ export const guideSidebar = (prefix: string, labels: SidebarLabels): DefaultThem
       { text: labels.gettingStarted, link: `${prefix}/getting-started` },
       { text: labels.features, link: `${prefix}/overview/features` },
       { text: labels.comparison, link: `${prefix}/overview/comparison` },
+      // English only until translated; locales link to the canonical page.
+      { text: labels.privacy, link: '/overview/privacy' },
     ],
   },
 ]
@@ -125,6 +127,7 @@ export const developmentSidebar = (
       ...(!prefix
         ? [
             { text: 'Roadmap', link: '/development/roadmap' },
+            { text: 'AI Chat Replies', link: '/development/ai-chat' },
             { text: 'Behaviours and Preview', link: '/development/behaviours-and-preview' },
             { text: 'Navigation Performance', link: '/development/navigation-performance' },
             { text: 'Renderer Lifecycle', link: '/development/renderer-lifecycle' },

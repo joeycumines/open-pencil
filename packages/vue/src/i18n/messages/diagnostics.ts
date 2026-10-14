@@ -14,6 +14,7 @@ export const diagnosticsMessageDefaults = {
   usageCacheNote: 'Cache values are shown only when the provider reports them.',
   title: 'Diagnostics',
   chatCompleted: 'AI chat completed',
+  chatStopped: 'AI chat stopped',
   chatFailed: 'AI chat failed',
   storageFailed: 'Storage operation failed',
   documentFailed: 'Document operation failed',
@@ -65,11 +66,34 @@ export const diagnosticsMessageDefaults = {
   usageHistoryDescription: 'Keep local AI usage summaries.',
   eventCount: params('{count} events · {size} KB'),
   copy: 'Copy diagnostics',
+  save: 'Save diagnostics…',
   clear: 'Clear',
   clearDescription: 'This removes locally stored diagnostic events from this device.',
   cleared: 'Diagnostics cleared.',
-  copied: 'Diagnostics copied to clipboard.',
-  copyFailed: 'Could not copy diagnostics to the clipboard.'
+  copyFailed: 'Could not copy diagnostics to the clipboard.',
+  saveFailed: 'Could not save diagnostics.',
+  sharingTitle: 'Sharing with OpenPencil',
+  sharingDescription:
+    'What this app sends to the OpenPencil team. Your designs, file names, prompts, and keys are never sent.',
+  sharingPing: 'Daily anonymous ping',
+  sharingPingDescription:
+    'Once a day: the app version, operating system, and whether it runs on desktop or the web. No ID.',
+  sharingUsageStats: 'Usage stats',
+  sharingUsageStatsDescription:
+    'Which features and file formats are used, under a random ID that names no person. Off unless you agree.',
+  sharingDetails: 'What is sent',
+  sharingUnofficialBuild:
+    'This build sends nothing. Only official OpenPencil releases send pings or usage stats.',
+  sharingDisabledByEnvironment:
+    'Turned off by OPENPENCIL_TELEMETRY or DO_NOT_TRACK in your environment.',
+  sharingQuestionTitle: 'Help improve OpenPencil?',
+  sharingQuestionDescription:
+    'Share anonymous usage stats: app launches, file formats, and features used. Never your designs, file names, or prompts. They show us what to build next and that OpenPencil is used, which keeps it funded.',
+  sharingQuestionDecline: 'No thanks',
+  sharingQuestionAccept: 'Share stats',
+  sharingQuestionAccepted: 'Thank you. You can change this in Privacy settings.',
+  sharingQuestionDeclined: 'Usage stats stay off. You can change this in Privacy settings.',
+  sharingLocalData: 'Usage and Diagnostics keep their records on this device and never send them.'
 } as const
 
 export const diagnosticsMessages = i18n('diagnostics', diagnosticsMessageDefaults)

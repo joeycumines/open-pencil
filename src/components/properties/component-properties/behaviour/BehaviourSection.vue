@@ -134,7 +134,7 @@ const nextStep = computed(() => {
       <p
         v-if="behaviour.missing.length"
         role="status"
-        class="flex items-start gap-1.5 rounded bg-issue-warning/10 px-1.5 py-1 text-[11px] leading-4 text-issue-warning"
+        class="flex items-start gap-1.5 rounded bg-warning/10 px-1.5 py-1 text-[11px] leading-4 text-warning"
         data-property="behaviour-missing"
       >
         <SeverityIcon severity="warning" class="mt-0.5 shrink-0" />

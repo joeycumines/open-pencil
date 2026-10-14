@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { expectDefined, getNodeOrThrow } from '#core-tests/helpers/assert'
 
 import { SceneGraph } from '@open-pencil/core'
-import { collectSubtrees } from '@open-pencil/core/editor/clipboard/subtree-history'
+import { collectSubtrees } from '#core/editor/history/subtree'
 import { createInstanceOverrideState } from '@open-pencil/scene-graph'
 
 function pageId(graph: SceneGraph): string {

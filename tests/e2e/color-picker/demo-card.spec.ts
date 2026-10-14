@@ -26,10 +26,8 @@ async function selectDemoCard(page: Page, canvas: CanvasHelper) {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
     const nodes = Array.from(store.graph.nodes.values())
-    const card =
-      nodes.find((node) => node.name === 'Card' && node.type === 'COMPONENT') ??
-      nodes.find((node) => node.name === 'Card')
-    // The card lives on whichever page the demo keeps its component library on.
+    // The Lint chapter's button keeps a hard-coded fill on purpose, for the rules to find.
+    const card = nodes.find((node) => node.name === 'Frame 3' && node.type === 'FRAME')
     let owner = card
     while (owner && owner.type !== 'CANVAS') {
       owner = owner.parentId ? store.graph.getNode(owner.parentId) : undefined
@@ -48,7 +46,7 @@ async function selectDemoCard(page: Page, canvas: CanvasHelper) {
 
   const designPanel = page.getByTestId('design-panel-single')
   await expect(designPanel).toBeVisible()
-  await expect(designPanel.getByRole('heading', { name: 'Card' })).toBeVisible()
+  await expect(designPanel.getByRole('heading', { name: 'Frame 3' })).toBeVisible()
 }
 
 async function getSelectedFill(page: Page) {

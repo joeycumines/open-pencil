@@ -15,6 +15,17 @@ import type {
 } from './types'
 import { getNodePath } from './utils'
 
+/** The size and weight of each stretch of a text layer's characters, as the canvas draws them. */
+function effectiveTextStyles(node: SceneNode): { fontSize: number; fontWeight: number }[] {
+  const base = { fontSize: node.fontSize, fontWeight: node.fontWeight }
+  const runs = node.styleRuns.map((run) => ({
+    fontSize: run.style.fontSize ?? base.fontSize,
+    fontWeight: run.style.fontWeight ?? base.fontWeight
+  }))
+  const covered = node.styleRuns.reduce((total, run) => total + run.length, 0)
+  return covered < node.text.length || runs.length === 0 ? [base, ...runs] : runs
+}
+
 export class Linter {
   private rules = new Map<string, Rule>()
   private ruleConfigs = new Map<string, { severity: Severity; options?: Record<string, unknown> }>()
@@ -111,6 +122,7 @@ export class Linter {
       componentId: raw.componentId || undefined,
       text: raw.text,
       fontSize: raw.fontSize,
+      textStyles: raw.type === 'TEXT' ? effectiveTextStyles(raw) : undefined,
       styleRunCount: raw.styleRuns.length,
       boundVariables: raw.boundVariables,
       fills: raw.fills.map((f, index) => ({

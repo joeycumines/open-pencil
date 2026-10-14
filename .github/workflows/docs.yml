@@ -1,13 +1,22 @@
 name: Deploy docs
 
 on:
-  push:
-    tags:
-      - "v*"
+  # The download page reads GitHub's releases when the site is built, so the docs deploy when a
+  # release is published, not when its tag is pushed and the release is still a draft.
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Build and capture the landing posters without deploying; the stills are kept as an artifact.
+        type: boolean
+        default: false
 
 jobs:
   deploy:
+    # Pre-releases (vX.Y.Z-beta.N) ship desktop and npm builds only, never production,
+    # including when dispatched manually on their tag.
+    if: ${{ !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,9 +29,22 @@ jobs:
       - name: Build SDK packages for documentation
         run: bun run build:packages
 
+      # The production build captures stills of the landing's stages in headless Chromium.
+      - name: Install Chromium for landing posters
+        run: bunx playwright install --with-deps chromium
+
       - run: bun run --filter @open-pencil/docs build:production
 
+      - name: Keep the landing posters for review
+        if: ${{ inputs.dry-run }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: landing-posters
+          path: packages/docs/.vitepress/dist/landing-posters
+
+      # A published release has no inputs, so it always deploys.
       - uses: cloudflare/wrangler-action@v4
+        if: ${{ !inputs.dry-run }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

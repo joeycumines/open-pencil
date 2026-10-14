@@ -10,77 +10,115 @@ async function openDemo(page: Page) {
   await waitForDemo(page)
   return canvas
 }
-test.use({ viewport: { width: 1200, height: 1300 } })
 
-for (const [name, snapshot] of [
-  ['01 · Components & variables', 'demo-components-and-variables'],
-  ['02 · Typography', 'demo-typography'],
-  ['03 · Paint & effects', 'demo-paint'],
-  ['04 · Controls', 'demo-controls']
-] as const) {
-  test(`demo startup and page navigation: ${name}`, async ({ page }) => {
-    const canvas = await openDemo(page)
-    const bounds = await page.evaluate(async (name) => {
-      const store = window.openPencil?.getStore?.()
-      if (!store) throw new Error('Editor unavailable')
-      const page = store.graph.getPages().find((page) => page.name === name)
-      if (!page) throw new Error(`Missing page: ${name}`)
-      await store.switchPage(page.id)
-      const [root] = store.graph.getChildren(page.id)
-      return {
-        x: root.x * store.state.zoom + store.state.panX,
-        y: root.y * store.state.zoom + store.state.panY,
-        width: root.width * store.state.zoom,
-        height: root.height * store.state.zoom
-      }
-    }, name)
-    const box = await canvas.canvas.boundingBox()
-    if (!box) throw new Error('Canvas unavailable')
-    expect(bounds.x).toBeGreaterThanOrEqual(0)
-    expect(bounds.y).toBeGreaterThanOrEqual(0)
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(box.width)
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(box.height)
-    await canvas.waitForRender()
-    canvas.assertNoErrors()
-    expect(await canvas.screenshotCanvasRegion(1200, 1300)).toMatchSnapshot(`${snapshot}.png`, {
-      maxDiffPixels: 100
-    })
-  })
+async function setAppTheme(page: Page, theme: 'dark' | 'light') {
+  await page.evaluate(async (value) => {
+    const themeModulePath = '/src/app/shell/theme.ts'
+    const themeModule = await import(themeModulePath)
+    themeModule.useAppTheme().setTheme(value)
+  }, theme)
+  await page.waitForFunction((value) => document.documentElement.dataset.theme === value, theme)
 }
 
-test('the demo opens as a document with every page', async ({ page }) => {
-  await openDemo(page)
+test.use({ viewport: { width: 1200, height: 900 } })
+
+test('the tour opens on its first chapter, the rest below it', async ({ page }) => {
+  const canvas = await openDemo(page)
   const opened = await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('Editor unavailable')
+    const pageId = store.state.currentPageId
+    const sections = store.graph
+      .getChildren(pageId)
+      .filter((node) => node.type === 'SECTION')
+      .sort((a, b) => a.y - b.y)
+    const [first] = sections
     return {
       name: store.state.documentName,
       pages: store.graph.getPages().map((item) => item.name),
-      preparing: store.state.preparation !== null
+      chapters: sections.map((section) => section.name),
+      unsaved: store.hasUnsavedChanges(),
+      first: {
+        x: first.x * store.state.zoom + store.state.panX,
+        y: first.y * store.state.zoom + store.state.panY,
+        width: first.width * store.state.zoom,
+        height: first.height * store.state.zoom
+      }
     }
   })
-  expect(opened).toEqual({
+  expect(opened).toMatchObject({
     name: 'Demo',
-    pages: [
-      '01 · Components & variables',
-      '02 · Typography',
-      '03 · Paint & effects',
-      '04 · Controls'
+    pages: ['Tour'],
+    chapters: [
+      '1 · Hello',
+      '2 · Slots',
+      '3 · Controls',
+      '4 · Modes',
+      '5 · Shaders',
+      '6 · Code',
+      '7 · Lint',
+      '8 · Yours'
     ],
-    preparing: false
+    unsaved: false
+  })
+  const box = await canvas.canvas.boundingBox()
+  if (!box) throw new Error('Canvas unavailable')
+  expect(opened.first.x).toBeGreaterThanOrEqual(0)
+  expect(opened.first.y).toBeGreaterThanOrEqual(0)
+  expect(opened.first.x + opened.first.width).toBeLessThanOrEqual(box.width)
+  expect(opened.first.y + opened.first.height).toBeLessThanOrEqual(box.height)
+  await canvas.waitForRender()
+  canvas.assertNoErrors()
+  expect(await canvas.screenshotCanvasRegion(1200, 900)).toMatchSnapshot('demo-tour-dark.png', {
+    maxDiffPixels: 100
   })
 })
 
-test('demo tokens and main-component edits survive undo', async ({ page }) => {
+test('the tour follows the app theme without becoming an edit', async ({ page }) => {
+  const canvas = await openDemo(page)
+  const read = () =>
+    page.evaluate(() => {
+      const store = window.openPencil?.getStore?.()
+      if (!store) throw new Error('Editor unavailable')
+      const pageId = store.state.currentPageId
+      const modeOf = (name: string) => {
+        const collection = [...store.graph.variableCollections.values()].find(
+          (item) => item.name === name
+        )
+        const modeId = collection && store.graph.getNodeVariableModeId(pageId, collection.id)
+        return collection?.modes.find((mode) => mode.modeId === modeId)?.name
+      }
+      return {
+        theme: modeOf('Theme'),
+        chrome: modeOf('App chrome'),
+        page: store.state.pageColor,
+        unsaved: store.hasUnsavedChanges(),
+        undo: store.undo.canUndo
+      }
+    })
+  await setAppTheme(page, 'light')
+  await expect.poll(async () => (await read()).theme).toBe('Light')
+  const light = await read()
+  expect(light).toMatchObject({ chrome: 'Light', unsaved: false, undo: false })
+  expect(light.page.r).toBeGreaterThan(0.9)
+  await canvas.waitForRender()
+  expect(await canvas.screenshotCanvasRegion(1200, 900)).toMatchSnapshot('demo-tour-light.png', {
+    maxDiffPixels: 100
+  })
+
+  await setAppTheme(page, 'dark')
+  await expect.poll(async () => (await read()).theme).toBe('Dark')
+  expect((await read()).page.r).toBeLessThan(0.1)
+})
+
+test('tour tokens and main-component edits survive undo', async ({ page }) => {
   await openDemo(page)
   const result = await page.evaluate(async () => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('Editor unavailable')
     const graph = store.graph
-    // The demo is opened from `.fig`, which gives variables and modes ids of its own.
-    const collection = [...graph.variableCollections.values()].find(
-      (item) => item.name === 'Announcement / Color'
-    )
+    // The tour is opened from `.fig`, which gives variables and modes ids of its own.
+    const collection = [...graph.variableCollections.values()].find((item) => item.name === 'Theme')
     const token = [...graph.variables.values()].find(
       (item) => item.name === 'Accent' && item.collectionId === collection?.id
     )
@@ -91,39 +129,35 @@ test('demo tokens and main-component edits survive undo', async ({ page }) => {
     const changed = structuredClone(token.valuesByMode[mode])
     store.undoAction()
     const restored = structuredClone(token.valuesByMode[mode])
+
     const component = Array.from(graph.getAllNodes()).find(
-      (node) => node.type === 'COMPONENT' && node.name === 'Announcement'
+      (node) => node.type === 'COMPONENT' && node.name === 'Player'
     )
-    if (!component) throw new Error('Announcement component unavailable')
-    const content = graph.getChildren(component.id).find((node) => node.name === 'Content')
-    if (!content) throw new Error('Component content unavailable')
-    const headline = graph.getChildren(content.id).find((node) => node.name === 'Headline')
-    if (!headline) throw new Error('Headline unavailable')
-    const instances = Array.from(graph.getAllNodes()).filter(
-      (node) => node.type === 'INSTANCE' && node.componentId === component.id
+    if (!component) throw new Error('Player component unavailable')
+    const artist = (owner: string) => {
+      const track = graph.getChildren(owner).find((node) => node.name === 'Track')
+      return track && graph.getChildren(track.id).find((node) => node.name === 'Artist')
+    }
+    const headline = artist(component.id)
+    if (!headline) throw new Error('Artist text unavailable')
+    // Instances that leave Artist at the component's value follow its edits.
+    const following = Array.from(graph.getAllNodes()).filter(
+      (node) =>
+        node.type === 'INSTANCE' &&
+        node.componentId === component.id &&
+        Object.keys(node.componentPropertyAssignments).length === 0
     )
-    const headlines = () =>
-      instances.map((instance) => {
-        const content = graph.getChildren(instance.id).find((node) => node.name === 'Content')
-        if (!content) throw new Error('Instance content unavailable')
-        return graph.getChildren(content.id).find((node) => node.name === 'Headline')?.text
-      })
-    store.updateNodeWithUndo(
-      headline.id,
-      { text: 'Open studio: bring your next idea' },
-      'Edit demo headline'
-    )
+    const artists = () => following.map((instance) => artist(instance.id)?.text)
+    store.updateNodeWithUndo(headline.id, { text: 'Lumen & friends' }, 'Edit tour artist')
     await store.loadFontsForNodes([component.id])
-    const editedHeadlines = headlines()
+    const edited = artists()
     store.undoAction()
     await store.loadFontsForNodes([component.id])
-    return { original, changed, restored, editedHeadlines, restoredHeadlines: headlines() }
+    return { original, changed, restored, count: following.length, edited, reverted: artists() }
   })
   expect(result.changed).not.toEqual(result.original)
   expect(result.restored).toEqual(result.original)
-  expect(result.editedHeadlines).toEqual([
-    'Open studio: bring your next idea',
-    'Open studio: bring your next idea'
-  ])
-  expect(result.restoredHeadlines).toEqual(['Open studio', 'Open studio'])
+  expect(result.count).toBeGreaterThan(1)
+  expect(new Set(result.edited)).toEqual(new Set(['Lumen & friends']))
+  expect(new Set(result.reverted)).toEqual(new Set(['Lumen']))
 })

@@ -49,6 +49,38 @@ export function createSelectionCommands({
       enabled: capabilities.canSelectAll,
       run: () => editor.selectInverse()
     },
+    'selection.selectChildren': {
+      id: 'selection.selectChildren',
+      get label() {
+        return t.value.selectChildren
+      },
+      enabled: selection.hasSelection,
+      run: () => editor.selectChildren()
+    },
+    'selection.selectParent': {
+      id: 'selection.selectParent',
+      get label() {
+        return t.value.selectParent
+      },
+      enabled: selection.hasSelection,
+      run: () => editor.selectParent()
+    },
+    'selection.selectNextSibling': {
+      id: 'selection.selectNextSibling',
+      get label() {
+        return t.value.selectNextSibling
+      },
+      enabled: selection.hasSelection,
+      run: () => editor.selectNextSibling()
+    },
+    'selection.selectPreviousSibling': {
+      id: 'selection.selectPreviousSibling',
+      get label() {
+        return t.value.selectPreviousSibling
+      },
+      enabled: selection.hasSelection,
+      run: () => editor.selectPreviousSibling()
+    },
     'selection.duplicate': {
       id: 'selection.duplicate',
       get label() {

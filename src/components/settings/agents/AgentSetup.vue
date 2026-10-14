@@ -54,7 +54,10 @@ function agentState(): string {
 </script>
 
 <template>
-  <p :class="styles.help()">{{ ai.aiSetupAgentDescription({ agent: agent.name }) }}</p>
+  <p :class="styles.help()">
+    {{ ai.aiSetupAgentDescription({ agent: agent.name }) }}
+    <SettingsLink :href="codingAgentGuideURL(agent.id)">{{ common.learnMore }}</SettingsLink>
+  </p>
 
   <template v-if="setup.supported">
     <p v-if="setup.scanning && !setup.checked" role="status" :class="styles.status()">
@@ -113,7 +116,10 @@ function agentState(): string {
   <p :class="styles.help()">{{ ai.aiSetupAgentPromptHint({ agent: agent.name }) }}</p>
   <div :class="styles.actions()">
     <AppButton size="xs" variant="outline" @click="copy(prompt)">
-      <template #leading><icon-lucide-clipboard-copy class="size-3" /></template>
+      <template #leading>
+        <icon-lucide-check v-if="copied" class="size-3" />
+        <icon-lucide-copy v-else class="size-3" />
+      </template>
       {{ copied ? common.copied : ai.aiSetupAgentCopyPrompt }}
     </AppButton>
     <AppButton
@@ -124,6 +130,5 @@ function agentState(): string {
     >
       {{ ai.aiSetupAgentCheckAgain }}
     </AppButton>
-    <SettingsLink :href="codingAgentGuideURL(agent.id)">{{ ai.aiSetupAgentGuide }}</SettingsLink>
   </div>
 </template>

@@ -1,11 +1,56 @@
-import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
+import { isEmptyObject } from 'es-toolkit/predicate'
+
+import type { GUID, NodeChange } from '@open-pencil/kiwi/fig/codec'
+import { guidToString, isUnsetGuid } from '@open-pencil/kiwi/fig/guid'
 import { styleToWeight } from '@open-pencil/scene-graph'
-import type { CharacterStyleOverride, StyleRun } from '@open-pencil/scene-graph'
+import type {
+  CharacterStyleOverride,
+  HyperlinkTarget,
+  StyleRun,
+  TextCase
+} from '@open-pencil/scene-graph'
 
 import { convertFontFeatures } from '../font/features'
 import { convertFontVariations } from '../font/variations'
 import { convertFills } from '../paint'
 import { convertLetterSpacing, convertLineHeight, mapTextDecoration } from '../text/values'
+import { textRunVariableBindings } from '../variable/bindings'
+import { styleRefId } from './refs'
+
+const TEXT_CASES = new Set<unknown>(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE'] satisfies TextCase[])
+
+/** A link Figma keeps on characters: to a URL, or to a node by its GUID. */
+export function importHyperlink(value: unknown): HyperlinkTarget | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const link = value as { url?: unknown; guid?: GUID }
+  if (typeof link.url === 'string' && link.url !== '') return { type: 'URL', value: link.url }
+  if (link.guid && !isUnsetGuid(link.guid)) return { type: 'NODE', value: guidToString(link.guid) }
+  return undefined
+}
+
+/**
+ * What a range refers to beyond its look: its case, link, styles, and bindings. A style the
+ * text uses itself is the range's own only when the range names another.
+ */
+function applyRangeReferences(
+  style: CharacterStyleOverride,
+  override: NodeChange,
+  text: Pick<NodeChange, 'styleIdForText' | 'styleIdForFill'>
+): void {
+  if (TEXT_CASES.has(override.textCase)) style.textCase = override.textCase as TextCase
+  const hyperlink = importHyperlink(override.hyperlink)
+  if (hyperlink) style.hyperlink = hyperlink
+  for (const [key, field] of [
+    ['textStyleId', 'styleIdForText'],
+    ['fillStyleId', 'styleIdForFill']
+  ] as const) {
+    if (override[field] === undefined) continue
+    const id = styleRefId(override[field])
+    if (id !== styleRefId(text[field])) style[key] = id
+  }
+  const boundVariables = textRunVariableBindings(override)
+  if (!isEmptyObject(boundVariables)) style.boundVariables = boundVariables
+}
 
 function applyTextDecorationOverride(style: CharacterStyleOverride, override: NodeChange): void {
   const deco = override.textDecoration
@@ -25,10 +70,8 @@ function applyTextDecorationOverride(style: CharacterStyleOverride, override: No
   }
 }
 
-function convertStyleOverride(
-  override: NodeChange,
-  fallbackFontSize: number | undefined
-): CharacterStyleOverride {
+function convertStyleOverride(override: NodeChange, text: NodeChange): CharacterStyleOverride {
+  const fallbackFontSize = text.fontSize
   const style: CharacterStyleOverride = {}
   if (override.fontName) {
     style.fontFamily = override.fontName.family
@@ -47,26 +90,25 @@ function convertStyleOverride(
     )
   }
   if (override.lineHeight) {
-    const lh = convertLineHeight(override.lineHeight, override.fontSize ?? fallbackFontSize)
-    if (lh != null) style.lineHeight = lh
+    // A run in auto lines up at its own font's height, even in text with a fixed one.
+    style.lineHeight = convertLineHeight(override.lineHeight, override.fontSize ?? fallbackFontSize)
   }
   applyTextDecorationOverride(style, override)
   if (override.fillPaints) {
     const fills = convertFills(override.fillPaints)
     if (fills.length > 0) style.fills = fills
   }
+  applyRangeReferences(style, override, text)
   return style
 }
 
-function buildStyleMap(
-  table: NodeChange[],
-  fallbackFontSize: number | undefined
-): Map<number, CharacterStyleOverride> {
+function buildStyleMap(table: NodeChange[], text: NodeChange): Map<number, CharacterStyleOverride> {
   const styleMap = new Map<number, CharacterStyleOverride>()
   for (const override of table) {
     const id = override.styleID as number | undefined
-    if (id === undefined) continue
-    const style = convertStyleOverride(override, fallbackFontSize)
+    // Characters with style 0 have the text's own.
+    if (id === undefined || id === 0) continue
+    const style = convertStyleOverride(override, text)
     if (Object.keys(style).length > 0) styleMap.set(id, style)
   }
   return styleMap
@@ -82,10 +124,8 @@ function collectStyleRuns(
 
   for (let i = 1; i <= ids.length; i++) {
     if (i === ids.length || ids[i] !== currentId) {
-      if (currentId !== 0) {
-        const style = styleMap.get(currentId)
-        if (style) runs.push({ start, length: i - start, style })
-      }
+      const style = styleMap.get(currentId)
+      if (style) runs.push({ start, length: i - start, style })
       if (i < ids.length) {
         currentId = ids[i]
         start = i
@@ -95,15 +135,29 @@ function collectStyleRuns(
   return runs
 }
 
+/**
+ * A link the text keeps for itself goes on every character, apart from those that name their
+ * own: the model keeps links on ranges only.
+ */
+function withTextLink(
+  ids: number[],
+  length: number,
+  styleMap: Map<number, CharacterStyleOverride>,
+  link: HyperlinkTarget
+): number[] {
+  for (const style of styleMap.values()) style.hyperlink ??= link
+  styleMap.set(0, { hyperlink: link })
+  return Array.from({ length }, (_, index) => ids[index] ?? 0)
+}
+
 export function importStyleRuns(nc: NodeChange): StyleRun[] {
   const td = nc.textData
-  if (!td?.characterStyleIDs || !td.styleOverrideTable) return []
-
-  const ids = td.characterStyleIDs
-  if (ids.length === 0 || td.styleOverrideTable.length === 0) return []
-
-  const styleMap = buildStyleMap(td.styleOverrideTable, nc.fontSize)
-  if (styleMap.size === 0) return []
-
+  const link = importHyperlink(nc.hyperlink)
+  const length = td?.characters.length ?? 0
+  const styleMap = buildStyleMap(td?.styleOverrideTable ?? [], nc)
+  const ids = link
+    ? withTextLink(td?.characterStyleIDs ?? [], length, styleMap, link)
+    : (td?.characterStyleIDs ?? [])
+  if (ids.length === 0 || styleMap.size === 0) return []
   return collectStyleRuns(ids, styleMap)
 }

@@ -1,4 +1,5 @@
 import { omit } from 'es-toolkit/object'
+import { isEqual } from 'es-toolkit/predicate'
 
 import type { CharacterStyleOverride, StyleRun, TextDecoration } from '@open-pencil/scene-graph'
 
@@ -75,18 +76,6 @@ export function selectionHasStyle(
   return true
 }
 
-function stylesEqual(a: CharacterStyleOverride | null, b: CharacterStyleOverride | null): boolean {
-  if (a === b) return true
-  if (!a || !b) return a === b
-  const aKeys = Object.keys(a) as (keyof CharacterStyleOverride)[]
-  const bKeys = Object.keys(b) as (keyof CharacterStyleOverride)[]
-  if (aKeys.length !== bKeys.length) return false
-  for (const k of aKeys) {
-    if (a[k] !== b[k]) return false
-  }
-  return true
-}
-
 function isEmptyStyle(style: CharacterStyleOverride | null): boolean {
   return !style || Object.keys(style).length === 0
 }
@@ -105,7 +94,7 @@ function compactRuns(chars: (CharacterStyleOverride | null)[]): StyleRun[] {
       i++
       continue
     }
-    while (i < chars.length && stylesEqual(chars[i], style)) i++
+    while (i < chars.length && isEqual(chars[i], style)) i++
     result.push({ start, length: i - start, style: { ...style } })
   }
   return result

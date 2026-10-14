@@ -7,10 +7,11 @@ export const TOKENS_PANEL_SIDEBAR_WIDTH = 896
 /**
  * The list is its own `tokens-list` container, so its columns follow the space left beside the
  * inspector. Below 42rem (`@2xl`) the CSS name moves under the token name; the value columns
- * repeat `--token-modes` times.
+ * repeat `--token-modes` times. The name keeps a width of its own, so a collection with more
+ * modes than fit scrolls sideways instead of hiding its names.
  */
 const COLUMNS =
-  'grid-cols-[minmax(0,1.4fr)_repeat(var(--token-modes),minmax(6rem,1fr))] @2xl/tokens-list:grid-cols-[minmax(8rem,1.1fr)_minmax(8rem,1fr)_repeat(var(--token-modes),minmax(7rem,1fr))]'
+  'grid-cols-[minmax(8rem,1.4fr)_repeat(var(--token-modes),minmax(6rem,1fr))] @2xl/tokens-list:grid-cols-[minmax(8rem,1.1fr)_minmax(8rem,1fr)_repeat(var(--token-modes),minmax(7rem,1fr))]'
 
 export default {
   slots: {
@@ -27,9 +28,9 @@ export default {
     list: '@container/tokens-list flex min-w-0 flex-1 flex-col overflow-auto',
     inspector: 'flex shrink-0 flex-col gap-4 overflow-y-auto p-4',
     output: 'flex shrink-0 flex-col border-t border-border',
-    header: `sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-panel px-4 py-2 text-[11px] font-medium text-muted ${COLUMNS}`,
+    header: `sticky top-0 z-10 grid min-w-min items-center gap-3 border-b border-border bg-panel px-4 py-2 text-[11px] font-medium text-muted ${COLUMNS}`,
     group: 'px-4 pt-3 pb-1 text-[11px] font-semibold text-muted',
-    row: `${COLUMNS} grid cursor-pointer items-center gap-3 px-4 py-1.5 text-xs text-surface outline-none transition-colors duration-100 hover:bg-hover data-[highlighted]:bg-hover data-[state=checked]:bg-hover data-[state=checked]:ring-1 data-[state=checked]:ring-accent/40 data-[state=checked]:ring-inset data-[dragging]:opacity-50 data-[drop=after]:shadow-[inset_0_-2px_0_var(--color-accent)] data-[drop=before]:shadow-[inset_0_2px_0_var(--color-accent)] motion-reduce:transition-none`,
+    row: `${COLUMNS} grid min-w-min cursor-pointer items-center gap-3 px-4 py-1.5 text-xs text-surface outline-none transition-colors duration-100 hover:bg-hover data-[highlighted]:bg-hover data-[state=checked]:bg-hover data-[state=checked]:ring-1 data-[state=checked]:ring-accent/40 data-[state=checked]:ring-inset data-[dragging]:opacity-50 data-[drop=after]:shadow-[inset_0_-2px_0_var(--color-accent)] data-[drop=before]:shadow-[inset_0_2px_0_var(--color-accent)] motion-reduce:transition-none`,
     name: 'flex min-w-0 flex-col truncate',
     nameLine: 'flex min-w-0 items-center gap-1.5',
     typeIcon: 'size-3 shrink-0 text-muted',

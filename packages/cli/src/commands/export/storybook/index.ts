@@ -25,7 +25,7 @@ import { applyExportFontPolicy } from '#cli/commands/export/font-policy'
 import { ok, printError } from '#cli/format'
 import { loadDocument, populateWholeDocument, requirePage } from '#cli/headless'
 
-import { fontFolder, storyFonts } from './fonts'
+import { documentFolder, storyFonts } from './fonts'
 import { readManifest, writeManifest, type StoryManifest, type StoryOwner } from './manifest'
 import { readStoryRules, storyPlan } from './rules'
 
@@ -38,6 +38,8 @@ interface StorybookArgs {
   page?: string
   node?: string
   framework: string
+  /** `tailwind` styles Vue and React components with utilities rather than a stylesheet. */
+  css: string
   'design-images': boolean
   'font-policy': string
   watch?: boolean
@@ -162,10 +164,11 @@ async function writeStories(
   const source = toPosix(relative(outputDir, resolve(file)))
   const files = await exportStorybook(graph, {
     framework,
+    styling: args.css === 'tailwind' ? 'tailwind' : 'css',
     pageId,
     plan: rules ? storyPlan(rules) : undefined,
     fonts: args.fonts === 'none' ? undefined : storyFonts,
-    fontFolder: fontFolder(source, args.page),
+    folder: documentFolder(source, args.page),
     // Titled by the document, so stories of documents exported together stay apart.
     document: basename(file, extname(file)),
     linkPath: linkPath(file),
@@ -286,6 +289,10 @@ export async function exportStorybookFromFile(args: StorybookArgs): Promise<void
     printError(
       `Invalid Storybook framework "${framework}". Use ${STORYBOOK_FRAMEWORKS.join(', ')}.`
     )
+    process.exit(1)
+  }
+  if (args.css !== 'inline' && args.css !== 'tailwind') {
+    printError(`Invalid Storybook CSS output "${args.css}". Use inline or tailwind.`)
     process.exit(1)
   }
   let documents: string[]

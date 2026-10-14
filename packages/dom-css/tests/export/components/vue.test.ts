@@ -9,6 +9,7 @@ import {
   collapsibleSet,
   labelledButtonSet,
   numberFieldComponent,
+  plainBadgeSet,
   progressComponent,
   sliderComponent,
   textareaComponent,
@@ -19,14 +20,16 @@ import {
   tabsComponent,
   toggleGroupComponent
 } from '#dom-css-tests/behaviours/fixtures'
-import { cssRules } from '#dom-css-tests/helpers'
+import { shaderBackdropSet, shaderHeroSet } from '#dom-css-tests/export/components/shader-fixtures'
+import { cssRules, fileText } from '#dom-css-tests/helpers'
+import type { ComponentStyling } from '#dom-css/export'
 import { exportStorybook } from '#dom-css/index'
 import { createSSRApp, h, type Component } from 'vue'
 import { compileScript, parse } from 'vue/compiler-sfc'
 import { renderToString } from 'vue/server-renderer'
 
 /** The packages generated code imports, linked so it resolves them as an app would. */
-const APP_PACKAGES = ['vue', 'reka-ui', '@iconify/vue', 'storybook']
+const APP_PACKAGES = ['vue', 'reka-ui', '@iconify/vue', 'storybook', 'shaders']
 
 const output = await mkdtemp(join(tmpdir(), 'open-pencil-vue-'))
 await mkdir(join(output, 'node_modules'))
@@ -39,8 +42,8 @@ for (const name of APP_PACKAGES)
 afterAll(() => rm(output, { recursive: true, force: true }))
 
 /** Exports a fixture's set to Vue stories and loads the component and stories it writes. */
-async function generate(fixture: ReturnType<typeof switchSet>) {
-  const files = await exportStorybook(fixture.graph, { framework: 'vue' })
+async function generate(fixture: ReturnType<typeof switchSet>, styling?: ComponentStyling) {
+  const files = await exportStorybook(fixture.graph, { framework: 'vue', styling })
   const source = (suffix: string) =>
     String(files.find((file) => file.path.endsWith(suffix))?.content)
   const name = fixture.set.name
@@ -223,6 +226,82 @@ const styleOf = (files: { path: string; content: string | Uint8Array }[], path: 
       String(files.find((file) => file.path === path)?.content)
     )?.[1] ?? ''
   )
+
+describe('generated Vue components styled with Tailwind', () => {
+  test('carry their states as variants in place of a style block', async () => {
+    const { files, component } = await generate(switchSet(), 'tailwind')
+    const sfc = fileText(files, 'Switch.vue')
+
+    expect(sfc).not.toContain('<style')
+    expect(sfc).toMatch(
+      /<SwitchRoot class="group\/switch [^"]*data-\[state=checked\]:bg-\[#4F45E6\]/
+    )
+    expect(sfc).toContain('group-data-[state=checked]/switch:left-5')
+    const on = await render(component, { checked: true })
+    expect(on).toContain('data-state="checked"')
+    expect(on).toMatch(/class="group\/switch [^"]*"/)
+  })
+
+  test('play a shader behind the layer, placed by utilities', async () => {
+    const { files } = await generate(shaderHeroSet(), 'tailwind')
+
+    expect(fileText(files, 'Hero.vue')).toMatch(
+      /<Shader[^>]* class="pointer-events-none absolute inset-0 -z-10 rounded-\[inherit\]"/
+    )
+  })
+})
+
+describe('generated Vue plain components', () => {
+  test('take variant, text, and boolean properties as props, and slots as slots', async () => {
+    const { component } = await generate(plainBadgeSet())
+    const rest = await render(component)
+    expect(rest).toContain('data-tone="Neutral"')
+    expect(rest).toContain('New')
+    // The icon the design hides at rest shows only while its boolean is on.
+    expect(rest).not.toContain('badge__dot')
+    expect(await render(component, { icon: true })).toContain('badge__dot')
+    expect(await render(component, { tone: 'Danger', label: 'Hot' })).toMatch(
+      /data-tone="Danger"[\s\S]*Hot/
+    )
+    // A slot shows the design's content unless the caller passes its own.
+    expect(rest).toContain('Note')
+    const filled = await renderToString(
+      createSSRApp({ render: () => h(component, {}, { extra: () => h('b', 'Custom') }) })
+    )
+    expect(filled).toContain('<b>Custom</b>')
+    expect(filled).not.toContain('Note')
+  })
+})
+
+describe('generated Vue shader fills', () => {
+  test('play the shader behind the layer, with telemetry off', async () => {
+    const { files, component } = await generate(shaderHeroSet())
+    const source = fileText(files, 'Hero.vue')
+
+    expect(source).toMatch(
+      /import \{\s*Shader as ShaderCanvas,\s*Aurora as ShaderAurora,\s*FilmGrain as ShaderFilmGrain\s*\} from ["']shaders\/vue["']/
+    )
+    expect(source).toContain('<ShaderCanvas class="hero-shader" :disable-telemetry="true">')
+    expect(source).toMatch(/<ShaderAurora[^>]*color-a="#ff3300"[^>]*:curtain-count="2"/)
+    expect(source).toContain(':center="({ x: 0.5, y: 0 })"')
+    const styles = [...cssRules(source.slice(source.indexOf('<style'))).values()]
+    expect(styles).toContainEqual(expect.objectContaining({ isolation: 'isolate' }))
+    // The shader comes first, so the title draws over it.
+    const html = await render(component)
+    expect(html.indexOf('hero-shader')).toBeLessThan(html.indexOf('Northern lights'))
+  })
+})
+
+describe('generated Vue shader backdrops', () => {
+  test('a layer with nothing in it plays its shader, not an image of it', async () => {
+    const { files } = await generate(shaderBackdropSet())
+    const source = fileText(files, 'Card.vue')
+
+    expect(source).not.toContain('<img')
+    expect(source).not.toContain('data:image')
+    expect(source).toContain('<ShaderCanvas')
+  })
+})
 
 describe('generated Vue form controls', () => {
   test('a slider binds one number within its range, the thumb and range placed by Reka', async () => {

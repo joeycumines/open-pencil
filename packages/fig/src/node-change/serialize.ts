@@ -47,12 +47,8 @@ import {
   type KiwiNodeChange
 } from './export/node'
 import { exportTextData, fontVariationToKiwi } from './text/data-export'
+import { FIGMA_AUTO_LINE_HEIGHT } from './text/values'
 import { toKiwiWindingRule } from './vector/geometry'
-
-function textLines(text: string): NonNullable<NodeChange['textData']>['lines'] {
-  const lineCount = Math.max(1, text.split('\n').length)
-  return Array.from({ length: lineCount }, () => ({ lineType: 'PLAIN' }))
-}
 
 function serializeCornerRadii(node: SceneNode, nc: KiwiNodeChange): void {
   const anyIndividual =
@@ -84,6 +80,14 @@ function serializeCornerRadii(node: SceneNode, nc: KiwiNodeChange): void {
   }
 }
 
+/** Paragraph spacing and list layout, which `.fig` keeps beside the lines in `textData`. */
+function serializeParagraphProps(node: SceneNode, nc: KiwiNodeChange): void {
+  if (node.paragraphSpacing !== 0) nc.paragraphSpacing = node.paragraphSpacing
+  if (node.paragraphIndent !== 0) nc.paragraphIndent = node.paragraphIndent
+  if (node.listSpacing !== 0) nc.listSpacing = node.listSpacing
+  if (node.hangingList) nc.hangingList = true
+}
+
 function serializeTextProps(
   node: SceneNode,
   nc: KiwiNodeChange,
@@ -104,7 +108,7 @@ function serializeTextProps(
     style: weightToFigmaStyle(node.fontWeight, node.italic),
     postscript: ''
   }
-  nc.textData = exportTextData(node, textLines, fillToKiwiPaint)
+  nc.textData = exportTextData(node, fillToKiwiPaint)
   if (node.fontVariations.length > 0) {
     nc.fontVariations = node.fontVariations.map(fontVariationToKiwi)
   }
@@ -127,16 +131,21 @@ function serializeTextProps(
   if (node.textCase !== 'ORIGINAL') nc.textCase = node.textCase
   if (node.textTruncation === 'ENDING') nc.textTruncation = 'ENDING'
   if (node.maxLines != null) nc.maxLines = node.maxLines
+  serializeParagraphProps(node, nc)
   if (fontDigestMap) {
     nc.derivedTextData = buildNodeDerivedTextData(node, {
       digestMap: fontDigestMap,
       blobs,
       glyphBlobMap: glyphBlobMap ?? new Map(),
-      shapeText: (textNode) => runtime.shapeText(textNode)
+      shapeText: (textNode) => runtime.shapeText(textNode),
+      textDecorations: (textNode, glyphs) => runtime.textDecorations(textNode, glyphs)
     })
   }
   if (node.leadingTrim !== 'NONE') nc.leadingTrim = node.leadingTrim
-  if (node.lineHeight != null) nc.lineHeight = { value: node.lineHeight, units: 'PIXELS' }
+  nc.lineHeight =
+    node.lineHeight === null
+      ? { ...FIGMA_AUTO_LINE_HEIGHT }
+      : { value: node.lineHeight, units: 'PIXELS' }
   nc.letterSpacing = { value: node.letterSpacing, units: 'PIXELS' }
   if (node.textDecoration !== 'NONE') {
     nc.textDecoration = node.textDecoration === 'UNDERLINE' ? 'UNDERLINE' : 'STRIKETHROUGH'
@@ -207,6 +216,7 @@ function preserveTrailingPadding(
 }
 
 function serializeSizeConstraints(node: SceneNode, nc: KiwiNodeChange): void {
+  if (node.targetAspectRatio) nc.targetAspectRatio = { value: { ...node.targetAspectRatio } }
   if (node.minWidth != null || node.minHeight != null) {
     nc.minSize = { value: { x: node.minWidth ?? 0, y: node.minHeight ?? 0 } }
   }
@@ -220,8 +230,13 @@ function serializeSizeConstraints(node: SceneNode, nc: KiwiNodeChange): void {
   }
 }
 
+/**
+ * Hug as Figma desktop 126 writes it for its own frames, which counts the children stretched
+ * across the frame; the older `RESIZE_TO_FIT` leaves them out, so a row hugging a stretched
+ * column shrank to its other layers when pasted into Figma.
+ */
 function exportSizing(value: SceneNode['primaryAxisSizing']) {
-  return value === 'HUG' ? 'RESIZE_TO_FIT' : 'FIXED'
+  return value === 'HUG' ? 'RESIZE_TO_FIT_WITH_IMPLICIT_SIZE' : 'FIXED'
 }
 
 /** Layout fields whose edits decide whether a frame's own sizing still matches its fill. */
@@ -425,11 +440,17 @@ function serializeVariableBindings(
   )
   if (entries.length > 0) {
     nc.variableConsumptionMap = { entries }
+    const bindings = mergeVariableConsumptionMaps(effectiveFigmaRawNodeFields(node), {
+      parameterConsumptionMap: { entries }
+    })
+    // Component property references were written to the record before its bindings; a
+    // record carries both in one map, so the bindings join them rather than replace them.
+    const references = nc.parameterConsumptionMap
     Object.assign(
       nc,
-      mergeVariableConsumptionMaps(effectiveFigmaRawNodeFields(node), {
-        parameterConsumptionMap: { entries }
-      })
+      references
+        ? mergeVariableConsumptionMaps(bindings, { parameterConsumptionMap: references })
+        : bindings
     )
   }
 }

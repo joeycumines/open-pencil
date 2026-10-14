@@ -25,4 +25,4 @@ Models: None
 <!-- List commands actually run and their results, plus relevant checks not run and why. Note changelog status. Replace these examples; do not claim unperformed validation. -->
 
 - Checks/tests: commands and results, or not run and why.
-- Changelog: updated, or not needed and why.
+- Changelog: fragment added under `changes/<PR>/`, or not needed and why.

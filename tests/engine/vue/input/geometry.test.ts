@@ -43,6 +43,14 @@ for (const flipX of [false, true]) {
         expect(
           hitTestTopRotationHandleByMatrix(handles.n.x, handles.n.y, frame, editor.graph, zoom)
         ).toBe(false)
+        // An edge resizes along its length, just outside it as on screen.
+        const band = geometry.toWorld(frame, {
+          x: frame.width + 3 / zoom,
+          y: frame.height / 2 + 10 / zoom
+        })
+        expect<string | undefined>(
+          getHitHandleByMatrix(band.x, band.y, frame, editor.graph, zoom)?.handle
+        ).toBe('e')
         const outside = geometry.toWorld(frame, { x: -5, y: -5 })
         expect(hitTestCornerRotationByMatrix(outside.x, outside.y, frame, editor.graph, zoom)).toBe(
           'nw'

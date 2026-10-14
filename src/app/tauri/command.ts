@@ -17,7 +17,7 @@
  * navigator value at runtime, falling back to an empty string in non-browser
  * contexts (e.g. headless tests) where `navigator` is unavailable.
  */
-function detectUserAgent(): string {
+export function detectUserAgent(): string {
   const ua = typeof navigator === 'undefined' ? undefined : navigator.userAgent
   return typeof ua === 'string' ? ua : ''
 }

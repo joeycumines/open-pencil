@@ -11,7 +11,7 @@ import {
 } from 'reka-ui'
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 
-import type { SceneNode } from '@open-pencil/scene-graph'
+import { cycleSafeParent, type SceneNode } from '@open-pencil/scene-graph'
 import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 import { useI18n } from '@open-pencil/vue'
 
@@ -28,6 +28,7 @@ import { AppDialogRoot, useDialogUI } from '@/components/ui/dialog'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
 import AppInput from '@/components/ui/input/AppInput.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
+import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 import { ASSET_GRID_THUMBNAIL_SIZE, ASSET_LIST_THUMBNAIL_SIZE } from '@/constants'
@@ -285,7 +286,11 @@ async function insertAsset(asset: LocalAsset) {
   if (!componentId) return
   const component = editor.graph.getNode(componentId)
   if (!component) return
-  const parentId = editor.state.enteredContainerId ?? editor.state.currentPageId
+  const parentId = cycleSafeParent(
+    editor.graph,
+    editor.state.enteredContainerId ?? editor.state.currentPageId,
+    [componentId]
+  )
   const point = insertionPoint(component, parentId)
   editor.createInstanceFromComponent(componentId, point.x, point.y, parentId)
   editor.requestRender()
@@ -341,7 +346,7 @@ async function insertSelectedAsset() {
         <icon-lucide-library class="size-3.5" />
         <span
           v-if="libraryUpdateCount > 0"
-          class="absolute top-0.5 right-0.5 min-w-2.5 rounded-full bg-accent px-0.5 text-center text-[8px] leading-2.5 text-white"
+          class="absolute top-0.5 right-0.5 min-w-2.5 rounded-full bg-accent px-0.5 text-center text-[8px] leading-2.5 text-on-accent"
         >
           {{ libraryUpdateCount }}
         </span>
@@ -432,7 +437,7 @@ async function insertSelectedAsset() {
                   <span
                     v-if="assetView === 'list' && asset.hasConflicts"
                     data-test-id="asset-variant-conflict"
-                    class="mt-0.5 block truncate text-[10px] text-[var(--color-warning-text)]"
+                    class="mt-0.5 block truncate text-[10px] text-warning"
                   >
                     {{ panels.duplicateVariantValues }}
                   </span>
@@ -464,21 +469,23 @@ async function insertSelectedAsset() {
             </ContextMenuTrigger>
             <ContextMenuPortal>
               <ContextMenuContent :class="contextMenu.content">
-                <ContextMenuItem
-                  v-if="!asset.libraryId"
-                  data-test-id="asset-context-go-to-main"
-                  :class="contextMenu.item"
-                  @select="focusAsset(asset)"
-                >
-                  {{ panels.goToMainComponent }}
-                </ContextMenuItem>
-                <ContextMenuItem
-                  data-test-id="asset-context-view-details"
-                  :class="contextMenu.item"
-                  @select="openDetails(asset)"
-                >
-                  {{ panels.viewDetails }}
-                </ContextMenuItem>
+                <MenuScrollArea>
+                  <ContextMenuItem
+                    v-if="!asset.libraryId"
+                    data-test-id="asset-context-go-to-main"
+                    :class="contextMenu.item"
+                    @select="focusAsset(asset)"
+                  >
+                    {{ panels.goToMainComponent }}
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    data-test-id="asset-context-view-details"
+                    :class="contextMenu.item"
+                    @select="openDetails(asset)"
+                  >
+                    {{ panels.viewDetails }}
+                  </ContextMenuItem>
+                </MenuScrollArea>
               </ContextMenuContent>
             </ContextMenuPortal>
           </ContextMenuRoot>

@@ -19,8 +19,10 @@ import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import MCPWorkspacePanel from '@/components/settings/mcp/MCPWorkspacePanel.vue'
 import MediaSettingsPanel from '@/components/settings/media/MediaSettingsPanel.vue'
 import ModelsPanel from '@/components/settings/models/ModelsPanel.vue'
+import PrivacySettingsPanel from '@/components/settings/privacy/PrivacySettingsPanel.vue'
 import StorageSettingsPanel from '@/components/settings/storage/StorageSettingsPanel.vue'
 import ToolAccessSettingsPanel from '@/components/settings/tool-access/ToolAccessSettingsPanel.vue'
+import ToolbarSettingsPanel from '@/components/settings/toolbar/ToolbarSettingsPanel.vue'
 import UsageSettingsPanel from '@/components/settings/usage/UsageSettingsPanel.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import {
@@ -44,9 +46,11 @@ const sections = computed(
   () =>
     [
       { value: 'general', label: settings.value.general },
+      { value: 'toolbar', label: settings.value.toolbar },
       { value: 'ai', label: settings.value.aiAndAgents },
       { value: 'usage', label: settings.value.usage },
       { value: 'diagnostics', label: settings.value.diagnostics },
+      { value: 'privacy', label: settings.value.privacy },
       { value: 'mcp', label: settings.value.mcp },
       { value: 'tools', label: settings.value.toolAccess },
       { value: 'media', label: settings.value.media },
@@ -103,6 +107,10 @@ function onOpenChange(open: boolean): void {
           <template #leading><icon-lucide-settings class="size-3.5" /></template>
           {{ settings.general }}
         </AppTabsTrigger>
+        <AppTabsTrigger value="toolbar" data-test-id="settings-section-toolbar">
+          <template #leading><icon-lucide-panel-bottom class="size-3.5" /></template>
+          {{ settings.toolbar }}
+        </AppTabsTrigger>
         <AppTabsTrigger value="ai" data-test-id="settings-section-ai">
           <template #leading><icon-lucide-sparkles class="size-3.5" /></template>
           {{ settings.aiAndAgents }}
@@ -114,6 +122,10 @@ function onOpenChange(open: boolean): void {
         <AppTabsTrigger value="diagnostics" data-test-id="settings-section-diagnostics">
           <template #leading><icon-lucide-activity class="size-3.5" /></template>
           {{ settings.diagnostics }}
+        </AppTabsTrigger>
+        <AppTabsTrigger value="privacy" data-test-id="settings-section-privacy">
+          <template #leading><icon-lucide-shield class="size-3.5" /></template>
+          {{ settings.privacy }}
         </AppTabsTrigger>
         <AppTabsTrigger value="mcp" data-test-id="settings-section-mcp">
           <template #leading><icon-lucide-plug class="size-3.5" /></template>
@@ -136,6 +148,9 @@ function onOpenChange(open: boolean): void {
       <AppTabsContent value="general" as-child>
         <SettingsPage><GeneralSettingsPanel /></SettingsPage>
       </AppTabsContent>
+      <AppTabsContent value="toolbar" as-child>
+        <SettingsPage><ToolbarSettingsPanel /></SettingsPage>
+      </AppTabsContent>
       <AppTabsContent value="ai" as-child>
         <section class="flex min-h-0 min-w-0 flex-1 flex-col" data-test-id="settings-ai-panel">
           <ModelsPanel>
@@ -148,6 +163,9 @@ function onOpenChange(open: boolean): void {
       </AppTabsContent>
       <AppTabsContent value="diagnostics" as-child>
         <SettingsPage><DiagnosticsSettingsPanel /></SettingsPage>
+      </AppTabsContent>
+      <AppTabsContent value="privacy" as-child>
+        <SettingsPage><PrivacySettingsPanel /></SettingsPage>
       </AppTabsContent>
       <AppTabsContent value="mcp" as-child>
         <MCPWorkspacePanel />

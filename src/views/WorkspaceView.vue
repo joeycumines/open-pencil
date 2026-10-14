@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { useHead } from '@unhead/vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, whenever } from '@vueuse/core'
 import { onMounted, onUnmounted, provide, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useI18n } from '@open-pencil/vue'
 
-import { offerAISetupOnFirstRun } from '@/app/ai/models/settings/onboarding/dialog'
+import {
+  aiSetupDialogOpen,
+  offerAISetupOnFirstRun
+} from '@/app/ai/models/settings/onboarding/dialog'
 import { exposeAutomationTestRequests } from '@/app/automation/bridge/test-hooks'
 import { startMCPRuntime, stopMCPRuntime } from '@/app/automation/mcp/runtime'
 import { startWebMCP } from '@/app/automation/webmcp/runtime'
@@ -37,6 +40,7 @@ import {
   type Tab
 } from '@/app/tabs'
 import { isTauri } from '@/app/tauri/env'
+import { offerUsageStatsPrompt, startSharing } from '@/app/telemetry'
 import ColorSpaceBanner from '@/components/canvas/ColorSpaceBanner.vue'
 import CommandPalette from '@/components/commands/CommandPalette.vue'
 import EditorWorkspace from '@/components/editor/EditorWorkspace.vue'
@@ -84,8 +88,24 @@ function openFirstTab(): Tab {
   }
 }
 
-if (createdInitialTab && route.path === '/' && !appRuntimeConfig.test && !route.meta.demo) {
-  offerAISetupOnFirstRun()
+// A first visit to the demo link is a first run too; the welcome there skips the tour offer.
+const welcomeShown =
+  createdInitialTab && (route.path === '/' || route.meta.demo) && !appRuntimeConfig.test
+    ? offerAISetupOnFirstRun({ inTour: route.meta.demo === true })
+    : false
+const sharingStarted = startSharing()
+// One question per surface: a first run is asked about usage stats once the welcome closes.
+if (welcomeShown) {
+  whenever(
+    () => !aiSetupDialogOpen.value,
+    async () => {
+      await sharingStarted
+      offerUsageStatsPrompt('welcome')
+    },
+    { once: true }
+  )
+} else {
+  void sharingStarted.then(() => offerUsageStatsPrompt('prompt'))
 }
 
 useHead({ title: route.meta.demo ? 'Demo' : undefined })

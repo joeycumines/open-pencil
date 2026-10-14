@@ -147,3 +147,82 @@ export function buildChains(segments: VectorSegment[]): number[][] {
 
   return chains
 }
+
+/** A stretch of a network's segments stroked as one contour, so its corners join. */
+export interface StrokeRun {
+  /** The vertex the run starts at. */
+  start: number
+  /** Segment indices in drawing order. */
+  segments: number[]
+  /** Whether the run comes back to its start, joining there instead of taking caps. */
+  closed: boolean
+}
+
+/**
+ * Segments chained into runs as Figma strokes a network: a run passes through every vertex
+ * exactly two segments meet at, so its corners take the stroke's join and only its open ends take
+ * caps. Runs stop at open ends and at junctions where three or more segments meet.
+ */
+export function strokeRuns(segments: VectorSegment[]): StrokeRun[] {
+  const incident = new Map<number, number[]>()
+  const meet = (vertex: number, index: number) => {
+    const list = incident.get(vertex)
+    if (list) list.push(index)
+    else incident.set(vertex, [index])
+  }
+  for (const [index, segment] of segments.entries()) {
+    meet(segment.start, index)
+    if (segment.end !== segment.start) meet(segment.end, index)
+  }
+  const used = new Set<number>()
+  const across = (index: number, vertex: number) =>
+    segments[index].start === vertex ? segments[index].end : segments[index].start
+  /** Extends a run through `vertex` for as long as two segments meet at each vertex reached. */
+  const extend = (vertex: number, from: number, add: (index: number) => void) => {
+    for (;;) {
+      const meeting = incident.get(vertex)
+      if (meeting?.length !== 2) return vertex
+      const next = meeting[0] === from ? meeting[1] : meeting[0]
+      if (used.has(next)) return vertex
+      used.add(next)
+      add(next)
+      vertex = across(next, vertex)
+      from = next
+    }
+  }
+
+  const runs: StrokeRun[] = []
+  for (const [first, segment] of segments.entries()) {
+    if (used.has(first)) continue
+    used.add(first)
+    const run = [first]
+    const end = extend(segment.end, first, (index) => run.push(index))
+    if (end === segment.start) {
+      runs.push({ start: segment.start, segments: run, closed: true })
+      continue
+    }
+    const start = extend(segment.start, first, (index) => run.unshift(index))
+    // A loop through a junction stops at it from both sides; it still closes there, whichever
+    // of its segments is stored first.
+    runs.push({ start, segments: run, closed: start === end })
+  }
+  return runs
+}
+
+/** Emits a stroke run as one contour, closed when the run comes back to its start. */
+export function addStrokeRunToPath(
+  path: PathSink,
+  run: StrokeRun,
+  segments: VectorSegment[],
+  vertices: VectorVertex[]
+): void {
+  let current = run.start
+  path.moveTo(vertices[current].x, vertices[current].y)
+  for (const index of run.segments) {
+    const segment = segments[index]
+    const forward = segment.start === current
+    addSegmentDirected(path, segment, vertices, forward)
+    current = forward ? segment.end : segment.start
+  }
+  if (run.closed) path.close()
+}

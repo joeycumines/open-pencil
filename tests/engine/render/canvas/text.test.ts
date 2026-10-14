@@ -9,7 +9,7 @@ import {
   SkiaRenderer as SkiaRendererClass
 } from '@open-pencil/core'
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defaults'
+import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 
 import { initCanvasKit } from '#cli/headless'
 import type { SkiaRenderer } from '#core/canvas/renderer'
@@ -20,6 +20,7 @@ import {
   nodeFontReadiness,
   textVerticalOffset
 } from '#core/canvas/text'
+import { createDerivedGlyphPathCache } from '#core/canvas/text/derived'
 import { transformTextCase } from '#core/text/case'
 import { fontManager } from '#core/text/fonts'
 import { fontFaceDemand, fontResolver, missingGlyphCharacters } from '#core/text/resolver'
@@ -47,7 +48,14 @@ function createMockCanvas() {
 }
 
 function createMockParagraph() {
-  return { delete: mock(() => undefined), getHeight: mock(() => 20) }
+  const paragraph = {
+    delete: mock(() => undefined),
+    getHeight: mock(() => 20),
+    draw: mock((canvas: { drawParagraph: (...args: unknown[]) => void }, x: number, y: number) =>
+      canvas.drawParagraph(paragraph, x, y)
+    )
+  }
+  return paragraph
 }
 
 function createMockPicture() {
@@ -60,6 +68,7 @@ function createMockRenderer(overrides: Partial<Record<string, unknown>> = {}) {
     fontsLoaded: true,
     fontProvider: {},
     textFont: {},
+    derivedGlyphPathCache: createDerivedGlyphPathCache(),
     fillPaint: { getColor: () => new Float32Array([0, 0, 0, 1]) },
     effectLayerPaint: {
       setBlendMode: mock(() => undefined),
@@ -97,8 +106,7 @@ function createMockRenderer(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 function textNode(overrides: Partial<SceneNode> = {}): SceneNode {
-  return {
-    type: 'TEXT',
+  return createDefaultNode(() => '0:1', 'TEXT', {
     text: 'Hello 你好',
     fontSize: 16,
     fontFamily: 'Arial',
@@ -112,9 +120,8 @@ function textNode(overrides: Partial<SceneNode> = {}): SceneNode {
     textDecoration: 'NONE',
     textDirection: 'AUTO',
     styleRuns: [],
-    source: createDefaultSourceMetadata(),
     ...overrides
-  } as SceneNode
+  })
 }
 
 async function createTextRenderer() {
@@ -190,7 +197,9 @@ describe('renderText', () => {
   })
 
   test('keeps native paragraph layout even when outline font data is available', async () => {
-    const interData = await Bun.file(repoPath('public/Inter-Regular.ttf')).arrayBuffer()
+    const interData = await Bun.file(
+      repoPath('packages/core/assets/Inter-Regular.ttf')
+    ).arrayBuffer()
     fontManager.markLoaded('Inter', 'Regular', interData)
     const r = createMockRenderer()
     const canvas = createMockCanvas()
@@ -311,8 +320,8 @@ describe('paragraph font weights', () => {
   test('bold Inter paragraph is wider than regular Inter', async () => {
     const { renderer, surface } = await createTextRenderer()
     await renderer.loadFonts()
-    const regular = await Bun.file(repoPath('public/Inter-Regular.ttf')).arrayBuffer()
-    const bold = await Bun.file(repoPath('public/Inter-Bold.ttf')).arrayBuffer()
+    const regular = await Bun.file(repoPath('packages/core/assets/Inter-Regular.ttf')).arrayBuffer()
+    const bold = await Bun.file(repoPath('packages/core/assets/Inter-Bold.ttf')).arrayBuffer()
     fontManager.markLoaded('Inter', 'Regular', regular)
     fontManager.markLoaded('Inter', 'Bold', bold)
 
@@ -337,7 +346,7 @@ describe('paragraph font weights', () => {
   test('shapes italic text when only the regular family face is available', async () => {
     const { renderer, surface } = await createTextRenderer()
     await renderer.loadFonts()
-    const regular = await Bun.file(repoPath('public/Inter-Regular.ttf')).arrayBuffer()
+    const regular = await Bun.file(repoPath('packages/core/assets/Inter-Regular.ttf')).arrayBuffer()
     fontManager.markLoaded('Inter', 'Regular', regular)
     const demand = fontFaceDemand('Inter', 'Regular Italic', 'Synthetic italic')
     fontResolver.reset(demand)
@@ -373,7 +382,7 @@ describe('renderText headless visual', () => {
     const ck = await initCanvasKit()
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
-    const interData = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+    const interData = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
     fontProvider.registerFont(interData, 'Inter')
     fontManager.markLoaded('Inter', 'Regular', interData)
     const fallbackFamilies = fontManager.getCJKFallbackFamilies()
@@ -403,7 +412,7 @@ describe('renderText headless visual', () => {
     const ck = await initCanvasKit()
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
-    const interData = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+    const interData = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
     fontManager.markLoaded('Inter', 'Regular', interData)
     const fallbackFamilies = fontManager.getCJKFallbackFamilies()
     const originalFallbacks = [...fallbackFamilies]
@@ -456,7 +465,7 @@ describe('renderText headless visual', () => {
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
 
-    const interData = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+    const interData = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
     fontManager.markLoaded('Inter', 'Regular', interData)
 
     const notoPath = repoPath('tests/fixtures/fonts/NotoSansSC-Regular.ttf')
@@ -528,7 +537,7 @@ describe('renderText headless visual', () => {
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
 
-    const interData = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+    const interData = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
     fontProvider.registerFont(interData, 'Inter')
     fontManager.markLoaded('Inter', 'Regular', interData)
 
@@ -592,8 +601,9 @@ describe('renderText headless visual', () => {
         const g = pixels[i + 1]
         const b = pixels[i + 2]
         if (g > 220) continue
-        if (x < 110 && b > r + 40) blueTextPixels++
-        if (x >= 110 && r > b + 40) redTextPixels++
+        // Figma's identity transform runs left to right: the first stop, red, is on the left.
+        if (x < 110 && r > b + 40) redTextPixels++
+        if (x >= 110 && b > r + 40) blueTextPixels++
       }
     }
 
@@ -606,7 +616,7 @@ describe('renderText headless visual', () => {
     const fontProvider = ck.TypefaceFontProvider.Make()
     fontManager.attachProvider(ck, fontProvider)
 
-    const interData = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+    const interData = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
     fontProvider.registerFont(interData, 'Inter')
     fontManager.markLoaded('Inter', 'Regular', interData)
 

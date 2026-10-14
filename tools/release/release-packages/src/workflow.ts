@@ -25,6 +25,7 @@ import {
   preparePublishDirectories,
   type PackageFileLister
 } from './publish-dirs'
+import { isPrerelease, PRERELEASE_DIST_TAG } from './version'
 
 export interface PublicationPlanEntry {
   package: WorkspacePackage
@@ -225,7 +226,8 @@ export async function publishReleasePackages(
         NPM_RELEASE_POLICY.access,
         '--provenance',
         '--registry',
-        NPM_RELEASE_POLICY.registry
+        NPM_RELEASE_POLICY.registry,
+        ...(isPrerelease(manifest.version) ? ['--tag', PRERELEASE_DIST_TAG] : [])
       ],
       cwd: root,
       output: 'inherit',

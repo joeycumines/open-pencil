@@ -1,14 +1,28 @@
 import { useLocalStorage } from '@vueuse/core'
 import { ref } from 'vue'
 
-import type { MCPToolScope, ToolDescriptor } from '@open-pencil/mcp/tools'
+import {
+  createToolDescriptors,
+  type MCPToolScope,
+  type ToolDescriptor
+} from '@open-pencil/mcp/tools'
 
 const DISABLED_TOOLS_STORAGE_KEY = 'open-pencil:mcp:disabled-tools'
 const ROOT_DIRECTORY_STORAGE_KEY = 'open-pencil:mcp:root-directory'
 const AUTHENTICATION_ENABLED_STORAGE_KEY = 'open-pencil:mcp:authentication-enabled'
 const SELECTION_ONLY_STORAGE_KEY = 'open-pencil:mcp:selection-only'
 
-export const configurableMCPTools = ref<ToolDescriptor[]>([])
+function configurable(tools: ToolDescriptor[]): ToolDescriptor[] {
+  return tools.filter((tool) => tool.availability !== 'eval')
+}
+
+const CORE_MCP_TOOLS = configurable(createToolDescriptors(true))
+
+/**
+ * The tools the local server offers. Known from Core, so Settings can configure them while no
+ * server runs; a running server's own list replaces them.
+ */
+export const configurableMCPTools = ref<ToolDescriptor[]>(CORE_MCP_TOOLS)
 
 export const disabledMCPTools = useLocalStorage<string[]>(DISABLED_TOOLS_STORAGE_KEY, [])
 export const mcpRootDirectory = useLocalStorage(ROOT_DIRECTORY_STORAGE_KEY, '')
@@ -21,5 +35,6 @@ export function mcpScope(): MCPToolScope {
 }
 
 export function setMCPToolDescriptors(tools: ToolDescriptor[]): void {
-  configurableMCPTools.value = tools.filter((tool) => tool.availability !== 'eval')
+  // A stopped server, or one that hides its tools behind authentication, reports none.
+  configurableMCPTools.value = tools.length > 0 ? configurable(tools) : CORE_MCP_TOOLS
 }

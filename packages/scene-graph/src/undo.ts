@@ -17,12 +17,14 @@ interface UndoBatch {
   coalesceKey?: string
 }
 
-const DEFAULT_HISTORY_LIMIT = 200
+/** How many edits undo keeps by default. */
+export const DEFAULT_HISTORY_LIMIT = 200
 
 export class UndoManager {
   private undoStack: UndoEntry[] = []
   private redoStack: UndoEntry[] = []
   private batches: UndoBatch[] = []
+  private readonly settlers = new Set<() => void>()
   private readonly limit: number
   private readonly onChange: (() => void) | undefined
 
@@ -53,7 +55,31 @@ export class UndoManager {
     this.pushUndoEntry(entry)
   }
 
+  /**
+   * Records an entry as a step of its own, outside the batches being built, such as an agent's
+   * edit made while a colour picker is open. Batches settle first, so the step follows the
+   * changes they hold so far.
+   */
+  pushStep(entry: UndoEntry): void {
+    this.settle()
+    this.pushUndoEntry(entry)
+  }
+
+  /**
+   * Registers a hook that commits an edit still being coalesced, such as a run of picker changes.
+   * Undo and redo run every hook first, so they act on the newest change.
+   */
+  onBeforeHistory(settle: () => void): () => void {
+    this.settlers.add(settle)
+    return () => this.settlers.delete(settle)
+  }
+
+  private settle() {
+    for (const settle of this.settlers) settle()
+  }
+
   undo(): string | null {
+    this.settle()
     const entry = this.undoStack.pop()
     if (!entry) return null
     entry.inverse()
@@ -63,6 +89,7 @@ export class UndoManager {
   }
 
   redo(): string | null {
+    this.settle()
     const entry = this.redoStack.pop()
     if (!entry) return null
     entry.forward()
@@ -119,8 +146,10 @@ export class UndoManager {
     return this.batches.length > 0
   }
 
+  /** Committed history, or changes in an open batch that a settling hook commits first. */
   get canUndo(): boolean {
-    return this.undoStack.length > 0
+    if (this.undoStack.length > 0) return true
+    return this.settlers.size > 0 && this.batches.some((batch) => batch.entries.length > 0)
   }
 
   get canRedo(): boolean {
@@ -138,6 +167,16 @@ export class UndoManager {
   /** The entry `depth` steps below the top of the redo stack, the next one Redo applies at 0. */
   peekRedo(depth = 0): UndoEntry | undefined {
     return this.redoStack.at(-1 - depth)
+  }
+
+  /**
+   * Whether `entry` is applied (on the undo stack) or undone (on the redo stack); null once it
+   * left the history, trimmed or dropped when an edit cleared Redo.
+   */
+  stateOf(entry: UndoEntry): 'applied' | 'undone' | null {
+    if (this.undoStack.includes(entry)) return 'applied'
+    if (this.redoStack.includes(entry)) return 'undone'
+    return null
   }
 
   get undoLabel(): string | null {

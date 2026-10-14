@@ -1,28 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  textDecorationStyleValue,
-  textFontFeatures,
-  textFontVariations,
-  textHeightBehaviorValue
-} from '#core/canvas/text'
+import { textFontFeatures, textFontVariations, textHeightBehaviorValue } from '#core/canvas/text'
 
 describe('canvas text font variations', () => {
-  test('maps imported text decoration styles to CanvasKit', () => {
-    const ck = {
-      DecorationStyle: {
-        Solid: 'solid',
-        Dotted: 'dotted',
-        Wavy: 'wavy'
-      }
-    }
-
-    expect(textDecorationStyleValue(ck, 'SOLID')).toBe('solid')
-    expect(textDecorationStyleValue(ck, 'DOTTED')).toBe('dotted')
-    expect(textDecorationStyleValue(ck, 'WAVY')).toBe('wavy')
-    expect(textDecorationStyleValue(ck, undefined)).toBe('solid')
-  })
-
   test('maps imported leading trim to CanvasKit text height behavior', () => {
     const ck = {
       TextHeightBehavior: {

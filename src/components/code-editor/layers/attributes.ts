@@ -8,7 +8,7 @@ import {
 } from '@open-pencil/design-jsx'
 
 import type { PatchContext } from './context'
-import { attributeName, isLiteralAttribute, type SyntaxNode } from './syntax'
+import { attributeName, indentAt, isLiteralAttribute, reindent, type SyntaxNode } from './syntax'
 
 /** Alias → the name Design JSX writes, e.g. `width` → `w`. */
 const CANONICAL_NAMES = new Map(
@@ -158,20 +158,50 @@ export function patchAttributes(
   if (anchor) ctx.changes.push({ from: anchor.to, insert: ` ${additions.join(' ')}` })
 }
 
-export function patchText(ctx: PatchContext, node: SyntaxNode, text: string | null) {
+/** Described text content as it is written inside an element indented by `indent`. */
+function writtenContent(text: string | null, indent: string): string {
+  if (!text) return ''
+  // Content on lines of its own, such as paragraphs, ends where the closing tag is indented.
+  return reindent(text, indent) + (text.endsWith('\n') ? indent : '')
+}
+
+/**
+ * Writes a text's content from the canvas. Content still as the code was last in sync with,
+ * spans and paragraphs included, is replaced as a whole, as is plain text the person wrote;
+ * content with expressions or elements of the person's own is theirs and stays.
+ */
+export function patchText(
+  ctx: PatchContext,
+  node: SyntaxNode,
+  base: string | null,
+  text: string | null
+) {
   const open = node.getChild('JSXOpenTag')
   const close = node.getChild('JSXCloseTag')
   if (!open || !close) return
-  // Text with expressions or elements in it is the author's; only plain text is replaced.
-  for (let child = open.nextSibling; child && child.from < close.from; child = child.nextSibling) {
-    if (child.name !== 'JSXText') return
-  }
+  const indent = indentAt(ctx.state, node.from)
   const content = ctx.state.doc.sliceString(open.to, close.from)
+  const insert = writtenContent(text, indent)
+  const unchanged = content === writtenContent(base, indent)
+  if (!unchanged && !isPlainContent(open, close)) return
+  // Plain text the person spaced out keeps the spacing around it, unless paragraphs replace it.
+  if (unchanged || insert.startsWith('\n')) {
+    ctx.changes.push({ from: open.to, to: close.from, insert })
+    return
+  }
   const leading = content.length - content.trimStart().length
   const trailing = content.length - content.trimEnd().length
   ctx.changes.push({
     from: open.to + leading,
     to: Math.max(open.to + leading, close.from - trailing),
-    insert: text ?? ''
+    insert
   })
+}
+
+/** Whether only text sits between the tags, no expressions or elements. */
+function isPlainContent(open: SyntaxNode, close: SyntaxNode): boolean {
+  for (let child = open.nextSibling; child && child.from < close.from; child = child.nextSibling) {
+    if (child.name !== 'JSXText') return false
+  }
+  return true
 }

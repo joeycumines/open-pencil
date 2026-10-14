@@ -73,3 +73,15 @@ test('mismatched artifacts prevent verification and publication', async () => {
   expect(verified).toBe(false)
   expect(state.published).toEqual([])
 })
+
+test('publishes a beta under the next dist-tag and a stable version under latest', async () => {
+  const state = fixture()
+  const [stable, beta] = state.plan
+  if (!stable || !beta) throw new Error('Missing fixture entry')
+  beta.package.manifest.version = '1.1.0-beta.1'
+  state.artifacts.delete('two@1.0.0')
+  state.artifacts.set('two@1.1.0-beta.1', '/two.tgz')
+  await publishReleasePackages('/repo', state.operations)
+  expect(state.published[0]).not.toContain('--tag')
+  expect(state.published[1]?.slice(-2)).toEqual(['--tag', 'next'])
+})

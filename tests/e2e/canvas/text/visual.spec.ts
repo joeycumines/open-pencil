@@ -166,3 +166,58 @@ test('text decoration styles and OpenType features', async () => {
   await editor.canvas.waitForRender()
   await expectCanvas('text-decoration-styles-and-opentype-features')
 })
+
+test('text case by character range', async () => {
+  await editor.page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const pageId = store.state.currentPageId
+    const fills = [
+      {
+        type: 'SOLID' as const,
+        color: { r: 0.08, g: 0.1, b: 0.18, a: 1 },
+        visible: true,
+        opacity: 1
+      }
+    ]
+    const rows = [
+      {
+        text: 'upper words in a lower line',
+        styleRuns: [{ start: 0, length: 11, style: { textCase: 'UPPER' as const } }]
+      },
+      {
+        text: 'Title case midword stays put',
+        styleRuns: [
+          { start: 0, length: 10, style: { textCase: 'TITLE' as const } },
+          { start: 13, length: 6, style: { textCase: 'TITLE' as const } }
+        ]
+      },
+      {
+        text: 'ALL CAPS TEXT WITH A QUIET END',
+        textCase: 'UPPER' as const,
+        styleRuns: [{ start: 19, length: 11, style: { textCase: 'LOWER' as const } }]
+      }
+    ]
+    for (const [index, row] of rows.entries()) {
+      store.graph.createNode('TEXT', pageId, {
+        name: row.text,
+        x: 100,
+        y: 80 + index * 50,
+        width: 560,
+        height: 34,
+        text: row.text,
+        fontSize: 24,
+        fontWeight: 500,
+        textAutoResize: 'HEIGHT',
+        textCase: row.textCase ?? 'ORIGINAL',
+        styleRuns: row.styleRuns,
+        fills
+      })
+    }
+    store.clearSelection()
+    await store.loadFontsForNodes(store.graph.getPages().flatMap((page) => page.childIds))
+    store.requestRender()
+  })
+  await editor.canvas.waitForRender()
+  await expectCanvas('text-case-by-range')
+})

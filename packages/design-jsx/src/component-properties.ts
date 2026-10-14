@@ -1,6 +1,11 @@
+import { compact } from 'es-toolkit/array'
 import * as v from 'valibot'
 
-import { applyComponentPropertyValue, componentPropertyDefinitions } from '@open-pencil/scene-graph'
+import {
+  applyComponentPropertyValue,
+  componentPropertyDefinitions,
+  createComponentPropertyId
+} from '@open-pencil/scene-graph'
 import type {
   ComponentPropertyDefinition,
   ComponentPropertyReference,
@@ -165,4 +170,65 @@ export function assignComponentProperties(
     if (!definition) throw new Error(`Unknown component property: ${key}`)
     assignValue(graph, instance, definition, key, value)
   }
+}
+
+function parseVariantValues(name: string): Record<string, string> {
+  const entries = compact(name.split(',').map((part) => part.trim()))
+  const values: Record<string, string> = {}
+  for (const entry of entries) {
+    const [key = '', ...rest] = entry.split('=')
+    const property = key.trim()
+    const value = rest.join('=').trim()
+    if (property && value) values[property] = value
+  }
+  return values
+}
+
+/** Variant properties a component set takes from its variants' names, such as `State=On`. */
+export function inferComponentSetProperties(graph: SceneGraph, componentSetId: string): void {
+  const componentSet = graph.getNode(componentSetId)
+  if (componentSet?.type !== 'COMPONENT_SET') return
+  const existingDefinitions = componentSet.componentPropertyDefinitions
+
+  const variants = graph.getChildren(componentSetId).filter((node) => node.type === 'COMPONENT')
+  const options = new Map<string, Set<string>>()
+  const valuesById = new Map<string, Record<string, string>>()
+
+  for (const variant of variants) {
+    const values = parseVariantValues(variant.name)
+    valuesById.set(variant.id, values)
+    for (const [property, value] of Object.entries(values)) {
+      let set = options.get(property)
+      if (!set) {
+        set = new Set()
+        options.set(property, set)
+      }
+      set.add(value)
+    }
+  }
+
+  const definitions: ComponentPropertyDefinition[] = [...options.entries()]
+    .filter(
+      ([name]) =>
+        !existingDefinitions.some(
+          (definition) => definition.type === 'VARIANT' && definition.name === name
+        )
+    )
+    .map(([name, values]) => {
+      const variantOptions = [...values]
+      return {
+        id: createComponentPropertyId(),
+        name,
+        type: 'VARIANT',
+        defaultValue: variantOptions[0] ?? '',
+        variantOptions
+      }
+    })
+
+  for (const [id, values] of valuesById) {
+    graph.updateNode(id, { componentPropertyValues: values })
+  }
+  graph.updateNode(componentSetId, {
+    componentPropertyDefinitions: [...existingDefinitions, ...definitions]
+  })
 }

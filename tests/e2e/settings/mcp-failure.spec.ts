@@ -53,7 +53,7 @@ test('technical details stay collapsed inside the alert and can be copied', asyn
   await expect(page.getByTestId('settings-mcp-failure-detail')).toBeVisible()
 
   await page.getByRole('button', { name: 'Copy details' }).click()
-  await expect(page.getByText('Diagnostic details copied.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Copied', exact: true })).toBeVisible()
   const clipboard = await page.evaluate(() => navigator.clipboard.readText())
   expect(clipboard).toMatch(/code=(unreachable|timeout)/)
 })

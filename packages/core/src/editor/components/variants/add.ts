@@ -2,8 +2,8 @@ import { createComponentPropertyId, type SceneNode } from '@open-pencil/scene-gr
 import { buildVariantName } from '@open-pencil/scene-graph/variant-name'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
-import { restoreSubtree, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
 import { VARIANT_SET_PADDING, variantSetProps } from '#core/editor/components/variant-set'
+import { restoreSubtree, snapshotSubtree } from '#core/editor/history/subtree'
 import { wrapSelectionInContainer } from '#core/editor/structure/container-wrap'
 import type { EditorContext } from '#core/editor/types'
 

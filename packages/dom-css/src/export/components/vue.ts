@@ -3,20 +3,31 @@ import { stateStylesToCSS } from '#dom-css/behaviours/states/css'
 import dedent from 'dedent'
 import { compact } from 'es-toolkit/array'
 import { omit } from 'es-toolkit/object'
-import { camelCase, upperFirst } from 'es-toolkit/string'
+import { camelCase, kebabCase, upperFirst } from 'es-toolkit/string'
 
 import { es, vue } from '@open-pencil/emit'
+import type { ShaderComponent } from '@open-pencil/scene-graph'
 
 import { claimName } from '../storybook/names'
 import { progressWidth } from './fields'
 import type {
   ComponentBinding,
+  ComponentElement,
   ComponentGenerator,
   ComponentModel,
   ComponentNode,
   GeneratedKind
 } from './model'
 import type { ComponentReference } from './references'
+import {
+  drawnEffects,
+  SHADER_CANVAS,
+  shaderCSS,
+  shaderEffectName,
+  shaderImport,
+  type ShaderLayer
+} from './shaders'
+import { componentClasses } from './styling'
 
 /** The Reka UI components a kind renders, by part, and the prop its model binds. */
 const REKA: Record<
@@ -68,7 +79,9 @@ const REKA: Record<
   },
   // Reka has no text field; the root is the design's own element around a native input.
   textField: { parts: {} },
-  textarea: { parts: {} }
+  textarea: { parts: {} },
+  // A component without a behaviour is the design's own elements.
+  plain: { parts: {} }
 }
 
 /** Kinds whose two-way value is their input's, which binds it rather than the root. */
@@ -127,16 +140,26 @@ function progressStyle(component: ComponentModel): vue.VueAttribute[] {
   return style ? [vue.bound('style', style)] : []
 }
 
+/** `element`, recorded as drawing `layerId`, so code can link back to that layer. */
+function drawing(
+  element: vue.VueElement,
+  layerId: string | undefined,
+  uses: TemplateUses
+): vue.VueElement {
+  if (layerId) uses.layers.set(element, layerId)
+  return element
+}
+
 /** A field's input: Reka's for a number field, else a native input or textarea. */
-function inputNode(className: string, uses: TemplateUses): vue.VueNode {
+function inputNode(className: string, uses: TemplateUses): vue.VueElement {
   const { component } = uses
   if (component.kind === 'numberField') {
     uses.reka.add('NumberFieldInput')
-    return vue.element('NumberFieldInput', [vue.attribute('class', className)])
+    return vue.element('NumberFieldInput', [vue.attribute('class', uses.classOf(className))])
   }
   const placeholder = component.text?.placeholder
   return vue.element(component.kind === 'textarea' ? 'textarea' : 'input', [
-    vue.attribute('class', className),
+    vue.attribute('class', uses.classOf(className)),
     ...(component.model ? [vue.model(identifier(component.model))] : []),
     ...(placeholder ? [vue.attribute('placeholder', placeholder)] : []),
     ...(component.disabled ? [vue.bound('disabled', identifier('disabled'))] : [])
@@ -154,6 +177,12 @@ interface TemplateUses {
   /** Other generated components. */
   components: Set<string>
   icons: boolean
+  /** The class a layer's readable class name stands for, as the component is styled. */
+  classOf: (className: string) => string
+  /** The layer each element draws, which code links back to. */
+  layers: WeakMap<vue.VueElement, string>
+  /** Effects of the `shaders` library its layers fill with. */
+  shaders: Set<string>
   /** A ref per nested control drawn on, which its `v-model` binds. */
   models: { name: string }[]
   taken: Set<string>
@@ -161,62 +190,112 @@ interface TemplateUses {
 
 /** The Iconify component, named apart from any component the design calls `Icon`. */
 const ICONIFY = 'IconifyIcon'
-const TRUE = es.parseExpression('true')
 
-function reference(node: ComponentReference, uses: TemplateUses): vue.VueNode {
+function reference(node: ComponentReference, uses: TemplateUses): vue.VueElement {
   uses.components.add(node.component)
   const model = node.model
     ? claimName(`${camelCase(node.component)}${upperFirst(node.model)}`, uses.taken)
     : null
   if (model) uses.models.push({ name: model })
   return vue.element(node.component, [
-    vue.attribute('class', node.className),
+    vue.attribute('class', uses.classOf(node.className)),
     ...node.props.map((prop) =>
-      prop.value === true ? vue.bound(prop.name, TRUE) : vue.attribute(prop.name, prop.value)
+      typeof prop.value === 'boolean'
+        ? vue.bound(prop.name, es.parseExpression(String(prop.value)))
+        : vue.attribute(prop.name, prop.value)
     ),
     // The control stays operable, starting from the value the design draws.
     ...(model && node.model ? [vue.model(identifier(model), node.model)] : [])
   ])
 }
 
-function templateNode(node: ComponentNode, uses: TemplateUses): vue.VueNode {
-  if (node.type === 'text') return vue.text(node.value)
-  if (node.type === 'textProp') return vue.interpolation(identifier(node.name))
-  if (node.type === 'reference') return reference(node, uses)
-  if (node.type === 'input') return inputNode(node.className, uses)
-  if (node.type === 'icon') {
-    uses.icons = true
-    return vue.element(ICONIFY, [
-      vue.attribute('icon', node.icon),
-      vue.attribute('class', node.className)
-    ])
+/** A design element's attributes: what shows it, its part's own, the design's, and bindings. */
+function elementAttributes(
+  node: ComponentElement,
+  uses: TemplateUses,
+  { native, button }: { native: boolean; button: boolean }
+): vue.VueAttribute[] {
+  const root = node.part === 'root'
+  return [
+    ...(node.shownBy ? [vue.renderIf(identifier(node.shownBy))] : []),
+    ...(button ? [vue.attribute('type', 'button')] : []),
+    ...(root ? [...(ROOT_ATTRIBUTES[uses.kind] ?? []), ...rangeAttributes(uses.component)] : []),
+    ...(uses.kind === 'progress' && node.part === 'indicator' ? progressStyle(uses.component) : []),
+    ...Object.entries(omit(node.attrs, ['class'])).map(([name, value]) =>
+      vue.attribute(name, value)
+    ),
+    vue.attribute('class', compact([node.attrs.class, uses.classOf(node.className)]).join(' ')),
+    ...(node.value === undefined ? [] : [vue.attribute('value', node.value)]),
+    ...node.bindings.flatMap((binding) => bindingAttributes(binding, uses, native))
+  ]
+}
+
+/** A shader playing behind its layer's content, with telemetry off, as every export has it. */
+function shaderCanvas(shader: ShaderLayer, uses: TemplateUses): vue.VueNode {
+  const effect = (component: ShaderComponent): vue.VueNode => {
+    uses.shaders.add(component.type)
+    return vue.element(
+      shaderEffectName(component.type),
+      Object.entries(component.props ?? {}).map(([key, value]) =>
+        typeof value === 'string'
+          ? vue.attribute(kebabCase(key), value)
+          : vue.bound(kebabCase(key), es.json(value))
+      ),
+      drawnEffects(component.children).map(effect)
+    )
   }
+  return vue.element(
+    SHADER_CANVAS,
+    [
+      vue.attribute('class', uses.classOf(shader.className)),
+      vue.bound('disable-telemetry', es.json(true))
+    ],
+    drawnEffects(shader.preset.components).map(effect)
+  )
+}
+
+function designElement(node: ComponentElement, uses: TemplateUses): vue.VueElement {
   const reka = node.part ? REKA[uses.kind].parts[node.part] : undefined
   if (reka) uses.reka.add(reka)
-  const root = node.part === 'root'
-  const native = root && !reka
+  const native = node.part === 'root' && !reka
   const button = native && uses.kind === 'button'
-  const element = vue.element(
-    reka ?? (button ? 'button' : node.tag),
-    [
-      ...(button ? [vue.attribute('type', 'button')] : []),
-      ...(root ? [...(ROOT_ATTRIBUTES[uses.kind] ?? []), ...rangeAttributes(uses.component)] : []),
-      ...(uses.kind === 'progress' && node.part === 'indicator'
-        ? progressStyle(uses.component)
-        : []),
-      ...Object.entries(omit(node.attrs, ['class'])).map(([name, value]) =>
-        vue.attribute(name, value)
-      ),
-      vue.attribute('class', compact([node.attrs.class, node.className]).join(' ')),
-      ...(node.value === undefined ? [] : [vue.attribute('value', node.value)]),
-      ...node.bindings.flatMap((binding) => bindingAttributes(binding, uses, native))
-    ],
-    node.children.map((child) => templateNode(child, uses))
+  const content = node.children.map((child) => templateNode(child, uses))
+  const children = node.shader ? [shaderCanvas(node.shader, uses), ...content] : content
+  const element = drawing(
+    vue.element(
+      reka ?? (button ? 'button' : node.tag),
+      elementAttributes(node, uses, { native, button }),
+      // A slot frame shows what the caller passes, or the design's content.
+      node.slot
+        ? [
+            ...(node.shader ? [shaderCanvas(node.shader, uses)] : []),
+            vue.element('slot', [vue.attribute('name', node.slot)], content)
+          ]
+        : children
+    ),
+    node.layerId,
+    uses
   )
   // Reka puts an accordion item's trigger in a header, which carries the heading level.
   if (uses.kind !== 'accordionItem' || node.part !== 'trigger') return element
   uses.reka.add('AccordionHeader')
   return vue.element('AccordionHeader', [vue.attribute('style', HEADING_STYLE)], [element])
+}
+
+function templateNode(node: ComponentNode, uses: TemplateUses): vue.VueNode {
+  if (node.type === 'text') return vue.text(node.value)
+  if (node.type === 'textProp') return vue.interpolation(identifier(node.name))
+  if (node.type === 'reference') return drawing(reference(node, uses), node.layerId, uses)
+  if (node.type === 'input') return drawing(inputNode(node.className, uses), node.layerId, uses)
+  if (node.type === 'icon') {
+    uses.icons = true
+    const icon = vue.element(ICONIFY, [
+      vue.attribute('icon', node.icon),
+      vue.attribute('class', uses.classOf(node.className))
+    ])
+    return drawing(icon, node.layerId, uses)
+  }
+  return designElement(node, uses)
 }
 
 function propsType(component: ComponentModel): es.SyntaxNode {
@@ -229,12 +308,20 @@ function propsType(component: ComponentModel): es.SyntaxNode {
   // A group's item always stands for a value, which has no default.
   if (component.valueProp) members.unshift(['value', es.parseType('string'), false])
   for (const text of component.texts) members.push([text.name, es.parseType('string'), true])
+  for (const prop of component.booleans) members.push([prop.name, es.parseType('boolean'), true])
   return es.objectType(members)
 }
 
 /** `defineProps`, with `withDefaults` when any prop has a default to give. */
+/** Whether any prop has a default to give: `disabled`, a variant, a text, or a boolean. */
+const hasDefaults = (component: ComponentModel) =>
+  component.disabled ||
+  component.props.length > 0 ||
+  component.texts.length > 0 ||
+  component.booleans.length > 0
+
 function propsDeclaration(component: ComponentModel): es.SyntaxNode[] {
-  const optional = component.disabled || component.props.length > 0 || component.texts.length > 0
+  const optional = hasDefaults(component)
   return optional
     ? es.fill(PROPS, { $Props: propsType(component), $defaults: propsDefaults(component) }).body
     : es.fill(REQUIRED_PROPS, { $Props: propsType(component) }).body
@@ -244,7 +331,10 @@ function propsDefaults(component: ComponentModel): es.SyntaxNode {
   return es.object([
     ...(component.disabled ? [['disabled', es.parseExpression('false')] as const] : []),
     ...component.props.map((prop) => [prop.name, es.string(prop.default)] as const),
-    ...component.texts.map((text) => [text.name, es.string(text.default)] as const)
+    ...component.texts.map((text) => [text.name, es.string(text.default)] as const),
+    ...component.booleans.map(
+      (prop) => [prop.name, es.parseExpression(String(prop.default))] as const
+    )
   ])
 }
 
@@ -290,6 +380,7 @@ function scriptImports(uses: TemplateUses): es.SyntaxNode[] {
     ...(helpers.length > 0 ? [namedImport(helpers, 'vue')] : []),
     ...(uses.icons ? [namedImport(['Icon'], '@iconify/vue', () => ICONIFY)] : []),
     ...(uses.reka.size > 0 ? [namedImport([...uses.reka].sort(), 'reka-ui')] : []),
+    ...(uses.shaders.size > 0 ? [shaderImport('shaders/vue', uses.shaders)] : []),
     ...[...uses.components].sort().flatMap(
       (name) =>
         es.fill(IMPORT_COMPONENT, {
@@ -326,13 +417,7 @@ function modelDeclaration(component: ComponentModel, uses: TemplateUses): es.Syn
 }
 
 function script(component: ComponentModel, uses: TemplateUses): es.SyntaxNode {
-  const props =
-    component.valueProp ||
-    component.disabled ||
-    component.props.length > 0 ||
-    component.texts.length > 0
-      ? propsDeclaration(component)
-      : []
+  const props = component.valueProp || hasDefaults(component) ? propsDeclaration(component) : []
   const refs = uses.models.flatMap(
     (item) => es.fill(MODEL_REF, { $name: identifier(item.name) }).body
   )
@@ -348,36 +433,52 @@ function script(component: ComponentModel, uses: TemplateUses): es.SyntaxNode {
  * scoped stylesheet, its parts as Reka components, and its props from the behaviour and its
  * other variant properties.
  */
-export const vueComponent: ComponentGenerator = async (component) => {
+export const vueComponent: ComponentGenerator = async (component, options = {}) => {
+  const styling = options.styling ?? 'css'
   const taken = new Set([
     ...component.props.map((prop) => prop.name),
     ...component.texts.map((text) => text.name),
+    ...component.booleans.map((prop) => prop.name),
+    ...component.slots.map((slot) => slot.name),
     ...(component.model ? [component.model] : []),
     'disabled'
   ])
   const uses: TemplateUses = {
     component,
+    classOf: componentClasses(component, styling),
+    layers: new WeakMap(),
     kind: component.kind,
     sliderValues:
       component.kind === 'slider' && component.model ? claimName('values', taken) : null,
     reka: new Set(),
     components: new Set(),
     icons: false,
+    shaders: new Set(),
     models: [],
     // Refs share the script with the component's own props and model.
     taken
   }
   const template = templateNode(component.tree, uses)
-  const { css } = await stateStylesToCSS(component.styles)
+  // Tailwind styles the markup itself; a stylesheet is written beside it otherwise.
+  const style =
+    styling === 'css'
+      ? compact([(await stateStylesToCSS(component.styles)).css, shaderCSS(component.tree)]).join(
+          '\n'
+        )
+      : undefined
   const path = `${component.name}.vue`
   // A group's items are their own component, which the group's template uses.
-  const item = component.item ? await vueComponent(component.item) : null
+  const item = component.item ? await vueComponent(component.item, options) : null
+  const sfc = { script: script(component, uses), template, style }
   return {
     files: [
       ...(item?.files ?? []),
       {
         path,
-        content: vue.printComponent({ script: script(component, uses), template, style: css })
+        content: vue.printComponent(sfc),
+        layerIds: vue
+          .componentElements(sfc)
+          .map((element) => (element && uses.layers.get(element)) ?? null)
       }
     ],
     entry: { path: `./${path}`, named: false },

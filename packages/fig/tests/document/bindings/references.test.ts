@@ -149,3 +149,43 @@ test('a record normalized on its own resolves as the document pass resolves it',
   expect(entries[0]?.variableData?.value?.alias).not.toHaveProperty('guid')
   expect(entries[1]?.variableData?.value?.alias).toHaveProperty('guid', guid(9))
 })
+
+test('ranges of text resolve the variables and styles they name by library key', () => {
+  // A copy from Figma names a range's variable and style by key, as it names a layer's.
+  const [, , text] = resolveDocumentBindingReferences(
+    [
+      { guid: guid(1), type: 'VARIABLE', key: 'size', version: 'v1' },
+      { guid: guid(2), type: 'TEXT', styleType: 'TEXT', key: 'heading', version: 'v1' },
+      {
+        guid: guid(3),
+        type: 'TEXT',
+        textData: {
+          characters: 'bound',
+          styleOverrideTable: [
+            {
+              styleID: 1,
+              styleIdForText: { assetRef: { key: 'heading', version: 'v1' } },
+              parameterConsumptionMap: {
+                entries: [
+                  {
+                    variableField: 'FONT_SIZE',
+                    variableData: {
+                      dataType: 'ALIAS',
+                      value: { alias: { assetRef: { key: 'size', version: 'v1' } } }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      } as NodeChange
+    ],
+    () => undefined
+  )
+  const [override] = text.textData?.styleOverrideTable ?? []
+  expect(override.styleIdForText?.guid).toEqual(guid(2))
+  expect(override.parameterConsumptionMap?.entries?.[0].variableData?.value?.alias?.guid).toEqual(
+    guid(1)
+  )
+})

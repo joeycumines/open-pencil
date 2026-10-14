@@ -27,16 +27,16 @@ async function createEditorWithRenderer() {
     editor.dispose()
     renderer.destroy()
   })
-  return { editor }
+  return { editor, renderer }
 }
 
 async function loadInterRegular() {
-  const data = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+  const data = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
   fontManager.markLoaded('Inter', 'Regular', data)
 }
 
 async function loadInterBold() {
-  const data = await Bun.file('public/Inter-Bold.ttf').arrayBuffer()
+  const data = await Bun.file('packages/core/assets/Inter-Bold.ttf').arrayBuffer()
   fontManager.markLoaded('Inter', 'Bold', data)
 }
 
@@ -200,6 +200,40 @@ describe('flattenSelected', () => {
     expect(vector?.vectorNetwork?.vertices.length).toBeGreaterThan(0)
     expect(editor.graph.getNode(text.id)).toBeUndefined()
   })
+
+  // Saved glyphs draw a decoration on one baseline; outlines carry none, so lines don't matter.
+  test.each(['NONE', 'UNDERLINE'] as const)(
+    'flattens a list with its bullets, as the canvas draws it (%s)',
+    async (textDecoration) => {
+    await loadInterRegular()
+    const { editor, renderer } = await createEditorWithRenderer()
+    await renderer.loadFonts()
+    const pageId = editor.state.currentPageId
+    const text = editor.graph.createNode('TEXT', pageId, {
+      x: 100,
+      text: 'One\nTwo',
+      fontFamily: 'Inter',
+      fontWeight: 400,
+      fontSize: 16,
+      width: 120,
+      height: 40,
+      textDecoration,
+      textParagraphs: [
+        { listType: 'UNORDERED', indentation: 1 },
+        { listType: 'UNORDERED', indentation: 1 }
+      ]
+    })
+
+    editor.select([text.id])
+    editor.flattenSelected()
+
+    const [vectorId] = [...editor.state.selectedIds]
+    const vector = editor.graph.getNode(vectorId)
+    // The bullets sit in the first 24px of indent, left of the items' text.
+    expect(vector?.x).toBeGreaterThan(106)
+    expect(vector?.x).toBeLessThan(112)
+    }
+  )
 
   test('wraps loaded text style runs as outlines', async () => {
     await loadInterRegular()

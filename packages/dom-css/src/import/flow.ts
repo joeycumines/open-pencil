@@ -28,15 +28,20 @@ export type FlowKind = 'block' | 'flex' | 'inline'
 /** The layout a child is placed in: its parent's flow, or none at the top of the page. */
 export type ParentFlow = FlowKind | 'none'
 
-const INLINE_TAGS = new Set([
+/** Tags browsers lay out in a line by default. */
+export const INLINE_TAGS = new Set([
   'a',
   'abbr',
   'b',
   'code',
+  'del',
   'em',
   'i',
+  'ins',
   'kbd',
   'label',
+  'mark',
+  's',
   'small',
   'span',
   'strong',

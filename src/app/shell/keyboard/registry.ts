@@ -5,6 +5,7 @@ import { onScopeDispose } from 'vue'
 import { editorCommandMetadata } from '@open-pencil/vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
+import { useComments } from '@/app/comments/use'
 import { requestRenameSelection } from '@/app/editor/selection/rename-dialog'
 import { TOOL_SHORTCUTS } from '@/app/editor/session'
 import { openSettingsDialog } from '@/app/settings/dialog'
@@ -63,25 +64,63 @@ function opacityBindings(): ShortcutDefinition[] {
   }))
 }
 
+/**
+ * Tab steps through sibling layers only while nothing on the page holds focus, so it still
+ * moves focus through the panels' controls.
+ */
+function isCanvasFocus(event: KeyboardEvent) {
+  return event.target === document.body || event.target instanceof HTMLCanvasElement
+}
+
+function siblingShortcut(
+  command: 'selection.selectNextSibling' | 'selection.selectPreviousSibling'
+): ShortcutDefinition {
+  return {
+    id: command,
+    keys: editorCommandMetadata(command).keybinding ?? [],
+    run: ({ keyEvent, runCommand }) => {
+      if (isCanvasFocus(keyEvent)) runCommand(command)
+    },
+    shouldPreventDefault: isCanvasFocus
+  }
+}
+
 const EDITOR_SHORTCUT_OVERLAY_SELECTOR =
   '[data-picker-content], [role="dialog"], [role="listbox"], [role="menu"]'
+const PICKER_SELECTOR = '[data-picker-content]'
+const OPEN_LAYER_SELECTOR = '[data-dismissable-layer]:not([data-state="closed"])'
 
-function originatedInOverlay(event: KeyboardEvent) {
+function originatedInOverlay(event: KeyboardEvent, allowPickers = false) {
   return event
     .composedPath()
-    .some((target) => target instanceof Element && target.matches(EDITOR_SHORTCUT_OVERLAY_SELECTOR))
+    .some(
+      (target) =>
+        target instanceof Element &&
+        target.matches(EDITOR_SHORTCUT_OVERLAY_SELECTOR) &&
+        !(allowPickers && target.closest(PICKER_SELECTOR))
+    )
 }
 
 /** A popover, menu, or dialog that is open; one fading out after closing no longer counts. */
-function hasOpenDismissableLayer() {
-  return document.querySelector('[data-dismissable-layer]:not([data-state="closed"])') !== null
+function hasOpenDismissableLayer(allowPickers = false) {
+  return [...document.querySelectorAll(OPEN_LAYER_SELECTOR)].some(
+    (layer) => !(allowPickers && layer.closest(PICKER_SELECTOR))
+  )
 }
 
-function shouldIgnoreShortcut(event: KeyboardEvent, options: KeyboardShortcutOptions) {
+/**
+ * Other shortcuts wait for open popovers to close, but undo and redo work while a fill, stroke,
+ * or colour picker is open, as in Figma; a text field in it keeps its own undo.
+ */
+function shouldIgnoreShortcut(
+  event: KeyboardEvent,
+  options: KeyboardShortcutOptions,
+  history = false
+) {
   return (
     isButtonActivation(event) ||
-    hasOpenDismissableLayer() ||
-    originatedInOverlay(event) ||
+    hasOpenDismissableLayer(history) ||
+    originatedInOverlay(event, history) ||
     isEditing(event) ||
     options.inputFocused.value ||
     !!options.store.state.editingTextId ||
@@ -182,6 +221,11 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     },
     { id: 'toggle-ai', keys: '$mod+KeyJ', run: ({ actions }) => actions.toggleAI() },
     {
+      id: 'toggle-comments',
+      keys: appMenuTinykeysShortcut('view-comments') ?? 'Shift+KeyC',
+      run: () => useComments().toggleOnCanvas()
+    },
+    {
       id: 'open-settings',
       keys: appMenuTinykeysShortcut('settings') ?? '$mod+Comma',
       run: () => openSettingsDialog(),
@@ -225,6 +269,11 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       'view.zoom100',
       'view.zoomFit',
       'view.zoomSelection',
+      'view.zoomNextFrame',
+      'view.zoomPreviousFrame',
+      'view.nextPage',
+      'view.previousPage',
+      'selection.selectParent',
       'selection.duplicate',
       'selection.selectAll',
       'selection.selectInverse'
@@ -254,13 +303,15 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     { id: 'delete-backspace', keys: 'Backspace', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete', keys: 'Delete', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete-alt', keys: 'Alt+Delete', run: ({ actions }) => actions.smartDelete(true) },
-    { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEnterText() },
+    { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEditSelection() },
     {
       id: 'escape',
       keys: 'Escape',
       run: ({ actions }) => actions.escapeOrDeselect(),
       preview: true
     },
+    siblingShortcut('selection.selectNextSibling'),
+    siblingShortcut('selection.selectPreviousSibling'),
     ...opacityBindings()
   ]
 
@@ -269,6 +320,11 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
   /** Keys that keep working while a canvas previews; everything else would edit the design. */
   const previewKeys = new Set(
     shortcuts.filter((shortcut) => shortcut.preview).flatMap((shortcut) => [shortcut.keys].flat())
+  )
+  const historyKeys = new Set(
+    shortcuts
+      .filter((shortcut) => shortcut.id === 'edit.undo' || shortcut.id === 'edit.redo')
+      .flatMap((shortcut) => [shortcut.keys].flat())
   )
   bindToolShortcuts(bindings, runOptions(new KeyboardEvent('keydown')))
 
@@ -285,7 +341,7 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       Object.entries(bindings).map(([keys, handler]) => [
         keys,
         (event: KeyboardEvent) => {
-          if (shouldIgnoreShortcut(event, options)) return
+          if (shouldIgnoreShortcut(event, options, historyKeys.has(keys))) return
           if (options.store.state.play && !previewKeys.has(keys)) return
           handler(event)
         }

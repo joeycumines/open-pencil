@@ -24,7 +24,7 @@ export interface PageChecksOptions {
 
 /** The page holding a layer, or the page itself. */
 export function pageOf(graph: SceneGraph, nodeId: string | null | undefined): string | null {
-  return nodeId ? (graph.closest(nodeId, (node) => node.type === 'CANVAS')?.id ?? null) : null
+  return nodeId ? graph.pageOf(nodeId) : null
 }
 
 /**

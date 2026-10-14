@@ -4,10 +4,14 @@ on:
   push:
     tags:
       - "v*"
+      - "!v*-*"
   workflow_dispatch:
 
 jobs:
   deploy:
+    # Pre-releases (vX.Y.Z-beta.N) ship desktop and npm builds only, never production,
+    # including when dispatched manually on their tag.
+    if: ${{ !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,7 +24,13 @@ jobs:
       - name: Format check
         run: bun run format:check
 
+      # The demo document's shader fills are drawn at build time in a headless Chromium.
+      - run: bunx playwright install --with-deps chromium
+
       - run: bun run build
+        env:
+          # Official releases only: lets the app send its daily ping and, with consent, usage stats.
+          VITE_OPENPENCIL_FEEDBACK: "on"
 
       - uses: cloudflare/wrangler-action@v4
         with:

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenPencil",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "identifier": "net.dannote.open-pencil",
   "build": {
     "beforeDevCommand": "bun run generate:icons --target desktop && bun run generate:tauri-menu && bun run dev",
@@ -61,7 +61,8 @@
     },
     "macOS": {
       "minimumSystemVersion": "13.0",
-      "signingIdentity": "Developer ID Application: Danila Poyarkov (N7D7M3Q3CD)"
+      "signingIdentity": "Developer ID Application: Danila Poyarkov (N7D7M3Q3CD)",
+      "entitlements": "Entitlements.plist"
     }
   },
   "plugins": {

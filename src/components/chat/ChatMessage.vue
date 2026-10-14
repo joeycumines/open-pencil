@@ -8,10 +8,11 @@ import { useI18n, vTestId } from '@open-pencil/vue'
 
 import { attachmentsForMessage } from '@/app/ai/attachment/presentation/store'
 import type { AttachmentPresentation } from '@/app/ai/attachment/presentation/types'
-import { reasoningDisplay } from '@/app/ai/chat/preferences'
+import { undoOf, wasStopped } from '@/app/ai/chat/metadata'
+import { reasoningDisplay as preferredReasoningDisplay } from '@/app/ai/chat/preferences'
 import { visibleUserMessageText } from '@/app/ai/chat/presentation'
 import { groupMessageParts, type MessagePartGroup } from '@/app/ai/chat/tool-calls/display'
-import { revertOf } from '@/app/ai/chat/turns'
+import type { ReasoningDisplay } from '@/app/settings/preferences/store'
 import AttachmentList from '@/components/chat/attachment/AttachmentList.vue'
 import ChatMarkdown from '@/components/chat/ChatMarkdown.vue'
 import ReasoningBlock from '@/components/chat/ReasoningBlock.vue'
@@ -27,7 +28,8 @@ const {
   presentation,
   canRegenerate = false,
   canRetry = false,
-  canEdit = false
+  canEdit = false,
+  reasoningDisplay
 } = defineProps<{
   message: UIMessage
   streaming?: boolean
@@ -38,6 +40,8 @@ const {
   canRetry?: boolean
   /** The last user message without attachments, when the chat is idle. */
   canEdit?: boolean
+  /** Overrides the reasoning display preference, for a surface that always shows it. */
+  reasoningDisplay?: ReasoningDisplay
 }>()
 const emit = defineEmits<{ regenerate: []; revert: []; restore: []; edit: [text: string] }>()
 const editing = ref(false)
@@ -82,7 +86,15 @@ async function copyResponse(): Promise<void> {
 
 // The AI SDK updates parts in place and replaces only the message, so copy each part for
 // the cards' computed state to see the new values.
-const reverted = computed(() => revertOf(message) !== null)
+const undo = computed(() => undoOf(message))
+const undoneCalls = computed(() => new Set(undo.value?.undone))
+const reverted = computed(
+  () =>
+    !!undo.value &&
+    undo.value.edits.length > 0 &&
+    undoneCalls.value.size === undo.value.edits.length
+)
+const stopped = computed(() => wasStopped(message))
 // A request that failed once its reply had started leaves the reply without content.
 const empty = computed(() => message.parts.every((part) => part.type === 'step-start'))
 const groups = computed(() => groupMessageParts(message.parts.map((part) => ({ ...part }))))
@@ -113,14 +125,15 @@ function groupKey(group: MessagePartGroup): string {
             <ToolCallGroup
               v-if="group.kind === 'tools'"
               :parts="group.parts.map(({ part }) => part)"
+              :undone="undoneCalls"
             />
 
             <!-- Reasoning -->
             <ReasoningBlock
               v-else-if="isReasoningUIPart(group.part) && group.part.text"
               :text="group.part.text"
-              :display="reasoningDisplay"
-              :streaming="group.part.state === 'streaming'"
+              :display="reasoningDisplay ?? preferredReasoningDisplay"
+              :streaming="streaming && group.part.state === 'streaming'"
               :thinking-label="ai.thinking"
               :reasoning-label="ai.reasoning"
               :duration-label="(seconds) => ai.thoughtFor({ seconds })"
@@ -143,7 +156,7 @@ function groupKey(group: MessagePartGroup): string {
                 class="absolute right-1 bottom-1 opacity-0 focus-visible:opacity-100 group-hover/response:opacity-100"
                 @click="copyResponse"
               >
-                <icon-lucide-check v-if="copied" class="size-3 text-green-400" />
+                <icon-lucide-check v-if="copied" class="size-3 text-success" />
                 <icon-lucide-copy v-else class="size-3" />
               </IconButton>
             </div>
@@ -155,6 +168,9 @@ function groupKey(group: MessagePartGroup): string {
           :can-regenerate="canRegenerate"
           :empty="empty"
           :reverted="reverted"
+          :stopped="stopped"
+          :undone="undoneCalls.size"
+          :edits="undo?.edits.length ?? 0"
           @regenerate="emit('regenerate')"
           @revert="emit('revert')"
           @restore="emit('restore')"
@@ -173,7 +189,7 @@ function groupKey(group: MessagePartGroup): string {
         <div v-else class="group/request relative">
           <div
             data-test-id="chat-text-bubble"
-            class="rounded-xl rounded-br-md bg-accent px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-white"
+            class="rounded-xl rounded-br-md bg-accent px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-on-accent"
           >
             {{ userText }}
           </div>

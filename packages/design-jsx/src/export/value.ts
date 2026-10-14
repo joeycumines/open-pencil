@@ -66,3 +66,17 @@ export function valueSyntax(value: JSXValue): SyntaxNode {
   }
   return jsx.literal(value)
 }
+
+function propValue(value: JSXValue): SyntaxNode | null {
+  if (value === true) return null
+  if (typeof value === 'string') return jsx.stringValue(value)
+  return jsx.container(valueSyntax(value))
+}
+
+/**
+ * A prop as a JSX attribute: `true` prints the bare name, strings as attribute strings, and
+ * other values as expressions, with paint and effect helpers as calls.
+ */
+export function propAttribute([name, value]: JSXProp): SyntaxNode {
+  return jsx.attribute(name, propValue(value))
+}

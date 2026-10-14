@@ -3,32 +3,78 @@ import { useClipboard } from '@vueuse/core'
 import { compact } from 'es-toolkit/array'
 import { computed, ref } from 'vue'
 
-import { useAutomationMessages } from '@open-pencil/vue'
+import { useAutomationMessages, useI18n } from '@open-pencil/vue'
 
+import { mcpServerSetupView, type MCPServerSetupState } from '@/app/ai/agents/setup'
 import {
-  MCP_INSTALL_TARGET,
+  restartFixesMCPFailure,
   type MCPFailure,
   type MCPFailureCode
 } from '@/app/automation/mcp/failure'
-import { toast } from '@/app/shell/ui'
+import { mcpServerSetupPrompt, needsMCPInstall } from '@/app/automation/mcp/setup-prompt'
+import { APP_VERSION } from '@/app/runtime/version'
+import { useSetupProblemMessage } from '@/components/settings/agents/problem'
+import SettingsLink from '@/components/settings/layout/SettingsLink.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppCollapsible from '@/components/ui/collapsible/AppCollapsible.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
+import AppCopyField from '@/components/ui/input/AppCopyField.vue'
+import { NODE_DOWNLOAD_URL } from '@/constants'
 
+/** Where one-click installation is unavailable, only the manual fallback applies. */
+const MANUAL_SETUP: MCPServerSetupState = {
+  supported: false,
+  checked: true,
+  bridge: false,
+  bridgeOutdated: false,
+  bridgeCommand: '',
+  npm: false,
+  installingBridge: false,
+  error: null
+}
+
+// The alert carries the fix: install or update, or restart where that is what fixes it; the
+// section header hides its own Restart while the alert offers one.
 const {
   failure,
+  setup,
   restarting = false,
   externallyManaged = false
 } = defineProps<{
   failure: MCPFailure
+  /** The MCP server's install state, for one-click installation on the desktop. */
+  setup?: MCPServerSetupState
   restarting?: boolean
   externallyManaged?: boolean
 }>()
-const emit = defineEmits<{ restart: [] }>()
+const emit = defineEmits<{ install: []; restart: []; check: [] }>()
+const restartFixes = computed(() => restartFixesMCPFailure(failure))
 
 const automation = useAutomationMessages()
-const { copy } = useClipboard()
+const { ai, common } = useI18n()
+const setupProblemMessage = useSetupProblemMessage()
+const { copy: copyDetailsText, copied: detailsCopied } = useClipboard({ copiedDuring: 1500 })
+const { copy: copyPrompt, copied: promptCopied } = useClipboard({ copiedDuring: 1500 })
 const detailsOpen = ref(false)
+
+/** One-click install or update first; a command and an agent prompt only where it cannot help. */
+const installView = computed(() =>
+  needsMCPInstall(failure) ? mcpServerSetupView(setup ?? MANUAL_SETUP) : null
+)
+const installAction = computed(() => {
+  const bridge = installView.value?.bridge
+  if (!bridge?.action) return null
+  if (bridge.installing) {
+    return bridge.action === 'update'
+      ? automation.value.mcpUpdating
+      : ai.value.aiSetupAgentInstalling
+  }
+  return bridge.action === 'update'
+    ? ai.value.aiSetupAgentUpdateMCP
+    : ai.value.aiSetupAgentInstallMCP
+})
+const problem = computed(() => installView.value?.problem ?? null)
+const manualCommand = computed(() => installView.value?.manualCommand ?? null)
 
 /** Translated copy for each reason; the technical detail stays secondary. */
 const copy$ = computed(() => {
@@ -36,7 +82,14 @@ const copy$ = computed(() => {
   const map: Record<MCPFailureCode, { heading: string; description: string }> = {
     'not-installed': {
       heading: messages.mcpFailureNotInstalled,
-      description: messages.mcpFailureNotInstalledHint({ package: MCP_INSTALL_TARGET })
+      description: messages.mcpFailureNotInstalledHint
+    },
+    outdated: {
+      heading: messages.mcpFailureOutdated,
+      description: messages.mcpFailureOutdatedHint({
+        running: failure.detail ? `v${failure.detail}` : 'an older version',
+        version: `v${APP_VERSION}`
+      })
     },
     'permission-denied': {
       heading: messages.mcpFailurePermission,
@@ -67,7 +120,11 @@ const copy$ = computed(() => {
  * Reasons whose cause already appears in the guidance, so repeating the same
  * value under Details would only add noise.
  */
-const EXPLAINED_REASONS: ReadonlySet<MCPFailureCode> = new Set(['rejected', 'unreachable'])
+const EXPLAINED_REASONS: ReadonlySet<MCPFailureCode> = new Set([
+  'outdated',
+  'rejected',
+  'unreachable'
+])
 
 const detail = computed(() =>
   EXPLAINED_REASONS.has(failure.code) ? null : failure.detail?.trim() || null
@@ -78,10 +135,7 @@ async function copyDetails(): Promise<void> {
     `code=${failure.code}`,
     failure.detail ? `detail=${failure.detail}` : null
   ]).join('\n')
-  // VueUse falls back to a legacy write and never rejects, so awaiting the write
-  // is what keeps the confirmation honest.
-  await copy(payload)
-  toast.info(automation.value.mcpFailureCopied)
+  await copyDetailsText(payload)
 }
 </script>
 
@@ -92,31 +146,89 @@ async function copyDetails(): Promise<void> {
     :description="copy$.description"
     data-test-id="settings-mcp-failure"
   >
-    <template v-if="detail" #details>
-      <AppCollapsible
-        v-model:open="detailsOpen"
-        :label="automation.mcpFailureDetails"
-        :ui="{ trigger: 'text-muted hover:text-surface', content: 'mt-1' }"
-        data-test-id="settings-mcp-failure-details"
-      >
-        <pre
-          class="max-h-40 overflow-auto rounded border border-border bg-input p-2 font-mono text-[11px] whitespace-pre-wrap text-muted"
-          data-test-id="settings-mcp-failure-detail"
-          >{{ detail }}</pre>
-      </AppCollapsible>
+    <template v-if="problem || manualCommand || detail" #details>
+      <!-- Guidance reads like the description; only the heading carries the error colour. -->
+      <div class="flex flex-col gap-2 leading-relaxed text-surface">
+        <p v-if="problem" data-test-id="settings-mcp-install-problem">
+          {{ setupProblemMessage(problem) }}
+          <SettingsLink v-if="problem === 'needs-npm'" :href="NODE_DOWNLOAD_URL"
+            >Node.js</SettingsLink
+          >
+        </p>
+        <template v-if="manualCommand">
+          <p>{{ automation.mcpInstallByHand }}</p>
+          <AppCopyField
+            :value="manualCommand"
+            :copy-label="common.copy"
+            :copied-label="common.copied"
+            data-test-id="settings-mcp-install-command"
+          />
+        </template>
+        <AppCollapsible
+          v-if="detail"
+          v-model:open="detailsOpen"
+          :label="automation.mcpFailureDetails"
+          :ui="{ trigger: 'text-muted hover:text-surface', content: 'mt-1' }"
+          data-test-id="settings-mcp-failure-details"
+        >
+          <pre
+            class="max-h-40 overflow-auto rounded border border-border bg-input p-2 font-mono text-[11px] whitespace-pre-wrap text-muted"
+            data-test-id="settings-mcp-failure-detail"
+            >{{ detail }}</pre>
+        </AppCollapsible>
+      </div>
     </template>
     <template #actions>
-      <AppButton size="xs" variant="outline" @click="copyDetails">{{
-        automation.mcpFailureCopy
-      }}</AppButton>
       <AppButton
+        v-if="installAction"
         size="xs"
-        variant="outline"
+        color="primary"
+        variant="solid"
+        :loading="installView?.bridge.installing"
+        data-test-id="settings-mcp-install"
+        @click="emit('install')"
+        >{{ installAction }}</AppButton
+      >
+      <AppButton
+        v-if="manualCommand"
+        size="xs"
+        :color="installAction ? 'neutral' : 'primary'"
+        :variant="installAction ? 'outline' : 'solid'"
+        data-test-id="settings-mcp-copy-agent-prompt"
+        @click="copyPrompt(mcpServerSetupPrompt(failure, manualCommand))"
+      >
+        <template #leading>
+          <icon-lucide-check v-if="promptCopied" class="size-3" />
+          <icon-lucide-copy v-else class="size-3" />
+        </template>
+        {{ promptCopied ? common.copied : automation.mcpCopyAgentPrompt }}
+      </AppButton>
+      <AppButton
+        v-if="restartFixes"
+        size="xs"
+        color="primary"
+        variant="solid"
         :disabled="externallyManaged"
         :loading="restarting"
+        data-test-id="settings-mcp-restart"
         @click="emit('restart')"
         >{{ externallyManaged ? automation.externallyManaged : automation.restart }}</AppButton
       >
+      <AppButton
+        v-if="problem === 'needs-npm'"
+        size="xs"
+        variant="outline"
+        data-test-id="settings-mcp-check-again"
+        @click="emit('check')"
+        >{{ ai.aiSetupAgentCheckAgain }}</AppButton
+      >
+      <AppButton size="xs" variant="outline" @click="copyDetails">
+        <template #leading>
+          <icon-lucide-check v-if="detailsCopied" class="size-3" />
+          <icon-lucide-copy v-else class="size-3" />
+        </template>
+        {{ detailsCopied ? common.copied : automation.mcpFailureCopy }}
+      </AppButton>
     </template>
   </AppAlert>
 </template>

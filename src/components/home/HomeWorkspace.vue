@@ -18,6 +18,7 @@ import {
   recentFiles,
   type RecentDocument
 } from '@/app/recent-files'
+import { useCredentialSettings } from '@/app/settings/credentials/preferences/use'
 import { openSettingsDialog } from '@/app/settings/dialog'
 import { openFileFromPath } from '@/app/shell/menu/use'
 import { createStorageWorkspaceSource } from '@/app/storage/workspace/source'
@@ -29,7 +30,7 @@ import IconButton from '@/components/ui/button/IconButton.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 
 const emit = defineEmits<{ 'new-document': [] }>()
-const { panels, locale, storage, files, common, settings } = useI18n()
+const { panels, locale, storage, files, common, settings, credentials } = useI18n()
 const { isMobile } = useViewportKind()
 const view = useLocalStorage<'grid' | 'list'>('open-pencil:home-files-view', 'grid')
 const query = ref('')
@@ -66,6 +67,12 @@ const storageWorkspace = useDocumentWorkspace<StorageDocument>({
 })
 const storageDocuments = storageWorkspace.documents
 const storageLoading = storageWorkspace.loading
+// Paused credential access has its own fix, so the card offers it instead of the raw native error.
+const credentialAccess = useCredentialSettings()
+async function retryCredentialAccess() {
+  await credentialAccess.retry()
+  if (!credentialAccess.paused.value) await storageWorkspace.refresh()
+}
 const storageError = computed(() => {
   const error = storageWorkspace.error.value
   if (error == null) return null
@@ -158,7 +165,7 @@ function formattedDate(updatedAt: string): string {
 
 <template>
   <main
-    class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-app text-surface"
+    class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-canvas text-surface"
     data-test-id="recent-files-home"
   >
     <section
@@ -166,7 +173,7 @@ function formattedDate(updatedAt: string): string {
     >
       <HomeSearchActions v-model="query" @new-document="emit('new-document')" />
 
-      <p v-if="openError" class="mb-4 text-xs text-danger" role="alert">{{ openError }}</p>
+      <p v-if="openError" class="mb-4 text-xs text-error" role="alert">{{ openError }}</p>
       <p
         v-if="noSearchMatches"
         class="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted"
@@ -290,13 +297,27 @@ function formattedDate(updatedAt: string): string {
 
         <div
           v-else-if="storageError && storageDocuments.length === 0"
-          class="rounded-lg border border-danger/40 px-4 py-6 text-center"
+          class="rounded-lg border border-error/40 px-4 py-6 text-center"
           role="alert"
         >
-          <p class="text-xs text-danger">{{ storageError }}</p>
-          <AppButton variant="outline" class="mt-3" @click="storageWorkspace.refresh">
-            {{ common.refresh }}
-          </AppButton>
+          <template v-if="credentialAccess.paused.value">
+            <p class="text-xs text-error">{{ credentials.accessPaused }}</p>
+            <AppButton
+              variant="outline"
+              class="mt-3"
+              :loading="credentialAccess.busy.value"
+              data-test-id="home-storage-retry-access"
+              @click="retryCredentialAccess"
+            >
+              {{ credentials.retryAccess }}
+            </AppButton>
+          </template>
+          <template v-else>
+            <p class="text-xs text-error">{{ storageError }}</p>
+            <AppButton variant="outline" class="mt-3" @click="storageWorkspace.refresh">
+              {{ common.refresh }}
+            </AppButton>
+          </template>
         </div>
 
         <div

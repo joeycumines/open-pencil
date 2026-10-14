@@ -1,4 +1,4 @@
-import { uniq } from 'es-toolkit/array'
+import { difference, uniq } from 'es-toolkit/array'
 import { transform } from 'sucrase'
 
 import type { SceneGraph } from '@open-pencil/scene-graph'
@@ -7,16 +7,16 @@ import { REKA_ELEMENTS } from './behaviours'
 import { designJSXHelpers } from './helpers'
 import * as React from './mini-react'
 import { renderRoots, renderTree, componentPropNames, type RenderResult } from './renderer'
-import { DESIGN_JSX_SUPPORTED_PROPERTIES } from './schema'
+import {
+  DESIGN_JSX_PARAGRAPH_PROPERTY_NAMES,
+  DESIGN_JSX_SPAN_PROPERTY_NAMES,
+  DESIGN_JSX_SUPPORTED_PROPERTY_NAMES,
+  DESIGN_JSX_TEXT_PARAGRAPH_PROPERTY_NAMES
+} from './schema'
 import type { DesignJSXServices } from './services'
+import { PARAGRAPH, SPAN, TEXT_CONTENT_NAMES } from './text-content'
 import { isTreeNode, resolveToTree, type TreeNode } from './tree'
 import type { RenderOptions as RenderJSXOptions } from './types'
-
-/**
- * Build a component function from a JSX string using sucrase.
- * Works in both Node/Bun and the browser (no native bindings).
- */
-const SUPPORTED_PROPS = DESIGN_JSX_SUPPORTED_PROPERTIES
 
 /** `const Switch = { Root: 'Switch.Root', … }`: each Reka namespace as element types. */
 const REKA_ALIASES = Object.entries(REKA_ELEMENTS)
@@ -38,19 +38,36 @@ function unsupportedPropWarnings(graph: SceneGraph, tree: TreeNode): string[] {
   return warnings
 }
 
-const SVG_ROOT_PROPS = new Set([...SUPPORTED_PROPS, 'viewBox', 'body'])
+// Paragraph props describe a paragraph of a text, never a layer, unless a text sets them too.
+const LAYER_PROPS = new Set<string>(
+  difference(
+    DESIGN_JSX_SUPPORTED_PROPERTY_NAMES,
+    difference(DESIGN_JSX_PARAGRAPH_PROPERTY_NAMES, DESIGN_JSX_TEXT_PARAGRAPH_PROPERTY_NAMES)
+  )
+)
+const SVG_ROOT_PROPS = new Set([...LAYER_PROPS, 'viewBox', 'body'])
+const PARAGRAPH_PROPS = new Set<string>(['key', ...DESIGN_JSX_PARAGRAPH_PROPERTY_NAMES])
+const SPAN_PROPS = new Set<string>(['key', ...DESIGN_JSX_SPAN_PROPERTY_NAMES])
+
+function supportedProps(type: string): ReadonlySet<string> {
+  if (type === 'svg') return SVG_ROOT_PROPS
+  if (type === SPAN) return SPAN_PROPS
+  if (type === PARAGRAPH) return PARAGRAPH_PROPS
+  return LAYER_PROPS
+}
 
 function collectUnsupportedPropWarnings(
   graph: SceneGraph,
   tree: TreeNode,
   warnings: string[]
 ): void {
-  const supportedProps = tree.type === 'svg' ? SVG_ROOT_PROPS : SUPPORTED_PROPS
+  const supported = supportedProps(tree.type)
   // An instance sets its component's properties by name, such as `State="On"` or `Title="Hi"`.
   const properties = componentPropNames(graph, tree.props)
   for (const key of Object.keys(tree.props)) {
-    if (!supportedProps.has(key) && !properties.includes(key)) {
-      warnings.push(`Unsupported prop "${key}" on <${tree.type}> is ignored.`)
+    if (!supported.has(key) && !properties.includes(key)) {
+      const element = TEXT_CONTENT_NAMES[tree.type] ?? tree.type
+      warnings.push(`Unsupported prop "${key}" on <${element}> is ignored.`)
     }
   }
 
@@ -62,6 +79,10 @@ function collectUnsupportedPropWarnings(
   }
 }
 
+/**
+ * Build a component function from a JSX string using sucrase.
+ * Works in both Node/Bun and the browser (no native bindings).
+ */
 export function buildComponent(jsxString: string, warnings: string[] = []): React.ComponentType {
   const trimmed = stripHTMLComments(jsxString).trim()
 
@@ -72,6 +93,7 @@ export function buildComponent(jsxString: string, warnings: string[] = []): Reac
     const Line = 'line', Star = 'star', Polygon = 'polygon', Vector = 'vector'
     const Group = 'group', Section = 'section', View = 'frame', Rect = 'rectangle'
     const Component = 'component', ComponentSet = 'component-set', Instance = 'instance'
+    const Span = 'text-span', Paragraph = 'text-paragraph'
     const Icon = 'icon'
     const svg = 'svg'
     ${REKA_ALIASES}
@@ -81,6 +103,7 @@ export function buildComponent(jsxString: string, warnings: string[] = []): Reac
     const backgroundBlur = __helpers.backgroundBlur
     const foregroundBlur = __helpers.foregroundBlur
     const solid = __helpers.solid
+    const shader = __helpers.shader
     const gradient = __helpers.gradient
     const linearGradient = __helpers.linearGradient
     const radialGradient = __helpers.radialGradient
@@ -102,17 +125,37 @@ export function buildComponent(jsxString: string, warnings: string[] = []): Reac
   }
 
   let code: string
+  let siblings = false
   try {
     code = transform(`${aliases}\nreturn function __render() { return ${trimmed} }`, opts).code
   } catch {
+    siblings = true
     code = transform(`${aliases}\nreturn function __render() { return <>${trimmed}</> }`, opts).code
   }
 
   // eslint-disable-next-line typescript-eslint/no-implied-eval -- sucrase output must be evaluated at runtime
-  return new Function('React', '__helpers', code)(
+  const component = new Function('React', '__helpers', code)(
     React,
     designJSXHelpers(warnings)
   ) as React.ComponentType
+  if (!siblings) return component
+  // Siblings are wrapped in a fragment, where a statement such as `const` is only text, so a
+  // name it meant to declare is undefined where the JSX uses it. An undefined name can also
+  // be a plain mistake, so the hint says when it applies.
+  return (props) => {
+    try {
+      return component(props)
+    } catch (error) {
+      if (!(error instanceof ReferenceError)) throw error
+      throw new Error(
+        `${error.message}. If a statement before the JSX, such as \`const\`, declares it, ` +
+          'that statement does not run: a JSX string is one expression. Compute values inside ' +
+          'it instead, for example ' +
+          '`{(() => { const days = […]; return days.map((day) => <Text>{day}</Text>) })()}`.',
+        { cause: error }
+      )
+    }
+  }
 }
 
 /**

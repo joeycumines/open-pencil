@@ -38,6 +38,19 @@ describe('JSX text', () => {
   )
 })
 
+describe('JSX inline text', () => {
+  test('keeps spaces at its ends, which JSX keeps on one line', () => {
+    const span = jsx.element('Span', [], [jsx.inlineText('b')], 0, true)
+    expect(card([], [jsx.inlineText(' a '), span, jsx.inlineText(' ')])).toBe(
+      '<Card> a <Span>b</Span> </Card>'
+    )
+  })
+
+  test.each(['{braces}', 'a & b', 'one\ntwo', ''])('writes %p as a string expression', (value) => {
+    expect(card([], [jsx.inlineText(value)])).toBe(`<Card>{${JSON.stringify(value)}}</Card>`)
+  })
+})
+
 describe('JSX elements', () => {
   test('put children on indented lines', () => {
     const child = jsx.element('Item', [], [], 1)

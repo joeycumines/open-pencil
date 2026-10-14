@@ -53,6 +53,73 @@ describe('local agent discovery', () => {
     expect(discovery.error.value).toBeNull()
   })
 
+  test('updates a server installed with Bun through Bun, even without npm', async () => {
+    let version = '0.15.1'
+    const installBridge = mock(async () => {
+      version = '0.0.0-test'
+    })
+    const discovery = createAgentDiscovery({
+      enabled: true,
+      lookup: async () => ({
+        searchPath: '/home/test/.bun/bin',
+        versions: { '@open-pencil/mcp': version },
+        executables: {
+          bun: '/home/test/.bun/bin/bun',
+          'openpencil-mcp-http': '/home/test/.bun/bin/openpencil-mcp-http'
+        }
+      }),
+      install: async () => undefined,
+      installBridge,
+      restartBridge: async () => undefined
+    })
+    await discovery.refresh()
+    expect(discovery.canvasBridgeOutdated.value).toBe(true)
+    await discovery.setupCanvasBridge()
+    // npm would install beside the Bun copy, which stays first on PATH.
+    expect(installBridge).toHaveBeenCalledWith('/home/test/.bun/bin', 'bun')
+    expect(discovery.error.value).toBeNull()
+  })
+
+  test('installs a new server with Bun when npm would need administrator rights', async () => {
+    const installBridge = mock(async () => undefined)
+    const discovery = createAgentDiscovery({
+      enabled: true,
+      lookup: async () => ({
+        ...lookup('npm', 'bun'),
+        npmGlobalWritable: false
+      }),
+      install: async () => undefined,
+      installBridge,
+      restartBridge: async () => undefined
+    })
+    await discovery.refresh()
+    expect(discovery.canvasBridgeNeedsAdmin.value).toBe(false)
+    await discovery.setupCanvasBridge()
+    expect(installBridge).toHaveBeenCalledWith('/test/bin', 'bun')
+  })
+
+  test('never runs an npm install that needs administrator rights', async () => {
+    const installBridge = mock(async () => undefined)
+    const install = mock(async () => undefined)
+    const discovery = createAgentDiscovery({
+      enabled: true,
+      lookup: async () => ({ ...lookup('npm', 'claude'), npmGlobalWritable: false }),
+      install,
+      installBridge,
+      restartBridge: async () => undefined
+    })
+    await discovery.refresh()
+    expect(discovery.canvasBridgeNeedsAdmin.value).toBe(true)
+    // Outside Windows the command an administrator runs goes through sudo.
+    expect(discovery.canvasBridgeCommand.value).toStartWith('sudo npm i -g @open-pencil/mcp@')
+    await discovery.setupCanvasBridge()
+    expect(installBridge).not.toHaveBeenCalled()
+    expect(discovery.error.value).toBe('npm-admin')
+    await discovery.install('claude-code')
+    expect(install).not.toHaveBeenCalled()
+    expect(discovery.error.value).toBe('npm-admin')
+  })
+
   test('retries bridge startup without reinstalling a successfully installed companion', async () => {
     const installBridge = mock(async () => undefined)
     const restartBridge = mock(async (): Promise<void> => {
@@ -206,7 +273,7 @@ describe('Harness companion setup', () => {
     await discovery.refresh()
     expect(discovery.harnessAvailable.value).toBe(false)
     await discovery.setupHarness()
-    expect(installHarness).toHaveBeenCalledWith('/test/bin')
+    expect(installHarness).toHaveBeenCalledWith('/test/bin', 'npm')
     expect(discovery.harnessAvailable.value).toBe(true)
     expect(discovery.error.value).toBeNull()
   })
@@ -233,7 +300,7 @@ describe('Harness companion setup', () => {
     expect(discovery.error.value).toBeNull()
   })
 
-  test('reports an update that left the old MCP server first on the path', async () => {
+  test('never updates a Bun copy through npm, which would leave it first on the path', async () => {
     const installBridge = mock(async () => undefined)
     const restartBridge = mock(async () => undefined)
     const discovery = createAgentDiscovery({
@@ -248,9 +315,11 @@ describe('Harness companion setup', () => {
       restartBridge
     })
     await discovery.refresh()
+    // The app cannot find Bun, but the person's terminal may; the command keeps Bun.
     expect(discovery.canvasBridgeCommand.value).toStartWith('bun add -g @open-pencil/mcp@')
+    expect(discovery.canvasBridgeInstallable.value).toBe(false)
     await discovery.setupCanvasBridge()
-    expect(installBridge).toHaveBeenCalledTimes(1)
+    expect(installBridge).not.toHaveBeenCalled()
     expect(restartBridge).not.toHaveBeenCalled()
     expect(discovery.error.value).toBe('canvas-install')
   })

@@ -20,12 +20,18 @@ import type { BuiltinIOFormatId } from '@open-pencil/core/io'
 import type { CommandPaletteGroup, CommandPaletteItem, MenuEntry } from '@open-pencil/vue'
 import { shortcutPlatform, useEditorCommands, useI18n } from '@open-pencil/vue'
 
+import { openTour } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
 import { openVariablesDialog } from '@/app/editor/tokens/dialog'
 import { openSettingsDialog } from '@/app/settings/dialog'
-import { setDesignIssuesOnCanvas, setSnappingPreference } from '@/app/settings/preferences/apply'
+import {
+  setCommentsOnCanvas,
+  setDesignIssuesOnCanvas,
+  setSnappingPreference
+} from '@/app/settings/preferences/apply'
 import { appPreferences } from '@/app/settings/preferences/store'
-import { createSharedEditorMenuActions } from '@/app/shell/menu/editor-actions'
+import { createSharedEditorMenuActions } from '@/app/shell/menu/actions/editor'
+import { createSelectionMenuActions } from '@/app/shell/menu/actions/selection'
 import { openStorageWorkspace } from '@/app/shell/menu/navigation'
 import type {
   AppMenuActionItem,
@@ -34,7 +40,6 @@ import type {
   AppMenuIcon
 } from '@/app/shell/menu/schema'
 import { APP_MENU_SCHEMA } from '@/app/shell/menu/schema'
-import { createSelectionMenuActions } from '@/app/shell/menu/selection-actions'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { useAppTheme } from '@/app/shell/theme'
@@ -99,6 +104,7 @@ export function useAppMenu() {
     new: 'new',
     open: 'open',
     'open-storage-workspace': 'openStorageWorkspace',
+    'open-tour': 'openTour',
     save: 'save',
     'save-as': 'saveAs',
     'save-to-storage': 'saveToStorage',
@@ -120,6 +126,7 @@ export function useAppMenu() {
     'view-pixel-grid': 'pixelGrid',
     'view-multiplayer-cursors': 'multiplayerCursors',
     'view-design-issues': 'designIssues',
+    'view-comments': 'comments',
     'snap-geometry': 'snapToGeometry',
     'snap-objects': 'snapToObjects',
     'snap-pixel-grid': 'snapToPixelGrid',
@@ -165,6 +172,9 @@ export function useAppMenu() {
     },
     open: () => void openFileDialog(),
     'open-storage-workspace': () => openStorageWorkspace(router),
+    'open-tour': () => {
+      openTour().catch((error: unknown) => console.error('[Tour] Could not open the tour:', error))
+    },
     save: () => void store.saveFigFile(),
     'save-as': () => void store.saveFigFileAs(),
     'save-to-storage': () => void saveDocumentToStorage(store),
@@ -203,6 +213,8 @@ export function useAppMenu() {
         return store.state.showRemoteCursors
       case 'view-design-issues':
         return appPreferences.value.designCheck.showOnCanvas
+      case 'view-comments':
+        return appPreferences.value.comments.showOnCanvas
       case 'snap-geometry':
         return store.state.snappingPreferences.geometry
       case 'snap-objects':
@@ -242,6 +254,8 @@ export function useAppMenu() {
         }
       case 'view-design-issues':
         return (value: boolean) => setDesignIssuesOnCanvas(value)
+      case 'view-comments':
+        return (value: boolean) => setCommentsOnCanvas(value)
       case 'snap-geometry':
         return (value: boolean) => setSnappingPreference('geometry', value)
       case 'snap-objects':

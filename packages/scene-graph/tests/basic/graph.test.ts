@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { generateId, SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { expectDefined, getNodeOrThrow } from '../helpers/assert'
 import { pageId, rect } from './helpers'
@@ -17,10 +17,10 @@ describe('SceneGraph', () => {
   })
 
   test('create node skips imported ids that collide with the local generator', () => {
-    const graph = new SceneGraph()
+    let nextId = 1
+    const graph = new SceneGraph(() => `0:${nextId++}`)
     const page = pageId(graph)
-    const probe = generateId()
-    const nextLocalId = `0:${Number(probe.split(':')[1]) + 1}`
+    const nextLocalId = `0:${nextId}`
     const imported = graph.createNode('RECTANGLE', page, {
       id: nextLocalId,
       name: 'Imported node'
@@ -274,6 +274,17 @@ describe('SceneGraph', () => {
     expect(graph.isDescendant(second.id, pageId(graph))).toBe(false)
     expect(graph.closest(second.id, (node) => node.type === 'CANVAS')).toBeUndefined()
     expect(graph.closest(second.id, (node) => node.id === first.id)).toBe(first)
+  })
+
+  test('pageOf finds the page a node is on', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const frame = graph.createNode('FRAME', page, { name: 'Frame' })
+    const nested = graph.createNode('RECTANGLE', frame.id, { name: 'Nested' })
+    expect(graph.pageOf(nested.id)).toBe(page)
+    expect(graph.pageOf(page)).toBe(page)
+    expect(graph.pageOf(graph.rootId)).toBeNull()
+    expect(graph.pageOf('missing')).toBeNull()
   })
 
   test('children order', () => {

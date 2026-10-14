@@ -7,6 +7,7 @@ import type {
   VectorVertex
 } from '@open-pencil/scene-graph'
 import { polygonVertices } from '@open-pencil/scene-graph/geometry'
+import { polygonOutline } from '@open-pencil/scene-graph/polygon'
 
 import { nodeHasRadius } from '#core/canvas/shapes'
 
@@ -217,14 +218,32 @@ export function vectorNetworkToSVGPaths(
 ): string[] {
   const { vertices, segments, regions } = network
 
-  if (regions.length > 0) {
-    return regions.map((region) =>
-      region.loops.map((loop) => traceOrderedSegments(loop, segments, vertices, decimals)).join('')
-    )
+  if (regions.length === 0) {
+    const path = unfilledSegmentsToPath(network, decimals)
+    return path ? [path] : []
   }
+  const paths = regions.map((region) =>
+    region.loops.map((loop) => traceOrderedSegments(loop, segments, vertices, decimals)).join('')
+  )
+  // Segments no region encloses, such as an icon's open strokes beside its filled shapes,
+  // draw as open paths after the regions.
+  const enclosed = new Set(regions.flatMap((region) => region.loops.flat()))
+  const open = segments.filter((_, index) => !enclosed.has(index))
+  const loose =
+    open.length > 0 && unfilledSegmentsToPath({ vertices, segments: open, regions: [] }, decimals)
+  return loose ? [...paths, loose] : paths
+}
 
-  const path = unfilledSegmentsToPath(network, decimals)
-  return path ? [path] : []
+/** The outline of a polygon or star whose corners are rounded, as path data. */
+export function roundedPolygonPath(node: SceneNode): string {
+  return polygonOutline(node)
+    .map((command) => {
+      if (command.type === 'Z') return 'Z'
+      if (command.type === 'C')
+        return `C${[command.x1, command.y1, command.x2, command.y2, command.x, command.y].map(round).join(' ')}`
+      return `${command.type}${round(command.x)} ${round(command.y)}`
+    })
+    .join('')
 }
 
 export function makePolygonPoints(node: SceneNode): string {

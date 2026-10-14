@@ -1,3 +1,4 @@
+import { pick } from 'es-toolkit'
 import { isValid, toUint8Array } from 'js-base64'
 
 import {
@@ -21,6 +22,16 @@ import {
   inheritedTextStyle,
   type ParentFlow
 } from './flow'
+import {
+  blockRichText,
+  characterStyleFromCSS,
+  elementLink,
+  holdsTextBlocks,
+  inlineRichText,
+  isInlineContent,
+  applyParagraphs,
+  type CSSCharacterStyle
+} from './text'
 
 const DOM_CSS_PLUGIN_ID = 'open-pencil-dom-css'
 const IMAGE_SOURCE_URL_KEY = 'image-source-url'
@@ -169,13 +180,6 @@ function applyCornerRadii(node: SceneNode, style: DesignStyleDeclaration): void 
     node.bottomRightRadius,
     node.bottomLeftRadius
   ].some((radius) => radius !== fallback)
-}
-
-function textCaseFromCSS(value: string | undefined): SceneNode['textCase'] {
-  if (value === 'uppercase') return 'UPPER'
-  if (value === 'lowercase') return 'LOWER'
-  if (value === 'capitalize') return 'TITLE'
-  return 'ORIGINAL'
 }
 
 function applyFlexGap(node: SceneNode, style: DesignStyleDeclaration): void {
@@ -338,24 +342,27 @@ function applyElementStyle(
   if (alignSelf !== 'AUTO') node.layoutAlignSelf = alignSelf
 }
 
+const CHARACTER_FIELDS = [
+  'fontFamily',
+  'fontSize',
+  'fontWeight',
+  'italic',
+  'letterSpacing',
+  'lineHeight',
+  'fills',
+  'textDecoration',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textDecorationFills',
+  'textDecorationSkipInk',
+  'textUnderlineOffset',
+  'textCase'
+] as const satisfies readonly (keyof CSSCharacterStyle)[]
+
 function applyTextStyle(node: SceneNode, style: DesignStyleDeclaration): void {
   setNodeBox(node, style)
   applyPositioning(node, style)
-
-  const fills = fillsFromStyle(style, 'color')
-  if (fills.length > 0) node.fills = fills
-
-  const fontSize = parseCSSNumber(pickStyle(style, 'font-size'))
-  if (fontSize !== null) node.fontSize = fontSize
-
-  const fontWeight = parseCSSNumber(pickStyle(style, 'font-weight'))
-  if (fontWeight !== null) node.fontWeight = fontWeight
-
-  const lineHeight = parseCSSNumber(pickStyle(style, 'line-height'))
-  if (lineHeight !== null) node.lineHeight = lineHeight
-
-  const letterSpacing = parseCSSNumber(pickStyle(style, 'letter-spacing'))
-  if (letterSpacing !== null) node.letterSpacing = letterSpacing
+  Object.assign(node, characterStyleFromCSS(style, pick(node, CHARACTER_FIELDS)))
 
   const opacity = parseCSSNumber(pickStyle(style, 'opacity'))
   if (opacity !== null) node.opacity = opacity
@@ -363,25 +370,54 @@ function applyTextStyle(node: SceneNode, style: DesignStyleDeclaration): void {
   const effects = parseCSSShadows(pickStyle(style, 'text-shadow'))
   if (effects.length > 0) node.effects = effects
 
-  const fontFamily = pickStyle(style, 'font-family')
-  if (fontFamily)
-    node.fontFamily = fontFamily.split(',')[0]?.replaceAll('"', '').trim() || node.fontFamily
-
-  node.italic = pickStyle(style, 'font-style') === 'italic'
-
   const textAlign = pickStyle(style, 'text-align')?.toUpperCase()
   if (textAlign === 'CENTER' || textAlign === 'RIGHT' || textAlign === 'JUSTIFIED') {
     node.textAlignHorizontal = textAlign
   }
 
-  const textDecoration = pickStyle(style, 'text-decoration-line')
-  if (textDecoration === 'underline') node.textDecoration = 'UNDERLINE'
-  if (textDecoration === 'line-through') node.textDecoration = 'STRIKETHROUGH'
-
-  const textCase = textCaseFromCSS(pickStyle(style, 'text-transform'))
-  if (textCase !== 'ORIGINAL') node.textCase = textCase
-
   if (pickStyle(style, 'white-space') === 'nowrap') node.maxLines = 1
+}
+
+/**
+ * Text and inline elements, or blocks of text, as one text layer: spans become runs, blocks
+ * paragraphs, and lists list paragraphs, as Figma holds rich text.
+ */
+function createRichTextNode(
+  graph: SceneGraph,
+  parentId: string,
+  element: DesignElement,
+  style: DesignStyleDeclaration,
+  display: string,
+  parentFlow: ParentFlow
+): SceneNode {
+  const node = graph.createNode('TEXT', parentId, { name: 'Text' })
+  applyTextStyle(node, style)
+  const blocks = holdsTextBlocks(element, isPlainElement, isInlineElement)
+  const base = pick(node, CHARACTER_FIELDS)
+  const rich = blocks ? blockRichText(element, style, base) : inlineRichText(element, style, base)
+  node.text = rich.text
+  node.name = rich.text.slice(0, 32) || 'Text'
+  node.styleRuns = rich.styleRuns
+  if (blocks) applyParagraphs(node, rich)
+  applyFlowSizing(graph, node, style, display, parentFlow)
+  return node
+}
+
+/** Whether an element draws nothing of its own, so its text can join the text around it. */
+function isPlainElement(element: DesignElement): boolean {
+  return !hasBoxStyle(mergedStyle(element))
+}
+
+function isInlineElement(element: DesignElement): boolean {
+  const style = mergedStyle(element)
+  return elementDisplay(element, style) === 'inline' && !hasBoxStyle(style)
+}
+
+/** Whether the element's children are text in one layer: inline content, or text blocks. */
+function holdsRichText(element: DesignElement): boolean {
+  if (!element.children.some((child) => child.type === 'element')) return false
+  if (holdsTextBlocks(element, isPlainElement, isInlineElement)) return true
+  return isInlineContent(element, isInlineElement)
 }
 
 function createTextNode(
@@ -396,6 +432,14 @@ function createTextNode(
   applyTextStyle(node, style)
   applyFlowSizing(graph, node, style, display, parentFlow)
   return node
+}
+
+/** A link of text alone links all of it. */
+function linkText(node: SceneNode, element: DesignElement): void {
+  const hyperlink = elementLink(element)
+  if (hyperlink && node.text.length > 0) {
+    node.styleRuns = [{ start: 0, length: node.text.length, style: { hyperlink } }]
+  }
 }
 
 function hasBoxStyle(style: DesignStyleDeclaration): boolean {
@@ -459,7 +503,12 @@ function createElementNode(
     !hasBoxStyle(style) &&
     element.children.every((child) => child.type === 'text')
   ) {
-    return createTextNode(graph, parentId, textContent(element), style, display, parentFlow)
+    const text = createTextNode(graph, parentId, textContent(element), style, display, parentFlow)
+    linkText(text, element)
+    return text
+  }
+  if (!hasBoxStyle(style) && holdsRichText(element)) {
+    return createRichTextNode(graph, parentId, element, style, display, parentFlow)
   }
 
   const node = graph.createNode('FRAME', parentId, {
@@ -475,6 +524,13 @@ function createElementNode(
   }
   applyFlowSizing(graph, node, style, display, parentFlow)
 
+  // Blocks of text in a box's own flow are one text; a flex box's children are items.
+  if (flow !== 'flex' && holdsRichText(element)) {
+    const textStyle = inheritedTextStyle(element, style)
+    const textDisplay = flow === 'inline' ? 'inline' : 'block'
+    createRichTextNode(graph, node.id, element, textStyle, textDisplay, flow ?? 'none')
+    return node
+  }
   for (const child of element.children) {
     createDesignNode(graph, node.id, child, flow ?? 'none', inheritedTextStyle(element, style))
   }

@@ -27,6 +27,16 @@ import { renderJSX } from '@open-pencil/core/design-jsx'
 await renderJSX(graph, '<Frame w={320} p={16} bg="#FFFFFF"><Text>Hello</Text></Frame>')
 ```
 
+Inside `<Text>`, `<Span>` styles some of its characters and `<Paragraph>` writes its paragraphs and list items:
+
+```tsx
+<Text size={16}>
+  <Paragraph spacing={8}>Hello <Span weight="bold" color="#EE2222">world</Span></Paragraph>
+  <Paragraph list="ordered">First</Paragraph>
+  <Paragraph list="ordered" level={2}>Nested</Paragraph>
+</Text>
+```
+
 Components that behave as controls are written with Reka UI's element names, in TSX (import `Switch`, `Slider`, `Tabs`, and the other namespaces, typed with their behaviour props) or in strings, and export writes them back the same way:
 
 ```tsx

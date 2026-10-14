@@ -63,6 +63,8 @@ test('reads pages independently through one index with cross-page component expa
     }))
   ).toEqual([{ sourceId: '1:4', parentSourceId: '1:2', pageSourceId: '1:2' }])
   expect(reader.planComponents([page]).map((component) => component.sourceId)).toEqual(['1:4'])
+  // A component an earlier pass built is neither read again nor planned.
+  expect(reader.planComponents([page], {}, (id) => id === '1:4')).toEqual([])
   const { graph, sources } = materializeDocument(changes)
   expect(graph.getPages().map((node) => node.name)).toEqual(['Design', 'Components'])
   const componentId = sources.get('1:4')

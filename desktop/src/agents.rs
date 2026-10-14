@@ -15,6 +15,7 @@ const EXECUTABLES: &[&str] = &[
     "openpencil-mcp-http",
     "openpencil-harness",
     "npm",
+    "bun",
 ];
 
 // OpenPencil's own companions, whose installed version must match the app.
@@ -29,6 +30,9 @@ pub struct AgentLookup {
     executables: BTreeMap<String, Option<String>>,
     /// Versions OpenPencil's companions report for `--version`; `None` when one predates it.
     versions: BTreeMap<String, Option<String>>,
+    /// Whether this user can write npm's global package folder; `None` without npm or when npm
+    /// does not say where it is. A distribution's Node usually needs administrator rights there.
+    npm_global_writable: Option<bool>,
     search_path: String,
 }
 
@@ -52,9 +56,25 @@ fn parse_version(output: &str) -> Option<String> {
 /// `--help` follows so that a release older than `--version` prints its help and exits; it has
 /// no version line, which reads as outdated.
 fn companion_version(executable: &Path, search_path: &str, timeout: Duration) -> Option<String> {
+    parse_version(&run_for_output(
+        executable,
+        &["--version", "--help"],
+        search_path,
+        timeout,
+    )?)
+}
+
+/// Runs a discovered program without a window and returns what it printed, or `None` when it
+/// fails to start or outlives `timeout`.
+fn run_for_output(
+    executable: &Path,
+    args: &[&str],
+    search_path: &str,
+    timeout: Duration,
+) -> Option<String> {
     let mut command = Command::new(executable);
     command
-        .args(["--version", "--help"])
+        .args(args)
         .env("PATH", search_path)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -77,19 +97,69 @@ fn companion_version(executable: &Path, search_path: &str, timeout: Duration) ->
     }
     let mut output = String::new();
     child.stdout.take()?.read_to_string(&mut output).ok()?;
-    parse_version(&output)
+    Some(output)
+}
+
+/// The folder `npm install --global` writes packages into, below the prefix npm reports.
+fn npm_global_packages(prefix: &Path) -> PathBuf {
+    if cfg!(windows) {
+        prefix.join("node_modules")
+    } else {
+        prefix.join("lib").join("node_modules")
+    }
+}
+
+/// The closest folder that exists at or above `path`. npm creates the missing ones, so writing
+/// there is what decides whether an install can succeed.
+fn nearest_existing(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|dir| dir.is_dir())
+}
+
+/// Whether this process can create files in `dir`, checked by creating and removing one, since
+/// permission bits alone do not account for ownership, ACLs, or read-only mounts.
+fn can_write(dir: &Path) -> bool {
+    let probe = dir.join(format!(".openpencil-write-check-{}", std::process::id()));
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn npm_global_writable(npm: &Path, search_path: &str, timeout: Duration) -> Option<bool> {
+    let output = run_for_output(npm, &["prefix", "--global"], search_path, timeout)?;
+    let prefix = output.lines().next()?.trim();
+    if prefix.is_empty() {
+        return None;
+    }
+    Some(can_write(nearest_existing(&npm_global_packages(
+        Path::new(prefix),
+    ))?))
 }
 
 fn lookup_with(
     search_path: String,
     resolve: impl Fn(&str) -> Option<PathBuf>,
     version: impl Fn(&Path) -> Option<String>,
+    npm_writable: impl Fn(&Path) -> Option<bool>,
 ) -> AgentLookup {
     let resolved: BTreeMap<&str, Option<PathBuf>> = EXECUTABLES
         .iter()
         .map(|command| (*command, resolve(command)))
         .collect();
+    let npm_global_writable = resolved
+        .get("npm")
+        .cloned()
+        .flatten()
+        .and_then(|npm| npm_writable(&npm));
     AgentLookup {
+        npm_global_writable,
         executables: resolved
             .iter()
             .map(|(command, path)| {
@@ -121,6 +191,7 @@ pub async fn agent_lookup() -> Result<AgentLookup, String> {
             search_path.clone(),
             |command| which::which_in(command, Some(&search_path), &cwd).ok(),
             |executable| companion_version(executable, &search_path, VERSION_TIMEOUT),
+            |npm| npm_global_writable(npm, &search_path, VERSION_TIMEOUT),
         )
     })
     .await
@@ -142,7 +213,9 @@ mod tests {
                 _ => None,
             },
             |_| Some("0.15.1".to_owned()),
+            |_| Some(false),
         );
+        assert_eq!(result.npm_global_writable, Some(false));
         assert_eq!(
             result.executables["claude"],
             Some("/agents/bin/claude".to_owned())
@@ -153,6 +226,36 @@ mod tests {
             Some("0.15.1".to_owned())
         );
         assert_eq!(result.versions["@open-pencil/harness"], None);
+    }
+
+    #[test]
+    fn checks_npm_only_when_npm_is_found() {
+        let result = lookup_with("/bin".to_owned(), |_| None, |_| None, |_| Some(true));
+        assert_eq!(result.npm_global_writable, None);
+    }
+
+    #[test]
+    fn probes_write_access_to_the_global_package_folder() {
+        let prefix = std::env::temp_dir().join(format!("open-pencil-npm-{}", std::process::id()));
+        let packages = if cfg!(windows) {
+            prefix.join("node_modules")
+        } else {
+            prefix.join("lib").join("node_modules")
+        };
+        // A fresh user prefix has no package folder yet; npm creates it, so the prefix decides.
+        std::fs::create_dir_all(&prefix).expect("create prefix");
+        assert_eq!(npm_global_packages(&prefix), packages);
+        assert_eq!(nearest_existing(&packages), Some(prefix.as_path()));
+        std::fs::create_dir_all(&packages).expect("create package folder");
+        assert_eq!(nearest_existing(&packages), Some(packages.as_path()));
+        assert!(can_write(&packages));
+        // The probe leaves nothing behind.
+        assert_eq!(
+            std::fs::read_dir(&packages).expect("read folder").count(),
+            0
+        );
+        assert!(!can_write(&prefix.join("missing")));
+        std::fs::remove_dir_all(&prefix).expect("clean up");
     }
 
     #[test]

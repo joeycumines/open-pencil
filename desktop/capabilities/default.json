@@ -137,7 +137,19 @@
             "install",
             "--global",
             {
-              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+)$"
+              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?)$"
+            },
+            "--registry=https://registry.npmjs.org"
+          ]
+        },
+        {
+          "name": "bun",
+          "cmd": "bun",
+          "args": [
+            "add",
+            "--global",
+            {
+              "validator": "^@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?$"
             },
             "--registry=https://registry.npmjs.org"
           ]
@@ -156,7 +168,21 @@
             "install",
             "--global",
             {
-              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+)$"
+              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?)$"
+            },
+            "--registry=https://registry.npmjs.org"
+          ]
+        },
+        {
+          "name": "cmd-bun",
+          "cmd": "cmd",
+          "args": [
+            "/c",
+            "bun",
+            "add",
+            "--global",
+            {
+              "validator": "^@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?$"
             },
             "--registry=https://registry.npmjs.org"
           ]

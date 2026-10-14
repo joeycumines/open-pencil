@@ -1,5 +1,5 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
-import { pixelGridDriver } from '#tests/helpers/canvas/pixel-grid-driver'
+import { pixelGridDriver } from '#tests/helpers/canvas/pixel-grid/driver'
 
 // Figma desktop 126: the pixel grid shows once a document pixel covers 8 device pixels (800% at
 // 1×, 400% at 2×), Shift+' toggles it, and

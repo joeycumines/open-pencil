@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import { getNodeEditCapability } from '@open-pencil/core/editor'
 import { readIcon } from '@open-pencil/scene-graph'
-import { useI18n, useSelectionState, useEditorCommands } from '@open-pencil/vue'
+import { useI18n, useSceneComputed, useSelectionState, useEditorCommands } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
 import { COMPONENT_TYPES, sceneNodeIcon } from '@/app/editor/icons'
@@ -30,12 +30,15 @@ import FillSection from './properties/FillSection.vue'
 import FramePresetSelect from './properties/frame-presets/FramePresetSelect.vue'
 import FramePresetsSection from './properties/frame-presets/FramePresetsSection.vue'
 import IconSection from './properties/IconSection.vue'
+import LayerTypeMenu from './properties/LayerTypeMenu.vue'
 import LayoutGridSection from './properties/layout/guides/LayoutGridSection.vue'
 import LayoutSection from './properties/layout/LayoutSection.vue'
 import MaskSection from './properties/MaskSection.vue'
 import PageSection from './properties/PageSection.vue'
 import RetainedPanel from './properties/panel/RetainedPanel.vue'
 import PositionSection from './properties/PositionSection.vue'
+import SelectionColorsSection from './properties/selection/SelectionColorsSection.vue'
+import SelectionLayoutSection from './properties/selection/SelectionLayoutSection.vue'
 import SelectionActionsControl from './properties/SelectionActionsControl.vue'
 import StrokeSection from './properties/stroke/StrokeSection.vue'
 import TypographySection from './properties/TypographySection.vue'
@@ -73,9 +76,11 @@ function openSelectedInstanceReview() {
     initialInstanceId: instance.id
   })
 }
-const supportsLayoutGuides = computed(() => {
-  const type = node.value?.type
-  return type === 'FRAME' || type === 'COMPONENT' || type === 'COMPONENT_SET' || type === 'INSTANCE'
+const LAYOUT_GUIDE_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE'])
+// Figma offers layout guides while every selected layer is a frame.
+const supportsLayoutGuides = useSceneComputed(() => {
+  const nodes = store.getSelectedNodes()
+  return nodes.length > 0 && nodes.every((selected) => LAYOUT_GUIDE_TYPES.has(selected.type))
 })
 const { panels } = useI18n()
 </script>
@@ -100,7 +105,7 @@ const { panels } = useI18n()
         <icon-lucide-layers-3 class="size-3.5" aria-hidden="true" />
       </template>
       <span role="heading" aria-level="2">
-        {{ panels.layersCount({ count: String(multiCount) }) }}
+        {{ panels.selectedCount({ count: String(multiCount) }) }}
       </span>
       <template #actions>
         <SelectionActionsControl :show-boolean-operations="showBooleanOperations" />
@@ -109,10 +114,14 @@ const { panels } = useI18n()
     <ComponentPropertiesSection />
     <PositionSection />
     <ConstraintsSection />
+    <SelectionLayoutSection />
     <AppearanceSection />
+    <TypographySection />
     <FillSection />
     <StrokeSection />
     <EffectsSection />
+    <SelectionColorsSection />
+    <LayoutGridSection v-if="supportsLayoutGuides" />
     <ExportSection />
   </div>
 
@@ -125,7 +134,12 @@ const { panels } = useI18n()
     >
       <PanelHeader :component="isComponentType">
         <template #icon>
-          <Tip :label="node.type">
+          <LayerTypeMenu
+            v-if="node.type === 'FRAME' || node.type === 'GROUP' || node.type === 'SECTION'"
+            :node="node"
+            :icon="selectedIcon"
+          />
+          <Tip v-else :label="node.type">
             <span role="img" :aria-label="node.type" class="contents">
               <component :is="selectedIcon" class="size-3.5" />
             </span>
@@ -200,8 +214,9 @@ const { panels } = useI18n()
       <TypographySection v-if="node.type === 'TEXT'" />
       <FillSection />
       <StrokeSection />
-      <LayoutGridSection v-if="supportsLayoutGuides" />
       <EffectsSection />
+      <SelectionColorsSection />
+      <LayoutGridSection v-if="supportsLayoutGuides" />
 
       <ExportSection />
     </div>

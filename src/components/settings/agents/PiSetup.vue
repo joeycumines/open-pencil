@@ -9,7 +9,7 @@ import SettingsLink from '@/components/settings/layout/SettingsLink.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 import AppCopyField from '@/components/ui/input/AppCopyField.vue'
-import { NODE_DOWNLOAD_URL } from '@/constants'
+import { NODE_DOWNLOAD_URL, PI_GUIDE_URL } from '@/constants'
 import theme from '@/theme/settings/agents'
 
 import AgentSetupItem from './AgentSetupItem.vue'
@@ -41,7 +41,10 @@ function actionLabel(
 </script>
 
 <template>
-  <p :class="styles.help()">{{ ai.aiSetupPiDescription }}</p>
+  <p :class="styles.help()">
+    {{ ai.aiSetupPiDescription }}
+    <SettingsLink :href="PI_GUIDE_URL">{{ common.learnMore }}</SettingsLink>
+  </p>
 
   <p v-if="setup.scanning && !setup.checked" role="status" :class="styles.status()">
     <icon-lucide-loader-2 :class="styles.spinner()" aria-hidden="true" />

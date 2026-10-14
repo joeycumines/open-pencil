@@ -6,7 +6,7 @@
     "#release/*": "./src/*.ts"
   },
   "scripts": {
-    "check-changelog": "bun src/check-changelog.ts",
+    "check-changelog": "bun src/changelog/check.ts ../../..",
     "build": "bun src/cli.ts build",
     "prepare-publish-dirs": "bun src/cli.ts prepare",
     "pack": "bun src/cli.ts pack",

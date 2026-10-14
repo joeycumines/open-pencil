@@ -23,11 +23,16 @@ export type { PresentationColorSpace } from '#vue/canvas/surface/color-space'
 export { useCanvas } from '#vue/canvas/surface/use'
 export type { UseCanvasOptions } from '#vue/canvas/surface/use'
 export { useCanvasInput } from '#vue/canvas/useCanvasInput'
+export {
+  autoLayoutValueAnchor,
+  type AutoLayoutValueField
+} from '#vue/shared/input/auto-layout-hover'
 export { useCanvasIssueMarkers } from '#vue/canvas/issues/use'
 export type { CanvasIssueMarkerOptions } from '#vue/canvas/issues/use'
 export type { CanvasLabelEdit, CanvasLabelKind } from '#vue/canvas/labels/edit'
 export { useCanvasVirtualReference } from '#vue/canvas/overlays/useCanvasVirtualReference'
 export { useTextEdit } from '#vue/canvas/text-edit/use'
+export { isCanvasTextInput } from '#vue/canvas/text-edit/textarea'
 export {
   useCanvasDrop,
   extractImageFilesFromClipboard,
@@ -75,6 +80,7 @@ export type {
   FlatReorderAxis,
   FlatReorderInstruction,
   FlatReorderItem,
+  FlatReorderOperations,
   UseFlatReorderDragOptions
 } from '#vue/shared/drag/useFlatReorderDrag'
 export { useInlineRename } from '#vue/editor/inline-rename/use'
@@ -102,8 +108,22 @@ export type { TestId } from '#vue/testing/test-id'
 /** Property-panel composables. */
 export { usePosition } from '#vue/controls/position/use'
 export { useLayout } from '#vue/controls/layout/use'
+export { useSelectionColors } from '#vue/controls/selection-colors/use'
+export {
+  LAYOUT_CONTAINER_TYPES,
+  textResizeMode,
+  useSelectionLayout
+} from '#vue/controls/selection-layout/use'
+export type { TextResizeMode } from '#vue/controls/selection-layout/use'
 export type { LayoutAxis, SizeLimitProp } from '#vue/controls/layout/helpers'
 export { useAppearance } from '#vue/controls/appearance/use'
+export { useVariableModes } from '#vue/controls/variable-modes/use'
+export {
+  setVariableMode,
+  variableModeChoices,
+  type VariableModeChoice,
+  type VariableModeOption
+} from '#vue/controls/variable-modes/helpers'
 export { useMask } from '#vue/controls/mask/use'
 export { useIcon } from '#vue/controls/icon/use'
 export { useIconSearch } from '#vue/controls/icon/search'
@@ -118,6 +138,21 @@ export type {
 export { useExport } from '#vue/document/export/use'
 export type { ExportFormatId, ExportFormatOption, ExportSetting } from '#vue/document/export/use'
 export { useFillControls } from '#vue/controls/fill/use'
+export { canDrawShaders, createShaderRasterizer } from '#vue/canvas/surface/shader/rasterizer'
+export {
+  addShaderEffect,
+  DEFAULT_SHADER_EFFECT,
+  DEFAULT_SHADER_PRESET,
+  loadShaderCatalog,
+  moveShaderEffect,
+  parseShaderPreset,
+  removeShaderEffect,
+  setShaderEffectProp,
+  shaderEffectLabel,
+  shaderEffectPreview,
+  shaderPresetJSON
+} from '#vue/controls/shader'
+export type { ShaderEffect, ShaderPropControl } from '#vue/controls/shader'
 export { useColorVariableBinding } from '#vue/controls/color-variable-binding/use'
 export { useNumberVariableBinding } from '#vue/controls/number-variable-binding/use'
 export type { NumberBindingPath } from '#vue/controls/number-variable-binding/use'
@@ -417,7 +452,13 @@ export { ToolbarRoot, ToolbarItem, useToolbar } from '#vue/primitives/Toolbar'
 export type { ToolbarContext } from '#vue/primitives/Toolbar'
 
 /** DOM event helpers for cast-free template bindings. */
-export { blurTarget, inputNumberValue, inputValue, selectTarget } from '#vue/shared/dom-events'
+export {
+  blurTarget,
+  inputChecked,
+  inputNumberValue,
+  inputValue,
+  selectTarget
+} from '#vue/shared/dom-events'
 
 /** Internationalization. */
 export * from '#vue/i18n'

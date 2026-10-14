@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "openpencil-feedback",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "feedback.openpencil.dev", "custom_domain": true }],
+  "workers_dev": false,
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "vars": {
+    "POSTHOG_HOST": "https://eu.i.posthog.com",
+    "EMAIL_FROM": "hello@openpencil.dev",
+    // The website's form and the web app's Settings; the desktop app opens the website.
+    "TURNSTILE_HOSTNAMES": "openpencil.dev,app.openpencil.dev"
+  },
+  // Created with `wrangler d1 create feedback --jurisdiction eu`, so rows stay in the EU.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "feedback",
+      "database_id": "80bf0aec-f868-4ca0-bea1-d18eaac86ebb",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Keyed by the client address in memory only; it is never written anywhere.
+  "ratelimits": [
+    { "name": "PING_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "INGEST_LIMITER", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } },
+    { "name": "WAITLIST_LIMITER", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } }
+  ],
+  "send_email": [{ "name": "EMAIL" }],
+  "triggers": { "crons": ["17 3 * * *"] },
+  // Set with `wrangler secret put`; locally from `.dev.vars` (see `.dev.vars.example`).
+  "secrets": { "required": ["POSTHOG_KEY", "TURNSTILE_SECRET"] }
+}

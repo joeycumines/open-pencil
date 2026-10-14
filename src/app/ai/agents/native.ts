@@ -6,10 +6,14 @@ import { HARNESS_INSTALL_TARGET } from '@/app/ai/harness/companion'
 import { MCP_INSTALL_TARGET } from '@/app/automation/mcp/failure'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 
+import type { PackageManager } from './companions'
+
 const lookupSchema = v.object({
   executables: v.record(v.string(), v.nullable(v.string())),
   /** Versions of OpenPencil's own companions, keyed by package name. */
   versions: v.record(v.string(), v.nullable(v.string())),
+  /** Whether this user can write npm's global folder; null without npm. */
+  npmGlobalWritable: v.nullish(v.boolean()),
   searchPath: v.string()
 })
 
@@ -27,23 +31,43 @@ export async function installAgentAdapter(agent: ACPAgentDef, searchPath: string
   return installPackage(agent.adapterPackage, searchPath)
 }
 
-export async function installCanvasBridge(searchPath: string): Promise<void> {
-  await installPackage(MCP_INSTALL_TARGET, searchPath)
+export async function installCanvasBridge(
+  searchPath: string,
+  manager: PackageManager = 'npm'
+): Promise<void> {
+  await installPackage(MCP_INSTALL_TARGET, searchPath, manager)
 }
 
-export async function installHarnessCompanion(searchPath: string): Promise<void> {
-  await installPackage(HARNESS_INSTALL_TARGET, searchPath)
+export async function installHarnessCompanion(
+  searchPath: string,
+  manager: PackageManager = 'npm'
+): Promise<void> {
+  await installPackage(HARNESS_INSTALL_TARGET, searchPath, manager)
 }
+
+// These are public packages; a user's private project registry may not mirror them.
+const PUBLIC_REGISTRY = '--registry=https://registry.npmjs.org'
 
 /** The npm arguments that install a package globally; the desktop shell scope pins them. */
 export function npmInstallArgs(packageName: string): string[] {
-  // These are public packages; a user's private project registry may not mirror them.
-  return ['install', '--global', packageName, '--registry=https://registry.npmjs.org']
+  return ['install', '--global', packageName, PUBLIC_REGISTRY]
 }
 
-async function installPackage(packageName: string, searchPath: string): Promise<void> {
+/** The Bun arguments that install a package globally; the desktop shell scope pins them. */
+export function bunInstallArgs(packageName: string): string[] {
+  return ['add', '--global', packageName, PUBLIC_REGISTRY]
+}
+
+async function installPackage(
+  packageName: string,
+  searchPath: string,
+  manager: PackageManager = 'npm'
+): Promise<void> {
   const { Command } = await import('@tauri-apps/plugin-shell')
-  const resolved = resolvePlatformCommand('npm', npmInstallArgs(packageName))
+  const resolved = resolvePlatformCommand(
+    manager,
+    manager === 'bun' ? bunInstallArgs(packageName) : npmInstallArgs(packageName)
+  )
   const command = Command.create(resolved.command, resolved.args, {
     env: { PATH: searchPath }
   })

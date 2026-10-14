@@ -120,4 +120,28 @@ describe('preview islands', () => {
     editor.replaceGraph(new SceneGraph())
     expect(editor.state.play).toEqual({ revision: 2 })
   })
+
+  test('a copy paints bound colors in the mode the canvas is showing, not as they were saved', () => {
+    const { graph, card } = switchCard()
+    const collection = graph.createCollection('Theme')
+    const dark = collection.defaultModeId
+    graph.addMode(collection.id, 'light', 'Light', dark)
+    const surface = graph.createVariable('Surface', 'COLOR', collection.id, {
+      r: 0.1,
+      g: 0.1,
+      b: 0.1,
+      a: 1
+    })
+    surface.valuesByMode.light = { r: 1, g: 1, b: 1, a: 1 }
+    graph.updateNode(card.id, {
+      fills: [{ type: 'SOLID', color: { r: 0.1, g: 0.1, b: 0.1, a: 1 }, opacity: 1, visible: true }]
+    })
+    graph.bindVariable(card.id, 'fills/0/color', surface.id)
+    graph.setActiveMode(collection.id, 'light')
+
+    const shown = resolvePlayState(graph, card.id, new Map())
+
+    expect(shown.getNode(card.id)?.fills[0]?.color).toEqual({ r: 1, g: 1, b: 1, a: 1 })
+    expect(graph.getNode(card.id)?.fills[0]?.color).toEqual({ r: 0.1, g: 0.1, b: 0.1, a: 1 })
+  })
 })

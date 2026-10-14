@@ -1,9 +1,11 @@
 import { useI18n } from '@open-pencil/vue'
 
+import { openTour } from '@/app/demo/document'
 import { requestAppExit } from '@/app/document/close/exit'
 import { openSettingsDialog } from '@/app/settings/dialog'
 import { setDesignIssuesOnCanvas, setSnappingPreference } from '@/app/settings/preferences/apply'
 import {
+  syncNativeCommentsMenu,
   syncNativeDesignIssuesMenu,
   syncNativeSnappingMenu
 } from '@/app/settings/preferences/native-menu'
@@ -42,11 +44,20 @@ export function useShellMenu() {
     }
   )
 
+  void syncNativeCommentsMenu(appPreferences.value.comments.showOnCanvas).catch(
+    (error: unknown) => {
+      console.error('[Menu] Failed to synchronize the native comments menu:', error)
+    }
+  )
+
   const { setTheme } = useAppTheme()
   const { updates } = useI18n()
   const actions: Partial<Record<string, () => void>> = {
     'open-storage-workspace': () => {
       void import('@/router').then(({ default: router }) => openStorageWorkspace(router))
+    },
+    'open-tour': () => {
+      openTour().catch((error: unknown) => console.error('[Tour] Could not open the tour:', error))
     },
     settings: openSettingsDialog,
     'snap-geometry': () => {

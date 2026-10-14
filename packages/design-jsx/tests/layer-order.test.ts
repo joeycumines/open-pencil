@@ -26,11 +26,33 @@ describe('Design JSX layer order', () => {
     expect(result.layerIds).toEqual([card.id, title.id, hidden.id, row.id, dot.id, badge.id])
     expect(openingTagNames(result.code)).toEqual(
       result.layerIds.map((id) => {
-        const node = graph.getNode(id)
+        const node = id === null ? undefined : graph.getNode(id)
         if (!node) throw new Error(`Missing layer ${id}`)
         return node.name
       })
     )
     expect(result.code).toBe(selectionToJSX([card.id, badge.id], graph))
+  })
+
+  test('lists rich text spans and paragraphs as elements without a layer', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const card = graph.createNode('FRAME', pageId, { name: 'Card', width: 200, height: 100 })
+    const text = graph.createNode('TEXT', card.id, {
+      name: 'Rich',
+      text: 'Bold\nItem',
+      styleRuns: [{ start: 0, length: 4, style: { fontWeight: 700 } }],
+      textParagraphs: [
+        { listType: 'NONE', indentation: 0 },
+        { listType: 'UNORDERED', indentation: 1 }
+      ]
+    })
+    const after = graph.createNode('RECTANGLE', card.id, { name: 'After', width: 8, height: 8 })
+
+    const { code, layerIds } = selectionToJSXWithLayers([card.id], graph)
+
+    // Two paragraphs and the span in the first: the layer after them keeps its own element.
+    expect(layerIds).toEqual([card.id, text.id, null, null, null, after.id])
+    expect(code.match(/<(?!\/)[A-Za-z]/g)).toHaveLength(layerIds.length)
   })
 })

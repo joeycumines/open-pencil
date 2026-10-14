@@ -4,7 +4,7 @@ const { label, description } = defineProps<{ label: string; description?: string
 
 <template>
   <div class="flex items-center justify-between gap-4 px-3 py-2.5" data-slot="settings-row">
-    <div class="min-w-0">
+    <div class="min-w-0 flex-1">
       <p class="text-xs font-medium text-surface">{{ label }}</p>
       <p v-if="description" class="mt-1 text-xs leading-relaxed text-muted">{{ description }}</p>
       <slot name="description" />

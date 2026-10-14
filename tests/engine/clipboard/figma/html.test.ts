@@ -153,8 +153,9 @@ describe('buildFigmaClipboardHTML', () => {
     expectFigmaEditableTextDefaults(textNode)
     const glyphs = textNode.derivedTextData?.glyphs ?? []
     expect(glyphs.length).toBeGreaterThan(0)
-    // Bold and italic Inter are not loaded, so no glyph gets an outline from the wrong font.
-    expect(glyphs.every((glyph) => glyph.commandsBlob === undefined)).toBe(true)
+    // Without bold and italic Inter loaded, the paragraph draws them in the face it has, and the
+    // glyphs keep that face's outlines: Figma shows nothing for glyphs saved without them.
+    expect(glyphs.every((glyph) => glyph.commandsBlob !== undefined)).toBe(true)
     expect(textNode.derivedTextData?.baselines).toHaveLength(1)
     expect(textNode.derivedTextData?.logicalIndexToCharacterOffsetMap?.length).toBe(
       text.text.length
@@ -162,7 +163,7 @@ describe('buildFigmaClipboardHTML', () => {
     expect(textNode.derivedTextData?.derivedLines).toEqual([{ directionality: 'LTR' }])
   })
 
-  it('writes the fallback layout without outlines when the font is unavailable', async () => {
+  it('writes text whose font is unavailable in the font that drew it', async () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
     graph.createNode('TEXT', page.id, {
@@ -184,11 +185,11 @@ describe('buildFigmaClipboardHTML', () => {
     const textNode = parsed?.nodes.find((node) => node.type === 'TEXT')
     const baseline = textNode?.derivedTextData?.baselines?.[0]
 
-    // The text keeps its auto-resize, so Figma reflows it in its own font instead of fixing the box.
+    // The text keeps its auto-resize, so Figma reflows it in its own font once it is edited.
     expect(textNode?.textAutoResize).toBe('HEIGHT')
     const glyphs = textNode?.derivedTextData?.glyphs ?? []
     expect(glyphs).toHaveLength('Analytics Overview'.length)
-    expect(glyphs.every((glyph) => glyph.commandsBlob === undefined)).toBe(true)
+    expect(glyphs.every((glyph) => glyph.commandsBlob !== undefined)).toBe(true)
     expect(textNode?.derivedTextData?.baselines).toHaveLength(1)
     expect(baseline?.width).toBeLessThanOrEqual(552)
     expect(baseline?.lineHeight).toBe(67)

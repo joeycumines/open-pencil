@@ -20,7 +20,7 @@ import {
   AUTOMATION_UNDO_LABEL,
   automationUndoLabel,
   executeAtomicEditorTool,
-  executeWithPageUndo
+  executeWithDocumentUndo
 } from '@/app/automation/execution/editor'
 import { ensureGraphFonts } from '@/app/editor/fonts'
 import { useLibraryService } from '@/app/libraries'
@@ -40,10 +40,11 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
 
     // A call from an MCP session shows as that session's agent, working where the call works.
     const session = readAgentSession((args as { agent?: unknown }).agent)
-    if (session) agentStarted(target.store, session, target.pageId)
+    const reply = session ? agentStarted(target.store, session, target.pageId) : 0
     const response = await runTool(target, toolName, toolArgs)
     if (session) {
       agentFinished(target.store, session, {
+        reply,
         pageId: target.pageId,
         nodeIds: touchedNodeIds(target.store, toolArgs, response.result),
         edited: response.edited
@@ -82,7 +83,7 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
         )
       // View tools (selection, viewport, pages) leave the document and its history alone.
       result = toolChangesDocument(def)
-        ? await executeWithPageUndo(store, pageId, automationUndoLabel(def.name), mutate)
+        ? await executeWithDocumentUndo(store, pageId, automationUndoLabel(def.name), mutate)
         : await mutate()
     } else {
       result = await def.execute(figma, toolArgs)

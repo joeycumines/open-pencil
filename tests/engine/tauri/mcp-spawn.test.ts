@@ -158,6 +158,38 @@ describe('Tauri MCP spawning', () => {
     })
   })
 
+  test('reports an older running server as outdated with the install command for this app', async () => {
+    installTauriMockWindow()
+    Object.assign(globalThis.window, { location: { origin: 'tauri://localhost' } })
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { platform: 'MacIntel', userAgent: 'Macintosh' }
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      fetchStub(async () =>
+        Response.json({
+          status: 'ok',
+          version: '0.15.1',
+          installCommand: 'npm i -g @open-pencil/mcp@0.15.1'
+        })
+      )
+    )
+    await mockTauriIPC((cmd) => {
+      if (cmd === 'plugin:path|resolve_directory') return '/mock/home'
+      if (cmd === 'plugin:fs|exists') return true
+      return null
+    })
+
+    expect(await spawnMCPIfNeeded()).toBeNull()
+    expect(getAutomationStartupFailure()).toEqual({ code: 'outdated', detail: '0.15.1' })
+    // The old server names its own version; the fix must name this app's.
+    const error = await getAutomationAuthToken().catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(Error)
+    expect(String(error)).toContain('npm i -g @open-pencil/mcp@0.0.0-test')
+    expect(String(error)).not.toContain('@open-pencil/mcp@0.15.1')
+  })
+
   test('spawns MCP server with shell plugin when health check is missing', async () => {
     installTauriMockWindow()
     Object.assign(globalThis.window, { location: { origin: 'tauri://localhost' } })

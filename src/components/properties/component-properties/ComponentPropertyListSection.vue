@@ -19,6 +19,7 @@ import { useComponentPropertyAuthoring, useFlatReorderDrag, useI18n } from '@ope
 import AppButton from '@/components/ui/button/AppButton.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import { menuItem, useMenuUI } from '@/components/ui/menu/menu'
+import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import { usePopoverUI } from '@/components/ui/overlay/popover'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
@@ -132,36 +133,38 @@ function valueLabel(type: ComponentPropertyType, value: string) {
                 :class="menu.content"
                 @close-auto-focus="openNestedAfterMenu"
               >
-                <DropdownMenuItem
-                  v-for="option in NEW_PROPERTIES"
-                  :key="option.type"
-                  :class="item"
-                  :data-property-type="option.type"
-                  @select="addProperty(option.type, option.label())"
-                >
-                  <PropertyTypeIcon :kind="option.type" />
-                  {{ option.label() }}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  v-if="componentSet"
-                  :class="item"
-                  data-property-type="VARIANT"
-                  @select="authoring.addVariantProperty()"
-                >
-                  <PropertyTypeIcon kind="VARIANT" />
-                  {{ panels.componentPropertyVariant }}
-                </DropdownMenuItem>
-                <template v-if="nestedInstances.length">
-                  <DropdownMenuSeparator :class="menu.separator" />
+                <MenuScrollArea>
                   <DropdownMenuItem
+                    v-for="option in NEW_PROPERTIES"
+                    :key="option.type"
                     :class="item"
-                    data-property-type="nested"
-                    @select="nestedRequested = true"
+                    :data-property-type="option.type"
+                    @select="addProperty(option.type, option.label())"
                   >
-                    <icon-lucide-component :class="menu.icon" />
-                    {{ panels.nestedInstances }}…
+                    <PropertyTypeIcon :kind="option.type" />
+                    {{ option.label() }}
                   </DropdownMenuItem>
-                </template>
+                  <DropdownMenuItem
+                    v-if="componentSet"
+                    :class="item"
+                    data-property-type="VARIANT"
+                    @select="authoring.addVariantProperty()"
+                  >
+                    <PropertyTypeIcon kind="VARIANT" />
+                    {{ panels.componentPropertyVariant }}
+                  </DropdownMenuItem>
+                  <template v-if="nestedInstances.length">
+                    <DropdownMenuSeparator :class="menu.separator" />
+                    <DropdownMenuItem
+                      :class="item"
+                      data-property-type="nested"
+                      @select="nestedRequested = true"
+                    >
+                      <icon-lucide-component :class="menu.icon" />
+                      {{ panels.nestedInstances }}…
+                    </DropdownMenuItem>
+                  </template>
+                </MenuScrollArea>
               </DropdownMenuContent>
             </DropdownMenuPortal>
           </DropdownMenuRoot>
@@ -171,7 +174,7 @@ function valueLabel(type: ComponentPropertyType, value: string) {
           v-for="conflict in conflicts"
           :key="conflict.label"
           role="alert"
-          class="flex items-start gap-1.5 rounded bg-issue-warning/10 px-2 py-1.5 text-[11px] leading-4 text-issue-warning"
+          class="flex items-start gap-1.5 rounded bg-warning/10 px-2 py-1.5 text-[11px] leading-4 text-warning"
         >
           <icon-lucide-triangle-alert class="mt-0.5 size-3 shrink-0" aria-hidden="true" />
           <span class="min-w-0 flex-1">

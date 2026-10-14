@@ -24,6 +24,10 @@ export {
   patchFigRecords,
   type FigArchiveRecordInfo,
   type FigPatchedArchiveInput,
+  entryPathKey,
+  type FigEntryListPatch,
+  type FigEntryPatch,
+  type FigRecordFieldPatch,
   type FigRecordPatch
 } from './record-patch'
 export {

@@ -7,6 +7,7 @@ export const commonMessageDefaults = {
   ok: 'OK',
   copy: 'Copy',
   copied: 'Copied',
+  learnMore: 'Learn more',
   copiedExclamation: 'Copied!',
   copyMessage: 'Copy message',
   paste: 'Paste',

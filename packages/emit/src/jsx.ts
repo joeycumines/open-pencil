@@ -59,6 +59,15 @@ export function text(value: string): SyntaxNode {
   return plain ? whitespace(value) : container(literal(value))
 }
 
+/**
+ * Text that shares a line with elements, as beside a span. JSX trims whitespace only at line
+ * edges, so text without a line break is kept as written, spaces at its ends included.
+ */
+export function inlineText(value: string): SyntaxNode {
+  const plain = LITERAL_TEXT.test(value) && value.length > 0
+  return plain ? whitespace(value) : container(literal(value))
+}
+
 /** Children on their own lines; JSX drops whitespace-only lines between elements. */
 function indented(children: SyntaxNode[], depth: number): SyntaxNode[] {
   const inner = `\n${'  '.repeat(depth + 1)}`
@@ -91,6 +100,16 @@ export function element(
     },
     closingElement: content.length > 0 ? { type: 'JSXClosingElement', name } : null,
     children: content
+  }
+}
+
+/** `<>…</>`: children without an element around them, laid out as an element's are. */
+export function fragment(children: SyntaxNode[], depth: number): SyntaxNode {
+  return {
+    type: 'JSXFragment',
+    openingFragment: { type: 'JSXOpeningFragment' },
+    closingFragment: { type: 'JSXClosingFragment' },
+    children: children.length === 0 ? [] : indented(children, depth)
   }
 }
 

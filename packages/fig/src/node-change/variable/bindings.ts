@@ -1,11 +1,14 @@
 import { effectiveFigmaRawNodeFields } from '#fig/source-metadata'
+import { invert } from 'es-toolkit/object'
 
 import type { VariableConsumptionEntry, GUID } from '@open-pencil/kiwi/fig/codec'
 import { guidToString, stringToGuid } from '@open-pencil/kiwi/fig/guid'
 import {
   isNumericVariableBindingField,
   type SceneNode,
-  type SceneGraph
+  type SceneGraph,
+  type TextBindableField,
+  type TextBoundVariables
 } from '@open-pencil/scene-graph'
 
 import { cloneRecord } from '../clone'
@@ -52,7 +55,7 @@ export const VARIABLE_BINDING_FIELDS_INVERSE: Record<string, string> = Object.fr
   Object.entries(VARIABLE_BINDING_FIELDS).map(([field, kiwiField]) => [kiwiField, field])
 )
 
-interface VariableConsumptionSource extends Record<string, unknown> {
+export interface VariableConsumptionSource extends Record<string, unknown> {
   variableConsumptionMap?: { entries?: VariableConsumptionEntry[] }
   parameterConsumptionMap?: unknown
 }
@@ -115,6 +118,73 @@ export function variableBindingEntry(
 ): VariableConsumptionEntry | undefined {
   const variableField = VARIABLE_BINDING_FIELDS[field]
   if (!variableField) return undefined
+  return consumptionEntry(variableField, variableId, graph, ids, multiplier, expression)
+}
+
+/** Kiwi's field for each text field a range of characters binds, where Kiwi has one. */
+export const TEXT_RUN_BINDING_FIELDS = {
+  fontFamily: 'FONT_FAMILY',
+  fontStyle: 'FONT_STYLE',
+  fontSize: 'FONT_SIZE',
+  letterSpacing: 'LETTER_SPACING',
+  lineHeight: 'LINE_HEIGHT',
+  paragraphSpacing: 'PARAGRAPH_SPACING',
+  paragraphIndent: 'PARAGRAPH_INDENT'
+} as const satisfies Partial<Record<TextBindableField, string>>
+
+const TEXT_RUN_BINDING_FIELDS_INVERSE: Partial<Record<string, TextBindableField>> =
+  invert(TEXT_RUN_BINDING_FIELDS)
+
+/** The entries a range of characters' bindings are written with, in its style override. */
+export function textRunVariableEntries(
+  bound: TextBoundVariables,
+  graph: SceneGraph,
+  ids?: Map<string, GUID>
+): VariableConsumptionEntry[] {
+  return Object.entries(bound).flatMap(([field, variableId]) => {
+    const variableField = (TEXT_RUN_BINDING_FIELDS as Partial<Record<string, string>>)[field]
+    if (!variableField || !variableId || !graph.variables.has(variableId)) return []
+    return [consumptionEntry(variableField, variableId, graph, ids)]
+  })
+}
+
+/** The text fields a style override binds, by variable ID. */
+export function textRunVariableBindings(override: VariableConsumptionSource): TextBoundVariables {
+  const bound: TextBoundVariables = {}
+  for (const entry of variableConsumptionEntries(override)) {
+    const field = entry.variableField && TEXT_RUN_BINDING_FIELDS_INVERSE[entry.variableField]
+    const guid = field ? linearVariableExpression(entry.variableData)?.reference?.guid : undefined
+    if (field && guid) bound[field] = guidToString(guid)
+  }
+  return bound
+}
+
+/**
+ * How a record names a variable it uses, as Figma writes it: a library variable by its key,
+ * even where the file holds a copy of it, and a local one by its record.
+ */
+export function variableAlias(
+  graph: SceneGraph,
+  variableId: string,
+  ids?: ReadonlyMap<string, GUID>
+): { guid: GUID } | { assetRef: { key: string; version?: string } } {
+  const variable = graph.variables.get(variableId)
+  if (variable?.key) {
+    return {
+      assetRef: { key: variable.key, ...(variable.version ? { version: variable.version } : {}) }
+    }
+  }
+  return { guid: ids?.get(variableId) ?? stringToGuid(variableId) }
+}
+
+function consumptionEntry(
+  variableField: string,
+  variableId: string | undefined,
+  graph: SceneGraph,
+  ids?: Map<string, GUID>,
+  multiplier = 1,
+  expression = false
+): VariableConsumptionEntry {
   if (!variableId) return { variableField }
   const variable = graph.variables.get(variableId)
   if (!variable) throw new Error(`Missing bound variable ${variableId}`)
@@ -122,7 +192,20 @@ export function variableBindingEntry(
   const alias = {
     dataType: 'ALIAS',
     resolvedDataType: variable.type,
-    value: { alias: { guid: ids?.get(variableId) ?? stringToGuid(variableId) } }
+    value: { alias: variableAlias(graph, variableId, ids) }
+  }
+  // Text content takes a number or boolean as its text, which Figma writes as STRINGIFY.
+  if (variableField === 'TEXT_DATA' && variable.type !== 'STRING') {
+    return {
+      variableField,
+      variableData: {
+        dataType: 'EXPRESSION',
+        resolvedDataType: 'STRING',
+        value: {
+          expressionValue: { expressionFunction: 'STRINGIFY', expressionArguments: [alias] }
+        }
+      }
+    }
   }
   if (variable.type !== 'FLOAT' || (!expression && multiplier === 1))
     return { variableField, variableData: alias }

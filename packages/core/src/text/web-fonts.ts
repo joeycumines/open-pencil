@@ -2,6 +2,7 @@ import type { FontFaceData, RemoteFontSource, ResolveFontResult } from 'unifont'
 
 import { IS_BROWSER } from '#core/constants'
 import { parseFontStyle } from '#core/text/face'
+import type { FamilyFace } from '#core/text/font/faces'
 import {
   createProviderUnifont,
   isRemoteFontSource,
@@ -66,6 +67,30 @@ function preferredRemoteSource(face: FontFaceData): RemoteFontSource | undefined
   )
 }
 
+const STANDARD_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
+
+/** The standard weights a face covers: one, or every one in a variable font's range. */
+function faceWeights(weight: FontFaceData['weight']): number[] {
+  const bounds = Array.isArray(weight)
+    ? weight
+    : String(weight ?? 400)
+        .trim()
+        .split(/\s+/u)
+        .map(Number)
+  const [min = 400, max = min] = bounds
+  return STANDARD_WEIGHTS.filter((value) => value >= min && value <= max)
+}
+
+function familyFacesOf(result: ResolveFontResult): FamilyFace[] {
+  const faces = new Map<string, FamilyFace>()
+  for (const font of result.fonts) {
+    const italic = font.style === 'italic' || font.style?.startsWith('oblique') === true
+    for (const weight of faceWeights(font.weight))
+      faces.set(`${weight}${italic ? 'i' : ''}`, { weight, italic })
+  }
+  return [...faces.values()]
+}
+
 function resolvedRemoteFaces(result: ResolveFontResult): Array<{
   source: RemoteFontSource
   init?: RequestInit
@@ -127,6 +152,7 @@ export class WebFontResolver {
   )
   private unifontPromises = new Map<WebFontProviderId, Promise<WebUnifont>>()
   private familiesCache = new Map<WebFontProviderId, string[]>()
+  private facesCache = new Map<string, Promise<FamilyFace[]>>()
   private familiesPromises = new Map<WebFontProviderId, Promise<string[]>>()
   private failedFonts = new Set<string>()
   private fontPromises = new Map<string, Promise<ArrayBuffer[]>>()
@@ -136,6 +162,7 @@ export class WebFontResolver {
   setEnabled(settings: Partial<Record<WebFontProviderId, boolean>>): void {
     this.enabled = new Set(WEB_FONT_PROVIDER_IDS.filter((provider) => settings[provider] === true))
     this.failedFonts.clear()
+    this.facesCache.clear()
   }
 
   setRemoteFetch(fetcher: WebFontFetch | null): void {
@@ -143,6 +170,7 @@ export class WebFontResolver {
     this.unifontPromises.clear()
     this.familiesPromises.clear()
     this.familiesCache.clear()
+    this.facesCache.clear()
     this.failedFonts.clear()
   }
 
@@ -162,6 +190,42 @@ export class WebFontResolver {
   preloadFamilies(): void {
     if (IS_BROWSER && !this.remoteFetch) return
     for (const provider of this.enabledProviders()) void this.listFamilies(provider)
+  }
+
+  /**
+   * The faces a family has at the first enabled provider that serves it, or none when no
+   * provider does. Asking a provider for every weight in both slants returns only the faces it
+   * has, without downloading them.
+   */
+  familyFaces(family: string): Promise<FamilyFace[]> {
+    let faces = this.facesCache.get(family)
+    if (!faces) {
+      faces = this.loadFamilyFaces(family)
+      this.facesCache.set(family, faces)
+    }
+    return faces
+  }
+
+  private async loadFamilyFaces(family: string): Promise<FamilyFace[]> {
+    if (typeof fetch === 'undefined' || (IS_BROWSER && !this.remoteFetch)) return []
+    for (const provider of this.enabledProviders()) {
+      try {
+        const unifont = await this.unifont(provider)
+        const result = await this.withFetchProxy<ResolveFontResult>(() =>
+          unifont.resolveFont(family, {
+            weights: STANDARD_WEIGHTS.map(String),
+            styles: ['normal', 'italic'],
+            formats: ['woff2', 'woff', 'ttf', 'otf']
+          })
+        )
+        const faces = familyFacesOf(result)
+        if (faces.length > 0) return faces
+      } catch (error) {
+        // The next provider may serve the family.
+        console.warn(`[fonts] ${provider} could not list the faces of ${family}:`, error)
+      }
+    }
+    return []
   }
 
   async listFamilies(provider: WebFontProviderId): Promise<string[]> {

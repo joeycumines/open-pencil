@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
-import { DESIGN_JSX_SUPPORTED_PROPERTIES, transformDesignJSXExpression } from '#design-jsx/index'
+import {
+  DESIGN_JSX_ELEMENTS,
+  DESIGN_JSX_SUPPORTED_PROPERTIES,
+  transformDesignJSXExpression
+} from '#design-jsx/index'
 
 describe('Design JSX schema', () => {
   test('includes renderer compatibility properties', () => {
@@ -12,6 +16,18 @@ describe('Design JSX schema', () => {
       'textDecoration',
       'componentId'
     ]) {
+      expect(DESIGN_JSX_SUPPORTED_PROPERTIES.has(property)).toBe(true)
+    }
+  })
+
+  test('lists the rich text elements and their props', () => {
+    expect(DESIGN_JSX_ELEMENTS).toContainEqual(
+      expect.objectContaining({ name: 'Span', runtimeType: 'text-span' })
+    )
+    expect(DESIGN_JSX_ELEMENTS).toContainEqual(
+      expect.objectContaining({ name: 'Paragraph', runtimeType: 'text-paragraph' })
+    )
+    for (const property of ['list', 'level', 'spacing', 'listSpacing', 'indent']) {
       expect(DESIGN_JSX_SUPPORTED_PROPERTIES.has(property)).toBe(true)
     }
   })

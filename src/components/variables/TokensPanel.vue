@@ -5,7 +5,11 @@ import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import type { VariableTokenFields } from '@open-pencil/core/editor'
 import type { TokenStylesheetFormat } from '@open-pencil/dom-css/export'
-import type { VariableType, VariableValue } from '@open-pencil/scene-graph'
+import {
+  isLibraryCollection,
+  type VariableType,
+  type VariableValue
+} from '@open-pencil/scene-graph'
 import { useI18n, useSceneComputed, useVariables } from '@open-pencil/vue'
 
 import {
@@ -141,7 +145,8 @@ const sidebarCollections = computed(() =>
   ctx.collections.value.map((candidate) => ({
     id: candidate.id,
     name: candidate.name,
-    count: candidate.variableIds.length
+    count: candidate.variableIds.length,
+    library: isLibraryCollection(candidate)
   }))
 )
 const modeOptions = computed(() =>

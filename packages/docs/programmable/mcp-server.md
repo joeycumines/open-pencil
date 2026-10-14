@@ -15,7 +15,7 @@ Tool definitions own native Valibot input schemas, execution/mutation metadata, 
 
 Use **Settings → Tool access** (select **Local MCP**) to search and toggle the local server's tools, individually or by read-only/side-effect group. Group switches affect all group members, even during search. **Restore defaults** enables the configurable MCP tools again. Existing MCP preferences are preserved separately from the **Built-in AI** settings.
 
-Restart the MCP server, then reconnect stdio clients, to apply changes. For an externally managed server, restart its owning process. The list reflects the tools discovered from the server; disabling a dedicated tool does not prevent an enabled script tool from performing the same operation. These switches are not a sandbox and do not configure remote MCP servers or WebMCP.
+Restart the MCP server, then reconnect stdio clients, to apply changes. For an externally managed server, restart its owning process. The list shows the tools the server offers, also while it is stopped; disabling a dedicated tool does not prevent an enabled script tool from performing the same operation. These switches are not a sandbox and do not configure remote MCP servers or WebMCP.
 
 ## Share only the selection {#selection-scope}
 
@@ -350,6 +350,15 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 | `diff_show` | Preview the patch that setting JSX attributes on a node would produce |
 | `diff_apply` | Apply a patch after checking the nodes still match its old values |
 | `diff_visual` | Pixel diff between two rendered nodes, returned as an image |
+
+### Comments
+
+| Tool | Description |
+|------|-------------|
+| `get_comments` | Read the comments left on the canvas, open ones unless asked for resolved too, with their layer, page, and replies |
+| `add_comment` | Pin a comment on a layer or at a point of a page, in Markdown |
+| `reply_to_comment` | Answer a thread, which reopens it if it was resolved |
+| `resolve_comment` | Resolve a thread once its feedback is addressed, or reopen it |
 
 ### Navigation
 

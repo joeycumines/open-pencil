@@ -7,9 +7,10 @@ import {
   type DesignElement,
   type DesignNode
 } from '@open-pencil/dom-css/export'
-import { layerPath, type SceneGraph } from '@open-pencil/scene-graph'
+import { layerPath, shaderOfPaint, type SceneGraph } from '@open-pencil/scene-graph'
 
 import { wrapRole } from './controls'
+import IslandShader from './IslandShader.vue'
 import type { IslandState } from './state'
 
 export interface IslandRenderContext {
@@ -31,6 +32,13 @@ export interface ElementOverride {
   children?: () => (VNode | string)[]
 }
 
+/** The image a layer's shader fill shows: its first fill's, as the projection reads it. */
+function shaderImage(element: DesignElement): string | undefined {
+  const node = element.sourceSceneNode
+  const fill = node?.fills.at(0)
+  return node && fill ? (shaderOfPaint(node, fill)?.image ?? undefined) : undefined
+}
+
 /** Render an element as the design draws it, with a role's changes applied. */
 export function renderElement(
   context: IslandRenderContext,
@@ -48,8 +56,17 @@ export function renderElement(
       ...override.style
     }).filter(([key]) => !omitted.has(key))
   )
-  const children =
+  const content =
     override.children ?? (() => element.children.map((child) => renderNode(context, child, path)))
+  // A shader fill plays behind the content, whatever draws the content, from the canvas's own
+  // player for the image its paint shows.
+  const image = element.shader ? shaderImage(element) : undefined
+  const children = () => [
+    ...(image
+      ? [h(IslandShader, { key: `${path}\0shader`, image, frame: element.shader?.frame })]
+      : []),
+    ...content()
+  ]
   const { 'data-open-pencil-node-id': _id, ...attrs } = element.attrs
   return h(
     override.tag ?? element.tagName,

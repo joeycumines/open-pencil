@@ -8,6 +8,7 @@ import { preferEsToolkitRule } from '#lint/rules/quality/es-toolkit.ts'
 import { noUnvalidatedJSONParseRule } from '#lint/rules/quality/json-parse.ts'
 import { noModuleMockingRule } from '#lint/rules/quality/module-mocking.ts'
 import { noReduceAccumulatorCopyRule } from '#lint/rules/quality/reduce-accumulator-copy.ts'
+import { noUnknownTailwindClassesRule } from '#lint/rules/quality/tailwind-classes.ts'
 import { noWidenThenAssertRule } from '#lint/rules/quality/widen-then-assert.ts'
 import { normalizedFilename } from '#lint/support/context.ts'
 import type { PluginRule, RuleDefinition } from '#lint/support/types.ts'
@@ -447,6 +448,7 @@ const plugin = {
     'no-direct-selection-tool-state-mutation': noDirectSelectionToolStateMutation,
     'no-math-random': noMathRandom,
     'no-hardcoded-color-constants': noHardcodedColorConstants,
+    'no-unknown-tailwind-classes': noUnknownTailwindClassesRule,
     'no-hand-rolled-color': noHandRolledColor,
     'no-raw-console-format': noRawConsoleFormat,
     'no-silent-catch': noSilentCatch,

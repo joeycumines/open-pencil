@@ -15,12 +15,12 @@ const toastTheme = {
   },
   variants: {
     tone: {
-      default: { root: 'bg-accent text-white', action: 'bg-black/20 hover:bg-black/30' },
+      default: { root: 'bg-accent text-on-accent', action: 'bg-black/20 hover:bg-black/30' },
       warning: {
-        root: 'border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]',
+        root: 'border border-warning-border bg-warning-bg text-warning',
         action: 'bg-current/10 hover:bg-current/15'
       },
-      error: { root: 'bg-red-600 text-white', action: 'bg-black/20 hover:bg-black/30' }
+      error: { root: 'bg-error-fill text-white', action: 'bg-black/20 hover:bg-black/30' }
     },
     // Work in progress spins the icon; AppProgress draws the bar.
     progress: {

@@ -127,7 +127,7 @@ const { profiles, statusByConnection, refreshStatuses } = useModelSettings()
                   "
                 >
                   <span
-                    class="size-1.5 rounded-full bg-muted data-[state=configured]:bg-[var(--color-success)]"
+                    class="size-1.5 rounded-full bg-muted data-[state=configured]:bg-success"
                     :data-state="
                       statusByConnection[profile.connectionId] === 'configured'
                         ? 'configured'

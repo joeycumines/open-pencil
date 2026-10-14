@@ -2,6 +2,7 @@ import {
   applyComponentPropertyValue,
   componentPropertyDefinitions,
   findLayerByPath,
+  resolvedPaintBindings,
   type SceneGraph,
   type SceneNode
 } from '@open-pencil/scene-graph'
@@ -114,6 +115,12 @@ export function resolvePlayState(
     componentSets: true,
     shareTables: true
   })
+  // A bound paint keeps the color it was saved with while the canvas draws the variable live, in
+  // whatever mode is showing now; the copy takes what the canvas draws, variants included.
+  for (const node of graph.getAllNodes()) {
+    const paints = resolvedPaintBindings(graph, node)
+    if (paints.fills || paints.strokes) graph.updateNode(node.id, paints)
+  }
   const ordered = [...states].sort(([a], [b]) => a.split('/').length - b.split('/').length)
   for (const [path, state] of ordered) {
     const instance = findLayerByPath(graph, rootId, path)

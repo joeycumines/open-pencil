@@ -3,6 +3,9 @@ import type { UserConfig } from '@commitlint/types'
 
 import { hasAICoauthor, noAICoauthors } from './tools/ci/policy/src/commit-attribution'
 
+// `Release vX.Y.Z` or `Release vX.Y.Z-beta.N`, plus the ` (#N)` the merge queue's squash appends.
+const RELEASE_TITLE = /^Release v\d+\.\d+\.\d+(?:-beta\.[1-9]\d*)?(?: \(#\d+\))?$/
+
 export default {
   extends: ['@commitlint/config-conventional'],
   // Apply attribution policy before allowing generated-message or release exceptions.
@@ -24,7 +27,7 @@ export default {
   ignores: [
     (message) =>
       !hasAICoauthor(message) &&
-      (/^Release v\d+\.\d+\.\d+$/.test(message.split('\n')[0] ?? '') ||
+      (RELEASE_TITLE.test(message.split('\n')[0] ?? '') ||
         (process.env.COMMITLINT_PR_TITLE !== '1' && isIgnored(message)))
   ],
   helpUrl: 'https://github.com/open-pencil/open-pencil/blob/master/CONTRIBUTING.md#commit-messages'

@@ -71,6 +71,8 @@ function createRecordNormalizer(resolve: ReturnType<typeof createResourceResolve
       for (const field of STYLE_REFERENCE_FIELDS) {
         normalize(node[field] as NodeChange['variableSetID'], field, path)
       }
+      // A text's ranges bind variables and use styles in their own style overrides.
+      for (const override of node.textData?.styleOverrideTable ?? []) visit(override, path)
       visitChildren(node, path, visit)
     }
     visit(record, [])

@@ -16,6 +16,7 @@ import {
 } from '#core/constants'
 import {
   createSceneGeometry,
+  hasTransformHandles,
   viewportMatrix,
   selectionPath,
   rotationHandleLayout,
@@ -286,6 +287,7 @@ function drawTextPathSelection(
   )
 }
 
+/** Figma's corner handles and our rotation stalk; a layer too small for handles shows none. */
 function drawBoundsHandles(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -295,18 +297,13 @@ function drawBoundsHandles(
   maxY: number,
   stalk: RotationHandleLayout
 ): void {
+  if (!hasTransformHandles((maxX - minX) * r.zoom, (maxY - minY) * r.zoom)) return
   r.drawHandle(canvas, minX, minY)
   r.drawHandle(canvas, maxX, minY)
   r.drawHandle(canvas, minX, maxY)
   r.drawHandle(canvas, maxX, maxY)
-  const midX = (minX + maxX) / 2
-  const midY = (minY + maxY) / 2
   canvas.drawLine(stalk.edge.x, stalk.edge.y, stalk.handle.x, stalk.handle.y, r.selectionPaint)
   r.drawHandle(canvas, stalk.handle.x, stalk.handle.y)
-  r.drawHandle(canvas, midX, minY)
-  r.drawHandle(canvas, midX, maxY)
-  r.drawHandle(canvas, minX, midY)
-  r.drawHandle(canvas, maxX, midY)
 }
 
 function drawSelectionRect(
@@ -484,17 +481,13 @@ function drawBoundsHandlesScreenSpace(
   maxX: number,
   maxY: number
 ): void {
+  if (!hasTransformHandles(maxX - minX, maxY - minY)) return
   drawHandleScreenSpace(r, canvas, minX, minY)
   drawHandleScreenSpace(r, canvas, maxX, minY)
   drawHandleScreenSpace(r, canvas, minX, maxY)
   drawHandleScreenSpace(r, canvas, maxX, maxY)
   const midX = (minX + maxX) / 2
-  const midY = (minY + maxY) / 2
   const rotationHandleY = minY - ROTATION_HANDLE_DISTANCE
   canvas.drawLine(midX, minY, midX, rotationHandleY, r.selectionPaint)
   drawHandleScreenSpace(r, canvas, midX, rotationHandleY)
-  drawHandleScreenSpace(r, canvas, midX, minY)
-  drawHandleScreenSpace(r, canvas, midX, maxY)
-  drawHandleScreenSpace(r, canvas, minX, midY)
-  drawHandleScreenSpace(r, canvas, maxX, midY)
 }

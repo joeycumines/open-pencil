@@ -88,6 +88,54 @@ describe('color-contrast', () => {
       background: '#FFFFFF'
     })
   })
+
+  test('large text needs 3:1, as WCAG AA asks of it', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const card = graph.createNode('FRAME', pageId, { name: 'Card', fills: solid(WHITE) })
+    // 3.2:1 against white.
+    const grey = { r: 0.55, g: 0.55, b: 0.55, a: 1 }
+    const text = (name: string, fontSize: number, fontWeight: number) =>
+      graph.createNode('TEXT', card.id, { name, text: name, fontSize, fontWeight, fills: solid(grey) })
+    const body = text('Body', 16, 400)
+    const boldBody = text('Bold body', 18, 700)
+    text('Display', 24, 400)
+    text('Bold subhead', 19, 700)
+
+    const messages = lint(graph, 'color-contrast')
+
+    expect(messages.map((message) => message.nodeId)).toEqual([body.id, boldBody.id])
+    expect(messages.map((message) => message.data?.minRatio)).toEqual([4.5, 4.5])
+  })
+
+  test('holds text to the strictest threshold any of its style runs needs', () => {
+    const graph = new SceneGraph()
+    const pageId = graph.getPages()[0].id
+    const card = graph.createNode('FRAME', pageId, { name: 'Card', fills: solid(WHITE) })
+    // 3.2:1 against white: enough for large text, not for the rest.
+    const grey = solid({ r: 0.55, g: 0.55, b: 0.55, a: 1 })
+    const mixed = graph.createNode('TEXT', card.id, {
+      name: 'Large with a small run',
+      text: 'Heading note',
+      fontSize: 24,
+      fontWeight: 400,
+      fills: grey,
+      styleRuns: [{ start: 8, length: 4, style: { fontSize: 14 } }]
+    })
+    graph.createNode('TEXT', card.id, {
+      name: 'Small made large throughout',
+      text: 'Heading',
+      fontSize: 14,
+      fontWeight: 400,
+      fills: grey,
+      styleRuns: [{ start: 0, length: 7, style: { fontSize: 32 } }]
+    })
+
+    const messages = lint(graph, 'color-contrast')
+
+    expect(messages.map((message) => message.nodeId)).toEqual([mixed.id])
+    expect(messages[0]?.data?.minRatio).toBe(4.5)
+  })
 })
 
 describe('no-deeply-nested', () => {

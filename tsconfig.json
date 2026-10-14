@@ -46,6 +46,9 @@
       "@open-pencil/harness": [
         "./packages/harness/src/index.ts"
       ],
+      "#feedback/*": [
+        "./packages/feedback/src/*"
+      ],
       "#dom-css/*": [
         "./packages/dom-css/src/*"
       ],
@@ -53,6 +56,9 @@
         "./tests/*"
       ],
       "#docs-config/*": [
+        "./packages/docs/.vitepress/*"
+      ],
+      "#docs/*": [
         "./packages/docs/.vitepress/*"
       ],
       "tinykeys": [
@@ -121,7 +127,9 @@
     "packages/vue/src/global.d.ts",
     "packages/dom-css/src/cssom.d.ts",
     "packages/dom-css/src/postcss-value-parser.d.ts",
-    "packages/design-jsx/src/global.d.ts"
+    "packages/design-jsx/src/global.d.ts",
+    "packages/docs/.vitepress/theme/landing/**/*.ts",
+    "packages/docs/.vitepress/theme/landing/**/*.vue"
   ],
   "references": [
     {

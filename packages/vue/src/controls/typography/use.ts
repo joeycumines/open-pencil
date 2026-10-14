@@ -1,8 +1,4 @@
-import {
-  TYPOGRAPHY_WEIGHTS,
-  createTypographyActions,
-  createTypographyState
-} from '#vue/controls/typography/actions'
+import { createTypographyActions, createTypographyState } from '#vue/controls/typography/actions'
 import { useEditor } from '#vue/editor/context'
 
 /**
@@ -32,7 +28,6 @@ export function useTypography(options: UseTypographyOptions = {}) {
   return {
     editor,
     ...typographyState,
-    weights: TYPOGRAPHY_WEIGHTS,
     ...actions
   }
 }

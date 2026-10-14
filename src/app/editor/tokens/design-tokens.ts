@@ -15,6 +15,14 @@ import { toast } from '@/app/shell/ui'
 /** Files a token import reads: JSON token files, or archives of them. */
 export const DESIGN_TOKEN_FILE_ACCEPT = '.json,.tokens,.zip'
 
+/**
+ * Whether a file is a design token file by its name: the `.tokens` and `.tokens.json` token
+ * files and the `.resolver.json` resolvers of the W3C format. Other JSON may be anything.
+ */
+export function isDesignTokenFileName(name: string): boolean {
+  return /\.(tokens|tokens\.json|resolver\.json)$/i.test(name)
+}
+
 function isTokenFile(path: string): boolean {
   return /\.(json|tokens)$/i.test(path) && !path.split('/').some((part) => part.startsWith('.'))
 }

@@ -25,7 +25,7 @@ for (const viewport of [
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+,' : 'Control+,')
     await selectMCPSection(page, viewport.width < 640)
     await expect(page.getByRole('heading', { name: 'Local server', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Tool access', exact: true }).click()
+    await page.getByTestId('settings-mcp-tool-access').click()
     const search = page.getByRole('searchbox', { name: 'Search tools' })
     await search.fill('no-such-mcp-tool')
     await expect(page.getByText('No tools match your search.', { exact: true })).toBeVisible()

@@ -1,4 +1,4 @@
-import { cloneInstanceOverrideState } from '@open-pencil/scene-graph'
+import { canCreateInstance, cloneInstanceOverrideState } from '@open-pencil/scene-graph'
 import type { SceneNode, Vector } from '@open-pencil/scene-graph'
 import { getAxisAlignedWorldBounds, getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import Matrix from '@open-pencil/scene-graph/matrix'
@@ -65,6 +65,7 @@ export function createComponentInstanceActions(ctx: EditorContext) {
   ) {
     const component = ctx.graph.getNode(componentId)
     if (component?.type !== 'COMPONENT') return null
+    if (!canCreateInstance(ctx.graph, componentId, parentId)) return null
     if (!prepareSlotEdits(ctx, [parentId])) return null
 
     const previousSelection = new Set(ctx.state.selectedIds)

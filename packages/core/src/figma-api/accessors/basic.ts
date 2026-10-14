@@ -1,9 +1,12 @@
+import { pickBy } from 'es-toolkit'
+
 import {
   getAxisAlignedWorldBounds,
   getWorldMatrix,
   FITTED_CONTAINER_TYPES,
   TRANSFORM_FIELDS as NODE_TRANSFORM_FIELDS,
   findInstanceAncestor,
+  recapturedAspectRatio,
   recordInstanceOverride,
   rescaleNodeTree,
   slotPropertyId,
@@ -12,9 +15,15 @@ import {
 } from '@open-pencil/scene-graph'
 import type { Mat3 } from '@open-pencil/scene-graph/matrix'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
+import {
+  computeConstrainedResizeChanges,
+  createResizeSnapshot,
+  type ResizeSnapshot
+} from '@open-pencil/scene-graph/resize'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
 import {
+  prepareFollowedFieldEdit,
   fitGroupsAround,
   graph,
   hostFitOptions,
@@ -121,6 +130,12 @@ export function installBasicNodeProxyAccessors(
         return containerTransform(raw(this, internals), graph(this, internals))[2]
       },
       set(this: ProxyThis, value: number) {
+        prepareFollowedFieldEdit(
+          graph(this, internals),
+          raw(this, internals),
+          'x',
+          'relative-transform'
+        )
         setTransform(this, internals, (matrix) => withOrigin(matrix, value, matrix[5]))
       }
     },
@@ -130,6 +145,12 @@ export function installBasicNodeProxyAccessors(
         return containerTransform(raw(this, internals), graph(this, internals))[5]
       },
       set(this: ProxyThis, value: number) {
+        prepareFollowedFieldEdit(
+          graph(this, internals),
+          raw(this, internals),
+          'y',
+          'relative-transform'
+        )
         setTransform(this, internals, (matrix) => withOrigin(matrix, matrix[2], value))
       }
     },
@@ -156,6 +177,12 @@ export function installBasicNodeProxyAccessors(
       },
       // Figma turns a node counterclockwise about its top-left corner.
       set(this: ProxyThis, value: number) {
+        prepareFollowedFieldEdit(
+          graph(this, internals),
+          raw(this, internals),
+          'rotation',
+          'relative-transform'
+        )
         setTransform(this, internals, (matrix) => withFigmaRotation(matrix, value))
       }
     },
@@ -180,6 +207,12 @@ export function installBasicNodeProxyAccessors(
         return figmaTransform(containerTransform(node, scene))
       },
       set(this: ProxyThis, value: FigmaTransform) {
+        prepareFollowedFieldEdit(
+          graph(this, internals),
+          raw(this, internals),
+          'relativeTransform',
+          'relative-transform'
+        )
         const [[a, b, x], [c, d, y]] = value
         setTransform(this, internals, () => [a, b, x, c, d, y, 0, 0, 1])
       }
@@ -208,28 +241,10 @@ export function installBasicNodeProxyAccessors(
     // A resized node keeps its top-left corner, as Figma's does, though it turns about its center.
     // The groups around it refit once, after the corner is back in place.
     resize(this: ProxyThis, width: number, height: number): void {
-      assertEditable(this, internals)
-      const scene = graph(this, internals)
-      const node = raw(this, internals)
-      const before = containerTransform(node, scene)
-      // Text given a size stops sizing itself to its content, as in Figma.
-      const fixesText =
-        node.type === 'TEXT' &&
-        (node.textAutoResize === 'WIDTH_AND_HEIGHT' || node.textAutoResize === 'HEIGHT')
-      scene.updateNode(node.id, {
-        width,
-        height,
-        ...(fixesText ? { textAutoResize: 'NONE' as const } : {})
-      })
-      recordInstanceOverride(scene, node.id, [
-        'width',
-        'height',
-        ...(fixesText ? ['textAutoResize'] : [])
-      ])
-      setTransform(this, internals, () => before)
+      resizeNode(this, internals, width, height, true)
     },
     resizeWithoutConstraints(this: ProxyThis, width: number, height: number): void {
-      ;(this as { resize(width: number, height: number): void }).resize(width, height)
+      resizeNode(this, internals, width, height, false)
     },
     rescale(this: ProxyThis, scale: number): void {
       assertEditable(this, internals)
@@ -240,6 +255,69 @@ export function installBasicNodeProxyAccessors(
       rescaleNodeTree(scene, node.id, scale)
     }
   })
+}
+
+/** Every layer below a node, which a resize may place by its constraints. */
+function descendants(scene: SceneGraph, node: SceneNode): SceneNode[] {
+  return scene.getChildren(node.id).flatMap((child) => [child, ...descendants(scene, child)])
+}
+
+/**
+ * Resizes a node keeping its top-left corner, as Figma's does, though it turns about its center.
+ * `resize` places the layers inside by their constraints, as Figma's does, without making their
+ * sizes overrides; `resizeWithoutConstraints` leaves them be, except in an instance. The groups around the node refit
+ * once, after the corner is back in place.
+ */
+function resizeNode(
+  target: ProxyThis,
+  internals: NodeProxyInternals,
+  width: number,
+  height: number,
+  constrained: boolean
+): void {
+  assertEditable(target, internals)
+  const scene = graph(target, internals)
+  const node = raw(target, internals)
+  const before = containerTransform(node, scene)
+  const size = { width: node.width, height: node.height }
+  // An instance's layers follow its constraints however it is resized, as in Figma.
+  const placed =
+    constrained || node.type === 'INSTANCE'
+      ? new Map(descendants(scene, node).map((child) => [child.id, createResizeSnapshot(child)]))
+      : new Map<string, ResizeSnapshot>()
+  // Text given a size stops sizing itself to its content, as in Figma.
+  const fixesText =
+    node.type === 'TEXT' &&
+    (node.textAutoResize === 'WIDTH_AND_HEIGHT' || node.textAutoResize === 'HEIGHT')
+  // A locked ratio does not hold here; it takes the new size, as in Figma.
+  const recaptured = recapturedAspectRatio(node, width, height)
+  // Auto layout given a size keeps it, as in Figma: hugging axes become fixed.
+  const fixed = node.layoutMode === 'HORIZONTAL' || node.layoutMode === 'VERTICAL'
+  const sizing = fixed
+    ? pickBy(
+        { primaryAxisSizing: 'FIXED' as const, counterAxisSizing: 'FIXED' as const },
+        (value, key) => node[key] !== value
+      )
+    : {}
+  scene.updateNode(node.id, {
+    width,
+    height,
+    ...recaptured,
+    ...sizing,
+    ...(fixesText ? { textAutoResize: 'NONE' as const } : {})
+  })
+  if (placed.size > 0 && size.width > 0 && size.height > 0) {
+    const changes = computeConstrainedResizeChanges(scene, node.id, size, { width, height }, placed)
+    for (const [id, change] of changes) scene.updateNode(id, change)
+  }
+  recordInstanceOverride(scene, node.id, [
+    'width',
+    'height',
+    ...Object.keys(recaptured),
+    ...Object.keys(sizing),
+    ...(fixesText ? ['textAutoResize'] : [])
+  ])
+  setTransform(target, internals, () => before)
 }
 
 export type { NodeProxyHost }

@@ -6,6 +6,7 @@ type DerivedTextData = NonNullable<NodeChange['derivedTextData']>
 interface DerivedTextDataOptions {
   node: SceneNode
   glyphs: DerivedTextData['glyphs']
+  decorations?: DerivedTextData['decorations']
   fontMetaData: DerivedTextData['fontMetaData']
   baselines: DerivedTextData['baselines']
   logicalIndexToCharacterOffsetMap: number[]
@@ -18,6 +19,7 @@ export function buildDerivedTextData(
     layoutSize: { x: options.node.width, y: options.node.height },
     baselines: options.baselines,
     glyphs: options.glyphs,
+    ...(options.decorations ? { decorations: options.decorations } : {}),
     fontMetaData: options.fontMetaData,
     logicalIndexToCharacterOffsetMap: options.logicalIndexToCharacterOffsetMap,
     derivedLines: [{ directionality: 'LTR' }],

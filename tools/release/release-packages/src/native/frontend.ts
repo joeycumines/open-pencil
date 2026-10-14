@@ -1,6 +1,8 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { msiVersion } from '#release/version'
+
 import { readPackageManifest } from '@open-pencil/package-artifacts-tools'
 
 import { releaseCommands } from './commands.ts'
@@ -21,9 +23,13 @@ export async function prepareSharedFrontend(
   if (manifest.version !== version) throw new Error('Source version does not match release tag')
   if (archive.sha256 !== identity.frontendSha256) throw new Error('Shared frontend digest mismatch')
 
+  const wixVersion = msiVersion(version)
   await writeFile(
     join(paths.root, 'release-build-config.json'),
-    JSON.stringify({ build: { beforeBuildCommand: null } })
+    JSON.stringify({
+      build: { beforeBuildCommand: null },
+      ...(wixVersion && { bundle: { windows: { wix: { version: wixVersion } } } })
+    })
   )
 }
 

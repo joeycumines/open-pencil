@@ -168,7 +168,7 @@ function recordMoves(
 /** The page a layer sits on, or undefined for the root and the pages themselves. */
 export function pageOf(graph: SceneGraph, layerId: string): string | undefined {
   if (graph.getNode(layerId)?.type === 'CANVAS') return undefined
-  return graph.closest(layerId, (node) => node.type === 'CANVAS')?.id
+  return graph.pageOf(layerId) ?? undefined
 }
 
 /** Records the page of each moved layer and, when it changed, of every layer under it. */

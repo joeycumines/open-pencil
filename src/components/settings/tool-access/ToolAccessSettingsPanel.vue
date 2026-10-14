@@ -72,7 +72,12 @@ function setExpanded(effect: 'read' | 'write', open: boolean) {
           target === 'ai' ? automation.aiToolAccessDescription : automation.mcpToolAccessDescription
         }}
       </p>
-      <AppPlaceholder v-if="!hasMatches" :label="automation.noMatchingTools" />
+      <AppPlaceholder
+        v-if="!hasMatches"
+        size="compact"
+        :fill="false"
+        :label="automation.noMatchingTools"
+      />
       <ToolAccessList
         v-else
         :groups="labelledGroups"

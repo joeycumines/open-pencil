@@ -26,7 +26,7 @@ describe('Fix 4: text lineHeight serialization', () => {
     expect(changes[0].lineHeight).toEqual({ value: 24, units: 'PIXELS' })
   })
 
-  test('text node without lineHeight omits lineHeight', () => {
+  test('text node in auto line height writes it as Figma does', () => {
     const graph = new SceneGraph()
     const node = graph.createNode('TEXT', pageId(graph), {
       name: 'DefaultLH',
@@ -41,7 +41,7 @@ describe('Fix 4: text lineHeight serialization', () => {
     })
 
     const changes = toKiwi(node, graph)
-    expect(changes[0].lineHeight).toBeUndefined()
+    expect(changes[0].lineHeight).toEqual({ value: 100, units: 'PERCENT' })
   })
 
   test('lineHeight survives roundtrip through export/parse', async () => {

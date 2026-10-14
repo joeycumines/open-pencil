@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
-import { globalInstallCommand, isOutdatedCompanion } from '@/app/ai/agents/companions'
+import {
+  companionPackageManager,
+  globalInstallCommand,
+  isOutdatedCompanion
+} from '@/app/ai/agents/companions'
 
 describe('isOutdatedCompanion', () => {
   test('requires the app’s major and minor version', () => {
@@ -14,17 +18,24 @@ describe('isOutdatedCompanion', () => {
   })
 })
 
+describe('companionPackageManager', () => {
+  test('recognises a companion Bun installed on any platform', () => {
+    expect(companionPackageManager('/Users/me/.bun/bin/x')).toBe('bun')
+    expect(companionPackageManager('C:\\Users\\me\\.bun\\bin\\x.exe')).toBe('bun')
+    expect(companionPackageManager('/usr/local/bin/x')).toBe('npm')
+    expect(companionPackageManager(null)).toBe('npm')
+  })
+})
+
 describe('globalInstallCommand', () => {
-  test('uses the package manager that installed the program', () => {
-    expect(globalInstallCommand('@open-pencil/mcp@0.15.1', '/Users/me/.bun/bin/x')).toBe(
-      'bun add -g @open-pencil/mcp@0.15.1'
+  test('names the package manager, and sudo only where npm needs administrator rights', () => {
+    const target = '@open-pencil/mcp@0.15.1'
+    expect(globalInstallCommand(target, 'bun', { admin: true })).toBe(`bun add -g ${target}`)
+    expect(globalInstallCommand(target, 'npm')).toBe(`npm i -g ${target}`)
+    expect(globalInstallCommand(target, 'npm', { admin: true })).toBe(`sudo npm i -g ${target}`)
+    // Windows has no sudo, and its default npm folder belongs to the user.
+    expect(globalInstallCommand(target, 'npm', { admin: true, windows: true })).toBe(
+      `npm i -g ${target}`
     )
-    expect(globalInstallCommand('@open-pencil/mcp@0.15.1', 'C:\\Users\\me\\.bun\\bin\\x.exe')).toBe(
-      'bun add -g @open-pencil/mcp@0.15.1'
-    )
-    expect(globalInstallCommand('@open-pencil/mcp@0.15.1', '/usr/local/bin/x')).toBe(
-      'npm i -g @open-pencil/mcp@0.15.1'
-    )
-    expect(globalInstallCommand('@open-pencil/mcp@0.15.1')).toBe('npm i -g @open-pencil/mcp@0.15.1')
   })
 })

@@ -7,8 +7,8 @@ import { ImagePreviewCache } from '#core/canvas/images/previews'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { EffectRasterCache } from '#core/canvas/renderer/effect-raster-cache'
 import { destroyRenderer } from '#core/canvas/renderer/lifecycle'
-import { createGlyphSilhouetteCache } from '#core/canvas/text/derived'
-import { TextPreparationCache } from '#core/canvas/text/preparation-cache'
+import { createDerivedGlyphPathCache, createGlyphSilhouetteCache } from '#core/canvas/text/derived'
+import { TextPreparationCache } from '#core/canvas/text/preparation/cache'
 
 import { asDouble, asRenderer } from './helpers'
 
@@ -22,6 +22,7 @@ function createRenderer() {
     textPreparationCache: new TextPreparationCache(),
     transientPreviews: new Map(),
     imageCache: createImageCache(),
+    liveImages: new Map(),
     imagePreviews: new ImagePreviewCache(() => undefined),
     onImagePreviewReady: null,
     vectorPathCache: new Map(),
@@ -30,6 +31,7 @@ function createRenderer() {
     fillGeometryCache: new Map(),
     strokeGeometryCache: new Map(),
     glyphSilhouetteCache: createGlyphSilhouetteCache(),
+    derivedGlyphPathCache: createDerivedGlyphPathCache(),
     fillPaint: deletable<Paint>(),
     strokePaint: deletable<Paint>(),
     selectionPaint: deletable<Paint>(),
@@ -55,6 +57,7 @@ function createRenderer() {
     rulerLabelPaint: deletable<Paint>(),
     penPathPaint: deletable<Paint>(),
     penLiveStrokePaint: deletable<Paint>(),
+    pencilStrokePaint: deletable<Paint>(),
     penHandlePaint: deletable<Paint>(),
     penVertexFill: deletable<Paint>(),
     penVertexStroke: deletable<Paint>(),
@@ -96,10 +99,12 @@ test('destroyRenderer deletes all renderer-owned paints and label fonts', () => 
   const parentOutlinePaint = renderer.parentOutlinePaint
   const sectionTitleFont = renderer.sectionTitleFont
   const componentLabelFont = renderer.componentLabelFont
+  const pencilStrokePaint = renderer.pencilStrokePaint
 
   destroyRenderer(renderer)
 
   expect(parentOutlinePaint.delete).toHaveBeenCalled()
+  expect(pencilStrokePaint.delete).toHaveBeenCalled()
   expect(sectionTitleFont?.delete).toHaveBeenCalled()
   expect(componentLabelFont?.delete).toHaveBeenCalled()
 })

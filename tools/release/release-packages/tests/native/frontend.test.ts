@@ -8,10 +8,11 @@ import { desktopReleasePaths } from '#release/native/context'
 import { prepareSharedFrontend } from '#release/native/frontend'
 import { digestFile } from '#release/native/manifest'
 
-test.each(['valid', 'source', 'version', 'digest'])(
+test.each(['valid', 'beta', 'source', 'version', 'digest'])(
   'shared frontend validation: %s',
   async (scenario) => {
     const root = await mkdtemp(join(tmpdir(), 'release-frontend-'))
+    const version = scenario === 'beta' ? '0.16.0-beta.2' : '0.15.0'
 
     try {
       const archive = join(root, 'frontend.tar')
@@ -20,13 +21,13 @@ test.each(['valid', 'source', 'version', 'digest'])(
         join(root, 'package.json'),
         JSON.stringify({
           name: 'open-pencil',
-          version: scenario === 'version' ? '0.14.0' : '0.15.0'
+          version: scenario === 'version' ? '0.14.0' : version
         })
       )
 
       const sourceCommit = 'a'.repeat(40)
       const identity = {
-        tag: 'v0.15.0',
+        tag: `v${version}`,
         sourceCommit,
         workflowCommit: 'b'.repeat(40),
         runId: '123',
@@ -36,7 +37,7 @@ test.each(['valid', 'source', 'version', 'digest'])(
       const context = {
         identity,
         repository: 'open-pencil/open-pencil',
-        version: '0.15.0',
+        version,
         paths: desktopReleasePaths(root)
       }
       const commands = releaseCommands(root, async () => ({
@@ -53,6 +54,12 @@ test.each(['valid', 'source', 'version', 'digest'])(
         await operation
         expect(JSON.parse(await readFile(config, 'utf8'))).toEqual({
           build: { beforeBuildCommand: null }
+        })
+      } else if (scenario === 'beta') {
+        await operation
+        expect(JSON.parse(await readFile(config, 'utf8'))).toEqual({
+          build: { beforeBuildCommand: null },
+          bundle: { windows: { wix: { version: '0.16.0.2' } } }
         })
       } else {
         await expect(operation).rejects.toThrow()

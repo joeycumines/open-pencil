@@ -1,4 +1,4 @@
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph, styleRunReferences } from '@open-pencil/scene-graph'
 
 import type { ExportTarget } from './types'
 
@@ -28,7 +28,8 @@ function includeReferencedStyles(source: SceneGraph, ids: Set<string>): void {
       node.strokeStyleId,
       node.textStyleId,
       node.effectStyleId,
-      node.gridStyleId
+      node.gridStyleId,
+      ...styleRunReferences(node.styleRuns).styles
     ]) {
       if (styleId) referencedStyleIds.add(styleId)
     }
@@ -140,9 +141,11 @@ function collectReferencedResources(source: SceneGraph, graph: SceneGraph) {
     for (const fill of node.fills) {
       if (fill.type === 'IMAGE' && fill.imageHash) imageHashes.add(fill.imageHash)
     }
-    for (const variableId of Object.values(node.boundVariables)) {
-      collectVariableClosure(source, variableId, variableIds)
-    }
+    const bound = [
+      ...Object.values(node.boundVariables),
+      ...styleRunReferences(node.styleRuns).variables
+    ]
+    for (const variableId of bound) collectVariableClosure(source, variableId, variableIds)
   }
   return { imageHashes, variableIds }
 }

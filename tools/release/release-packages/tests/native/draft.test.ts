@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import type { ReleaseIdentity } from '#release/native/context'
-import { assertDraftReplacement } from '#release/native/draft'
+import { assertDraftReplacement, releaseChannelArgs } from '#release/native/draft'
 
 const identity: ReleaseIdentity = {
   tag: 'v0.15.0',
@@ -49,4 +49,9 @@ test.each(['release-manifest.json', 'SHA256SUMS'])('requires %s before publicati
       identity
     )
   ).toThrow('Missing release manifest')
+})
+
+test('marks a beta as a pre-release that never becomes the latest release', () => {
+  expect(releaseChannelArgs('0.16.0-beta.1')).toEqual(['--prerelease', '--latest=false'])
+  expect(releaseChannelArgs('0.16.0')).toEqual([])
 })

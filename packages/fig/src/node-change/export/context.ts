@@ -1,6 +1,6 @@
 import { effectiveFigmaRawNodeFields } from '#fig/source-metadata'
 
-import type { NodeChange, Paint } from '@open-pencil/kiwi/fig/codec'
+import type { NodeChange, Paint, StyleReference } from '@open-pencil/kiwi/fig/codec'
 import { stringToGuid } from '@open-pencil/kiwi/fig/guid'
 import type {
   ComponentPropertyDefinition,
@@ -9,6 +9,8 @@ import type {
   SceneNode
 } from '@open-pencil/scene-graph'
 import type { Color, GUID, Matrix } from '@open-pencil/scene-graph/primitives'
+
+import { variableAlias } from '../variable/bindings'
 
 export type KiwiNodeChange = NodeChange & Record<string, unknown>
 
@@ -19,17 +21,11 @@ export interface KiwiSymbolOverridePayload {
   [key: string]: unknown
 }
 
-/** How a record names a shared style: a local GUID, or a published library asset. */
-export interface StyleReference {
-  guid?: GUID
-  assetRef?: { key: string; version?: string }
-}
-
-/** Published text styles by source id, built once with the rest of the context. */
+/** Library styles by source id, built once with the rest of the context. */
 export function buildStyleReferences(graph: SceneGraph): ReadonlyMap<string, StyleReference> {
   const references = new Map<string, StyleReference>()
   for (const node of graph.getAllNodes()) {
-    if (node.sharedStyleType !== 'TEXT' || !node.source.id) continue
+    if (node.sharedStyleType === null || !node.source.id) continue
     const raw = effectiveFigmaRawNodeFields(node)
     if (typeof raw.key !== 'string') continue
     references.set(node.source.id, {
@@ -42,8 +38,45 @@ export function buildStyleReferences(graph: SceneGraph): ReadonlyMap<string, Sty
   return references
 }
 
+/**
+ * The GUID a layer names a style with: the record written for the local style of that ID, or
+ * the GUID the ID spells. Styles made in OpenPencil, by token import or by pasting from another
+ * document, have IDs that spell no GUID, so only their records can name them.
+ */
+export function styleReferenceGuid(
+  context: Pick<SceneNodeToKiwiContext, 'graph' | 'nodeIdToGuid' | 'styleNodeIds'>,
+  id: string
+): GUID {
+  if (!context.styleNodeIds) {
+    const styleNodeIds = new Map<string, string>()
+    for (const node of context.graph.getAllNodes())
+      if (node.sharedStyleType !== null && node.source.id) styleNodeIds.set(node.source.id, node.id)
+    context.styleNodeIds = styleNodeIds
+  }
+  const styleNodeId = context.styleNodeIds.get(id)
+  const written = styleNodeId ? context.nodeIdToGuid?.get(styleNodeId) : undefined
+  return written ?? context.nodeIdToGuid?.get(id) ?? stringToGuid(id)
+}
+
+/**
+ * How a layer names a style, as Figma writes it: a library style by its key, which Figma
+ * resolves and keeps linked to the library, and a local one by its record.
+ */
+export function exportedStyleReference(
+  context: Pick<
+    SceneNodeToKiwiContext,
+    'graph' | 'nodeIdToGuid' | 'styleNodeIds' | 'styleReferences'
+  >,
+  id: string
+): StyleReference {
+  context.styleReferences ??= buildStyleReferences(context.graph)
+  return context.styleReferences.get(id) ?? { guid: styleReferenceGuid(context, id) }
+}
+
 export interface SceneNodeToKiwiContext {
   styleReferences?: ReadonlyMap<string, StyleReference>
+  /** Local styles' node IDs by the style IDs layers name them with, built on first use. */
+  styleNodeIds?: ReadonlyMap<string, string>
   graph: SceneGraph
   blobs: Uint8Array[]
   blobIndexByHex?: Map<string, number>
@@ -111,8 +144,14 @@ export interface SceneNodeToKiwiContext {
   ) => KiwiNodeChange[]
 }
 
+/** Figma reads both parts of a GUID as signed 32-bit integers and drops a paste beyond them. */
+const MAX_FIGMA_GUID_PART = 0x7fffffff
+
+/** The GUID an ID spells, or null when it spells none Figma can read. */
 export function parseGuidOrNull(value: string) {
-  return /^\d+:\d+$/.test(value) ? stringToGuid(value) : null
+  if (!/^\d+:\d+$/.test(value)) return null
+  const guid = stringToGuid(value)
+  return guid.sessionID <= MAX_FIGMA_GUID_PART && guid.localID <= MAX_FIGMA_GUID_PART ? guid : null
 }
 
 export function resolveInstanceComponentId(
@@ -215,7 +254,7 @@ export function applyColorVariableBinding(
     colorVar: {
       dataType: 'ALIAS',
       resolvedDataType: 'COLOR',
-      value: { alias: { guid: context.varIdToGuid?.get(variableId) ?? stringToGuid(variableId) } }
+      value: { alias: variableAlias(context.graph, variableId, context.varIdToGuid) }
     }
   }
 }

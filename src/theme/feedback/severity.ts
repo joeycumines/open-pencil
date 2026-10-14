@@ -5,9 +5,9 @@ export const severityIcon = tv({
   base: 'size-3 shrink-0',
   variants: {
     severity: {
-      error: 'text-issue-error',
-      warning: 'text-issue-warning',
-      info: 'text-issue-info'
+      error: 'text-error',
+      warning: 'text-warning',
+      info: 'text-muted'
     }
   }
 })

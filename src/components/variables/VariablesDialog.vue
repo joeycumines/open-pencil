@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useFileDialog } from '@vueuse/core'
 import { DialogTitle } from 'reka-ui'
-import { computed, defineAsyncComponent, ref, shallowRef } from 'vue'
+import { computed, defineAsyncComponent, ref, shallowRef, watch } from 'vue'
 
 import type { DesignTokenBundle } from '@open-pencil/core/io/formats/design-tokens'
 import { useI18n } from '@open-pencil/vue'
@@ -13,6 +13,7 @@ import {
   exportDesignTokenArchive,
   readDesignTokenFiles
 } from '@/app/editor/tokens/design-tokens'
+import { pendingTokenImport } from '@/app/editor/tokens/dialog'
 import { notificationMessages } from '@/app/i18n/notifications'
 import { useDocumentShortcuts } from '@/app/shell/keyboard/document'
 import { toast } from '@/app/shell/ui'
@@ -50,18 +51,39 @@ function reportFailure(error: unknown) {
   )
 }
 
+/** The latest import asked for; an earlier one still reading does not replace its preview. */
+let importRequest = 0
+
 /** Token files, a folder's worth, or a zip of them; the import dialog shows what they would do. */
-const tokenFiles = useFileDialog({ accept: DESIGN_TOKEN_FILE_ACCEPT, multiple: true, reset: true })
-tokenFiles.onChange((files) => {
-  if (!files?.length) return
-  const picked = [...files]
+function importFiles(files: readonly File[]) {
+  const request = ++importRequest
   void (async () => {
-    const sources = await readDesignTokenFiles(picked)
+    const sources = await readDesignTokenFiles(files)
     const { readDesignTokens } = await import('@open-pencil/core/io/formats/design-tokens')
+    if (request !== importRequest) return
     importBundle.value = readDesignTokens(sources)
     importOpen.value = true
-  })().catch(reportFailure)
+  })().catch((error: unknown) => {
+    if (request === importRequest) reportFailure(error)
+  })
+}
+
+const tokenFiles = useFileDialog({ accept: DESIGN_TOKEN_FILE_ACCEPT, multiple: true, reset: true })
+tokenFiles.onChange((files) => {
+  if (files?.length) importFiles([...files])
 })
+
+// Token files dropped on the window come here through the document's pending import.
+const pendingImport = pendingTokenImport(store)
+watch(
+  pendingImport,
+  (files) => {
+    if (!files) return
+    pendingImport.value = null
+    importFiles(files)
+  },
+  { immediate: true }
+)
 
 function exportTokens() {
   exportDesignTokenArchive(store).catch(reportFailure)

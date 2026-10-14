@@ -2,6 +2,7 @@
 import { computed, shallowRef, useTemplateRef, watch } from 'vue'
 
 import { resolvePlayState } from '@open-pencil/core/editor'
+import { vectorElement } from '@open-pencil/core/io'
 import {
   behaviourControls,
   controlRoles,
@@ -19,16 +20,16 @@ import { createIslandState, instanceStates } from './state'
  * root, with each control running as its Reka UI component. The design's variants draw the
  * controls' states; the document never changes.
  */
-const { rootId, revision } = defineProps<{
+const { rootId, revision, tokens } = defineProps<{
   rootId: string
   /** Changing it starts every control again as designed. */
   revision: number
+  /** The document's variables as custom properties, shared by every island of the canvas. */
+  tokens: CSSStyleSheet
 }>()
 const editor = useEditor()
 
-/** Styles of the island's own document; the app's styles do not reach into it. */
-const ISLAND_CSS = ':host{all:initial;display:block}*,*::before,*::after{box-sizing:border-box}'
-const container = useShadowContainer(useTemplateRef<HTMLElement>('host'), ISLAND_CSS)
+const container = useShadowContainer(useTemplateRef<HTMLElement>('host'), [tokens])
 
 const controls = computed(() => {
   void editor.state.sceneVersion
@@ -44,7 +45,7 @@ watch(
 const projection = computed(() => {
   void editor.state.sceneVersion
   const graph = resolvePlayState(editor.graph, rootId, instanceStates(controls.value, state.value))
-  const [root] = sceneNodeToDesignDocument(graph, rootId).children
+  const [root] = sceneNodeToDesignDocument(graph, rootId, { vectorElement }).children
   return { graph, root }
 })
 

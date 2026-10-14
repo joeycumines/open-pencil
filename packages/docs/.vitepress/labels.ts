@@ -24,6 +24,7 @@ export interface SidebarLabels {
   architecture: string
   techStack: string
   comparison: string
+  privacy: string
   figmaMatrix: string
 }
 
@@ -177,6 +178,7 @@ export const EN: SidebarLabels = {
   architecture: 'Architecture',
   techStack: 'Tech Stack',
   comparison: 'Comparison',
+  privacy: 'Privacy',
   figmaMatrix: 'Figma Feature Matrix'
 }
 export const DE: SidebarLabels = {
@@ -205,6 +207,7 @@ export const DE: SidebarLabels = {
   architecture: 'Architektur',
   techStack: 'Tech-Stack',
   comparison: 'Vergleich',
+  privacy: 'Datenschutz',
   figmaMatrix: 'Figma-Funktionsmatrix'
 }
 export const IT: SidebarLabels = {
@@ -233,6 +236,7 @@ export const IT: SidebarLabels = {
   architecture: 'Architettura',
   techStack: 'Stack tecnologico',
   comparison: 'Confronto',
+  privacy: 'Privacy',
   figmaMatrix: 'Matrice funzionalità Figma'
 }
 export const FR: SidebarLabels = {
@@ -261,6 +265,7 @@ export const FR: SidebarLabels = {
   architecture: 'Architecture',
   techStack: 'Stack technique',
   comparison: 'Comparaison',
+  privacy: 'Confidentialité',
   figmaMatrix: 'Matrice des fonctionnalités Figma'
 }
 export const ES: SidebarLabels = {
@@ -289,6 +294,7 @@ export const ES: SidebarLabels = {
   architecture: 'Arquitectura',
   techStack: 'Stack tecnológico',
   comparison: 'Comparación',
+  privacy: 'Privacidad',
   figmaMatrix: 'Matriz de funcionalidades Figma'
 }
 export const PL: SidebarLabels = {
@@ -317,6 +323,7 @@ export const PL: SidebarLabels = {
   architecture: 'Architektura',
   techStack: 'Stack technologiczny',
   comparison: 'Porównanie',
+  privacy: 'Prywatność',
   figmaMatrix: 'Matryca funkcji Figma'
 }
 export const RU: SidebarLabels = {
@@ -345,5 +352,6 @@ export const RU: SidebarLabels = {
   architecture: 'Архитектура',
   techStack: 'Технологии',
   comparison: 'Сравнение',
+  privacy: 'Конфиденциальность',
   figmaMatrix: 'Матрица функций Figma'
 }

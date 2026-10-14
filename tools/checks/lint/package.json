@@ -9,6 +9,7 @@
     "test": "bun test tests"
   },
   "dependencies": {
+    "@tailwindcss/node": "^4.3.3",
     "es-toolkit": "^1.52.0"
   },
   "devDependencies": {

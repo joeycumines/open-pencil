@@ -62,6 +62,8 @@ export class CanvasHelper {
   }
 
   async clearCanvas() {
+    // Inside path editing, Select All and Backspace act on the path's points, not the layers.
+    await this.pressKey('Escape')
     await this.selectAll()
     await this.pressKey('Backspace')
     await this.waitForRender()
@@ -122,7 +124,7 @@ export class CanvasHelper {
   }
 
   async drawSection(x: number, y: number, width: number, height: number) {
-    await this.pressKey('s')
+    await this.pressKey('Shift+KeyS')
     await this.drag(x, y, x + width, y + height)
     await this.waitForRender()
   }
@@ -133,7 +135,7 @@ export class CanvasHelper {
     const keys: Record<string, string> = {
       select: 'v',
       frame: 'f',
-      section: 's',
+      section: 'Shift+KeyS',
       rectangle: 'r',
       ellipse: 'o',
       text: 't',

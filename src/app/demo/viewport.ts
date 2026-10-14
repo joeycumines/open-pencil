@@ -1,20 +1,25 @@
 import type { Editor } from '@open-pencil/core/editor'
 
-type DemoViewportEditor = Pick<Editor, 'onEditorEvent' | 'zoomToFit'>
+type DemoViewportEditor = Pick<Editor, 'graph' | 'state' | 'zoomToBounds'>
 
-/** Fit a demo page once, then preserve the user's own viewport on return visits. */
-export function fitDemoPagesOnFirstVisit(store: DemoViewportEditor, pageIds: string[]) {
-  const pending = new Set(pageIds)
-  const unbindPage = store.onEditorEvent('page:changed', (pageId) => {
-    if (!pending.delete(pageId)) return
-    store.zoomToFit()
-    if (pending.size === 0) dispose()
-  })
-  const unbindGraph = store.onEditorEvent('graph:replaced', dispose)
+/** The air around the first chapter when the tour opens, in canvas units. */
+const MARGIN = 80
 
-  function dispose() {
-    unbindPage()
-    unbindGraph()
-  }
-  return dispose
+/**
+ * Open the tour on its first chapter: the chapters are sections stacked on one page, so the
+ * opening view fills the screen with the first and the rest follow below it.
+ */
+export function showFirstChapter(store: DemoViewportEditor): void {
+  const first = store.graph
+    .getChildren(store.state.currentPageId)
+    .filter((node) => node.type === 'SECTION')
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+    .at(0)
+  if (!first) return
+  store.zoomToBounds(
+    first.x - MARGIN,
+    first.y - MARGIN,
+    first.x + first.width + MARGIN,
+    first.y + first.height + MARGIN
+  )
 }

@@ -125,7 +125,7 @@ function replace(value: string, replacement: string) {
           "
           @update:model-value="replace(value, $event)"
         />
-        <span v-if="conflict" role="alert" class="text-[11px] text-issue-warning">
+        <span v-if="conflict" role="alert" class="text-[11px] text-warning">
           {{ panels.duplicateVariantValues }}
         </span>
       </div>

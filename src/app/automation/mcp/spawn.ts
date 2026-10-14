@@ -20,7 +20,10 @@ import { DEV_MCP_RESTART_PATH, type DevMCPConfiguration } from './dev-control'
 import {
   classifySpawnFailure,
   mcpFailure,
+  MCP_EXECUTABLE,
+  MCP_INSTALL_COMMAND,
   MCP_INSTALL_TARGET,
+  MCP_PACKAGE_NAME,
   MCPStartupError,
   type MCPFailure
 } from './failure'
@@ -34,7 +37,6 @@ import {
 export interface AutomationHealth {
   status: 'ok' | 'no_app'
   version?: string
-  installCommand?: string
   authRequired?: boolean
   discoveryPath?: string
   tools?: ToolDescriptor[]
@@ -59,7 +61,6 @@ const DEV_AUTOMATION_AUTH_TOKEN =
     : null
 const noop = () => undefined
 const MAX_STARTUP_STDERR_LENGTH = 8_192
-const MCP_EXECUTABLE = 'openpencil-mcp-http'
 
 interface MCPLookup {
   available: boolean
@@ -268,22 +269,14 @@ function parseAutomationHealth(value: unknown): AutomationHealth | null {
   if (!isAutomationHealthRecord(value)) return null
   if (value.status !== 'ok' && value.status !== 'no_app') return null
   const version = optionalString(value.version)
-  const installCommand = optionalString(value.installCommand)
   const authRequired = optionalBoolean(value.authRequired)
   const discoveryPath = optionalString(value.discoveryPath)
   const tools = parseToolDescriptors(value.tools)
-  if (
-    version === null ||
-    installCommand === null ||
-    authRequired === null ||
-    discoveryPath === null ||
-    tools === null
-  ) {
+  if (version === null || authRequired === null || discoveryPath === null || tools === null) {
     return null
   }
   const health: AutomationHealth = { status: value.status }
   if (version !== undefined) health.version = version
-  if (installCommand !== undefined) health.installCommand = installCommand
   if (authRequired !== undefined) health.authRequired = authRequired
   if (discoveryPath !== undefined) health.discoveryPath = discoveryPath
   if (tools !== undefined) health.tools = tools
@@ -336,12 +329,13 @@ function assertCompatibleMCPVersion(health: AutomationHealth): void {
   if (!oursMajorMinor) return
   if (runningMajorMinor === oursMajorMinor) return
   const runningVersion = health.version ? `v${health.version}` : 'an older version'
-  const updateHint = health.installCommand
-    ? `Run: ${health.installCommand}, then restart OpenPencil.`
-    : `Update the global @open-pencil/mcp package to v${APP_VERSION} with your package manager, then restart OpenPencil.`
-  throw new Error(
-    `OpenPencil desktop v${APP_VERSION} requires @open-pencil/mcp v${oursMajorMinor}.x ` +
-      `(major.minor compatibility), but the running MCP server is ${runningVersion}. ${updateHint}`
+  // The running server's own install command names its own version, so the fix always
+  // comes from this app's version.
+  throw new MCPStartupError(
+    `OpenPencil desktop v${APP_VERSION} requires ${MCP_PACKAGE_NAME} v${oursMajorMinor}.x ` +
+      `(major.minor compatibility), but the running MCP server is ${runningVersion}. ` +
+      `Run: ${MCP_INSTALL_COMMAND}, then restart the MCP server.`,
+    mcpFailure('outdated', health.version)
   )
 }
 

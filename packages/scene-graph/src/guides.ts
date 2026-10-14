@@ -41,8 +41,7 @@ export function guideOwnersOnPage(graph: SceneGraph, pageId: string): SceneNode[
   for (const id of ownerSet(graph)) {
     const node = graph.getNode(id)
     if (!node || node.guides.length === 0) continue
-    if (graph.closest(id, (ancestor) => ancestor.type === 'CANVAS')?.id === pageId)
-      owners.push(node)
+    if (graph.pageOf(id) === pageId) owners.push(node)
   }
   return owners
 }

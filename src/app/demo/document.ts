@@ -1,6 +1,10 @@
+import { yieldToUI } from '@/app/document/io/browser'
 import type { EditorStore } from '@/app/editor/session'
+import { resolvedAppTheme } from '@/app/shell/theme'
+import { createTab } from '@/app/tabs'
 
-import { fitDemoPagesOnFirstVisit } from './viewport'
+import { followAppTheme } from './theme'
+import { showFirstChapter } from './viewport'
 
 /** Built from `tools/generate/demo` before the app is served or bundled. */
 const DEMO_URL = '/demo.fig'
@@ -8,8 +12,8 @@ const DEMO_FILE_NAME = 'Demo.fig'
 
 /**
  * Opens the bundled demo document like any `.fig` file: decoded off the main thread, behind
- * the canvas loader, with pages materialized as they are visited. Each page is fitted to the
- * viewport on its first visit.
+ * the canvas loader. Once it is open it follows the app's theme and the view settles on the
+ * first chapter.
  */
 export async function openDemoDocument(store: EditorStore): Promise<void> {
   const blank = store.graph
@@ -24,9 +28,14 @@ export async function openDemoDocument(store: EditorStore): Promise<void> {
     store.graph.getChildren(store.state.currentPageId).length === 0
   if (!untouched) return
   await store.openFigFile(file)
-  const [, ...later] = store.graph.getPages()
-  fitDemoPagesOnFirstVisit(
-    store,
-    later.map((page) => page.id)
-  )
+  if (store.graph === blank) return
+  followAppTheme(store, resolvedAppTheme)
+  // Opening fits the whole page on the next frame; the first chapter comes after it.
+  await yieldToUI()
+  if (store.graph.getNode(store.state.currentPageId)) showFirstChapter(store)
+}
+
+/** Open the tour in a tab of its own, from the welcome dialog or the File menu. */
+export function openTour(): Promise<void> {
+  return openDemoDocument(createTab().store)
 }

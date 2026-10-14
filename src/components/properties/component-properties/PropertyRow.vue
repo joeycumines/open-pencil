@@ -145,7 +145,7 @@ const shownValue = computed(() => {
             size="xs"
             variant="ghost"
             :disabled="disabled"
-            class="text-issue-error"
+            class="text-error"
             @click="emit('remove')"
           >
             <icon-lucide-trash-2 class="size-3.5" />

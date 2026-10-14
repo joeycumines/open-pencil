@@ -126,7 +126,7 @@ const provider: BindingProvider<Color> = {
           class="absolute h-3 w-full rounded bg-[linear-gradient(to_right,#ddd,#7c3aed)]"
         />
         <ChannelSliderThumb
-          class="block size-4 rounded-full border-2 border-white bg-violet-600 shadow outline-none focus-visible:ring-2"
+          class="block size-4 rounded-full border-2 border-white bg-[var(--vp-c-brand-1)] shadow outline-none focus-visible:ring-2"
         />
         <output class="ml-auto pl-4 text-xs tabular-nums"
           >{{ Math.round(slider.value * 100) }}%</output

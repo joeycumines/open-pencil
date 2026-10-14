@@ -16,6 +16,9 @@ Select objects to move, resize, rotate, duplicate, and organize them on the canv
 - **Double-click a frame's or component's name** above it on the canvas to rename it in place
 - **Marquee drag** — drag on empty canvas to draw a selection rectangle; intersecting nodes are selected on release. Started inside a top-level frame without auto layout or a section, it selects that container's layers; from the page, a frame or section that holds layers is selected only when fully enclosed
 - <kbd>⌘</kbd><kbd>A</kbd> — select all nodes on the current page
+- <kbd>Enter</kbd> — select the children of the selected layers; on a vector it edits the path and on text it edits the text
+- <kbd>Shift</kbd> + <kbd>Enter</kbd> or <kbd>\\</kbd> — select the parent of the selected layers
+- <kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd> — select the next or previous sibling, going down or up the layers panel and wrapping at the ends
 - **Click empty canvas** — deselect all
 
 ## Moving
@@ -76,6 +79,15 @@ Change the stacking order of nodes within their parent:
 ## Move to Page
 
 Move selected nodes to a different page via the [context menu](./context-menu). The nodes are reparented under the target page's canvas.
+
+## Editing several layers
+
+With several layers selected, the properties panel shows what they have in common and reads **Mixed** where they differ; an edit changes all of them in one undo step.
+
+- **Layout** shows their sizes, text resizing when text is selected, flow when every layer is a frame, and clip content for the frames among them. When the layers form one row or column, **Spacing** shows the gap between them; typing a value spaces them evenly from the first layer.
+- **Typography** appears whenever text is selected and changes only the text.
+- **Stroke** shows the stroke of the layers that have one; editing it strokes every selected layer.
+- **Selection colors** lists every fill and stroke colour in the selection, including inside frames and groups, most used first. Changing one recolours it everywhere it is used.
 
 ## Sections
 

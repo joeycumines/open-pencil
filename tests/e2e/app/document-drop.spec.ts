@@ -48,6 +48,21 @@ test('a dropped file that is neither a document nor an image reports that it can
   await expect(tabs.getByRole('tab')).toHaveCount(1)
 })
 
+test('a design token file dropped on the canvas opens the variables import', async ({ page }) => {
+  await page.goto('/?test')
+  await new CanvasHelper(page).waitForInit()
+  const tokens = { color: { $type: 'color', brand: { $value: '#2563eb' } } }
+
+  await dropOnCanvas(page, [
+    { name: 'brand.tokens.json', bytes: [...new TextEncoder().encode(JSON.stringify(tokens))] }
+  ])
+
+  await expect(page.getByRole('dialog', { name: 'Import design tokens' })).toBeVisible()
+  await expect(page.getByText('Could not open', { exact: false })).toHaveCount(0)
+  // The modal dialog hides the tab bar from the accessibility tree, so tabs are counted by id.
+  await expect(page.getByTestId('tabbar-tab')).toHaveCount(1)
+})
+
 test('an SVG dropped on the canvas is placed, not opened as a document', async ({ page }) => {
   await page.goto('/?test')
   await new CanvasHelper(page).waitForInit()

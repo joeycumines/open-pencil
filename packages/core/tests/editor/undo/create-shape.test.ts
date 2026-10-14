@@ -63,3 +63,26 @@ describe('create shape undo/redo', () => {
     expect(getNodeOrThrow(editor.graph, id).x).toBe(200)
   })
 })
+
+describe('pen path undo/redo', () => {
+  test('redo brings back the path, fills and strokes, not an empty vector', () => {
+    const editor = createEditor()
+    editor.setTool('PEN')
+    editor.penAddVertex(0, 0)
+    editor.penAddVertex(100, 0)
+    editor.penAddVertex(100, 50)
+    editor.penCommit(false)
+    const id = [...editor.state.selectedIds][0]
+    const drawn = getNodeOrThrow(editor.graph, id)
+    expect(drawn.vectorNetwork?.segments).toHaveLength(2)
+
+    editor.undo.undo()
+    expect(editor.graph.getNode(id)).toBeUndefined()
+
+    editor.undo.redo()
+    const restored = getNodeOrThrow(editor.graph, id)
+    expect(restored.vectorNetwork).toEqual(drawn.vectorNetwork)
+    expect(restored.strokes).toEqual(drawn.strokes)
+    expect(restored.fills).toEqual(drawn.fills)
+  })
+})

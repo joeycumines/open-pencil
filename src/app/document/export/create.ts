@@ -12,6 +12,7 @@ import {
   type ExportedFile
 } from '@/app/document/export/files'
 import type { ExportOptions } from '@/app/document/export/types'
+import { trackDocumentFormat } from '@/app/telemetry'
 
 type DownloadBlob = (data: Uint8Array, filename: string, mime: string) => void
 
@@ -57,8 +58,8 @@ export function createDocumentExportActions(
     }
   }
 
-  async function saveExportFile(file: ExportedFile) {
-    await saveExportedFile(
+  function saveExportFile(file: ExportedFile): Promise<boolean> {
+    return saveExportedFile(
       file.bytes,
       file.fileName,
       file.format,
@@ -73,7 +74,9 @@ export function createDocumentExportActions(
     formatId: string,
     options?: ExportOptions
   ) {
-    await saveExportFile(await renderExportFile(target, formatId, options))
+    if (await saveExportFile(await renderExportFile(target, formatId, options))) {
+      trackDocumentFormat('document_exported', formatId)
+    }
   }
 
   // Export a batch of targets. A single file downloads directly; multiple files
@@ -86,21 +89,22 @@ export function createDocumentExportActions(
       files.push(await renderExportFile(request.target, request.formatId, request.options))
     }
 
-    if (files.length === 1) {
-      await saveExportFile(files[0])
-      return
-    }
-
     const baseNames = new Set(requests.map((r) => getExportBaseName(editor.graph, r.target)))
     const zipBaseName = baseNames.size === 1 ? [...baseNames][0] : 'export'
-    await saveExportedFile(
-      bundleExportFiles(files),
-      `${zipBaseName}.zip`,
-      'ZIP',
-      '.zip',
-      'application/zip',
-      downloadBlob
-    )
+    const saved =
+      files.length === 1
+        ? await saveExportFile(files[0])
+        : await saveExportedFile(
+            bundleExportFiles(files),
+            `${zipBaseName}.zip`,
+            'ZIP',
+            '.zip',
+            'application/zip',
+            downloadBlob
+          )
+    // Counted once delivered, so a failed render or a cancelled save is not an export.
+    if (saved)
+      for (const { formatId } of requests) trackDocumentFormat('document_exported', formatId)
   }
 
   async function exportSelection(scale: number, formatId: BuiltinIOFormatId) {

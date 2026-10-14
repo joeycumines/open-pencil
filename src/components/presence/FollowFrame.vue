@@ -2,7 +2,7 @@
 import { useEventListener } from '@vueuse/core'
 import { computed } from 'vue'
 
-import { colorToCSS, readableForeground } from '@open-pencil/scene-graph/color'
+import { colorToCSS, darkenForContrast } from '@open-pencil/scene-graph/color'
 import { useI18n } from '@open-pencil/vue'
 
 import type { FollowedLabel } from '@/app/presence/registry'
@@ -15,9 +15,10 @@ const emit = defineEmits<{ stop: [] }>()
 const { collaboration: messages } = useI18n()
 const ui = followFrame()
 
-const color = computed(() => colorToCSS(followed.color))
-// People's colors range from pale to deep, so the bar's text takes whichever reads on it.
-const foreground = computed(() => colorToCSS(readableForeground(followed.color)))
+// People's colors range from pale to deep, so the frame takes theirs darkened just enough for
+// the bar's white label to read at WCAG AA, keeping its hue. A peer's color can arrive with
+// alpha; the bar is drawn opaque, so the contrast holds over any canvas.
+const color = computed(() => colorToCSS(darkenForContrast({ ...followed.color, a: 1 })))
 const text = computed(() =>
   followed.owner
     ? messages.value.followingAgent({ agent: followed.name, owner: followed.owner })
@@ -32,7 +33,7 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 
 <template>
   <div data-test-id="follow-frame" :class="ui.root()" :style="{ borderColor: color }">
-    <div role="status" :class="ui.bar()" :style="{ background: color, color: foreground }">
+    <div role="status" :class="ui.bar()" :style="{ background: color }">
       <icon-lucide-sparkle v-if="followed.kind === 'agent'" :class="ui.icon()" />
       <span :class="ui.label()">{{ text }}</span>
       <button type="button" data-test-id="follow-stop" :class="ui.stop()" @click="emit('stop')">

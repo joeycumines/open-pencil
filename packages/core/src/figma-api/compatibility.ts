@@ -108,3 +108,79 @@ const _slotSurfaceMatch: SlotSurfaceMatch = true
 // `Effect` here is Figma's plugin-typings union; OpenPencil reads and writes a subset of it.
 type EffectShapeMatch = Expect<Extends<FigmaNodeProxy['effects'][number], Effect>>
 const _effectShapeMatch: EffectShapeMatch = true
+
+type TextListKeys =
+  | 'setRangeListOptions'
+  | 'setRangeIndentation'
+  | 'setRangeListSpacing'
+  | 'setRangeParagraphSpacing'
+  | 'setRangeParagraphIndent'
+  | 'setRangeFontSize'
+  | 'setRangeFontName'
+  | 'setRangeLetterSpacing'
+  | 'setRangeLineHeight'
+  | 'setRangeTextDecoration'
+  | 'setRangeTextDecorationStyle'
+  | 'setRangeTextDecorationOffset'
+  | 'setRangeTextDecorationThickness'
+  | 'setRangeTextDecorationSkipInk'
+  | 'setRangeTextCase'
+  | 'setRangeHyperlink'
+  | 'setRangeTextStyleId'
+  | 'setRangeTextStyleIdAsync'
+  | 'setRangeFillStyleId'
+  | 'setRangeFillStyleIdAsync'
+  | 'hangingList'
+type TextListSurfaceMatch = Expect<
+  Extends<Pick<FigmaNodeProxy, TextListKeys>, Pick<TextNode, TextListKeys>>
+>
+const _textListSurfaceMatch: TextListSurfaceMatch = true
+
+// Figma's mixed values are its own `figma.mixed` unique symbol; ours are a plain symbol. Fills
+// and decoration colours read and take the paints OpenPencil models, as `fills` does, and Figma
+// types OpenType features as every feature while it returns only those set, so they stay out.
+type WithoutMixed<T> = T extends (...args: infer A) => infer R
+  ? (...args: A) => Exclude<R, symbol>
+  : Exclude<T, symbol>
+type TextMixedKeys =
+  | 'getRangeListOptions'
+  | 'getRangeIndentation'
+  | 'getRangeListSpacing'
+  | 'getRangeParagraphSpacing'
+  | 'getRangeParagraphIndent'
+  | 'getRangeFontSize'
+  | 'getRangeFontName'
+  | 'getRangeFontWeight'
+  | 'getRangeLetterSpacing'
+  | 'getRangeLineHeight'
+  | 'getRangeTextDecoration'
+  | 'getRangeTextDecorationStyle'
+  | 'getRangeTextDecorationOffset'
+  | 'getRangeTextDecorationThickness'
+  | 'getRangeTextDecorationSkipInk'
+  | 'getRangeAllFontNames'
+  | 'getRangeTextCase'
+  | 'getRangeHyperlink'
+  | 'getRangeTextStyleId'
+  | 'getRangeFillStyleId'
+  | 'getRangeBoundVariable'
+  | 'textCase'
+  | 'hyperlink'
+  | 'textStyleId'
+  | 'fillStyleId'
+  | 'fontSize'
+  | 'fontName'
+  | 'fontWeight'
+  | 'letterSpacing'
+  | 'lineHeight'
+  | 'textDecoration'
+  | 'listSpacing'
+  | 'paragraphSpacing'
+  | 'paragraphIndent'
+type TextMixedMatch = Expect<
+  Extends<
+    { [K in TextMixedKeys]: WithoutMixed<FigmaNodeProxy[K]> },
+    { [K in TextMixedKeys]: WithoutMixed<TextNode[K]> }
+  >
+>
+const _textMixedMatch: TextMixedMatch = true

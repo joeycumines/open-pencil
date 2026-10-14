@@ -10,6 +10,7 @@ import type { RenderColorSpace } from '@open-pencil/scene-graph/color'
 import { computeDescendantVisualBounds, type VisualBounds } from '@open-pencil/scene-graph/geometry'
 
 import type { SkiaRenderer } from '#core/canvas'
+import { getPageColor } from '#core/figma-api/page-backgrounds'
 import { extractExportGraph, findPageId } from '#core/io/subgraph'
 
 export type RasterExportFormat = 'PNG' | 'JPG' | 'WEBP'
@@ -344,9 +345,11 @@ export function renderThumbnail(
   const scale = Math.min(width / contentW, height / contentH)
   const pixelW = Math.max(1, Math.round(contentW * scale))
   const pixelH = Math.max(1, Math.round(contentH * scale))
+  // The page's own background, which the editor's page colour matches only while it is open.
+  const background = getPageColor(page)
 
   return renderToSurface(ck, renderer, graph, pageId, pixelW, pixelH, 'PNG', 100, (canvas) => {
-    canvas.clear(ck.Color4f(renderer.pageColor.r, renderer.pageColor.g, renderer.pageColor.b, 1))
+    canvas.clear(ck.Color4f(background.r, background.g, background.b, 1))
     canvas.translate(-bounds.minX * scale, -bounds.minY * scale)
     canvas.scale(scale, scale)
   })

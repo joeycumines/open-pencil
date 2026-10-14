@@ -1,4 +1,7 @@
+import { isEqual, omitBy, pick } from 'es-toolkit'
+
 import {
+  createDefaultNode,
   layoutSizing,
   type SceneGraph,
   type SceneNode,
@@ -7,6 +10,7 @@ import {
 import { DEFAULT_FONT_FAMILY } from '@open-pencil/scene-graph/constants'
 import { resolveNodeTextDirection } from '@open-pencil/scene-graph/text-direction'
 
+import { collectDecorationProps } from './decoration'
 import {
   collectCornerRadii,
   collectPadding,
@@ -216,16 +220,32 @@ function collectTextSizingProps(node: SceneNode, graph: SceneGraph, props: JSXPr
   if (emitH && node.height > 0) props.push(['h', node.height])
 }
 
+const DECORATION_FIELDS = [
+  'textDecorationStyle',
+  'textDecorationFills',
+  'textDecorationThickness',
+  'textUnderlineOffset',
+  'textDecorationSkipInk'
+] as const
+
+const TEXT_DEFAULTS = pick(
+  createDefaultNode(() => '', 'TEXT'),
+  DECORATION_FIELDS
+)
+
+/** A font weight as `weight` writes it, by name for the weights that have one. */
+export function fontWeightValue(weight: number): string | number {
+  if (weight === 700) return 'bold'
+  if (weight === 500) return 'medium'
+  return weight
+}
+
 function collectTextNodeProps(node: SceneNode, props: JSXProp[]): void {
   const direction = resolveNodeTextDirection(node)
   if (node.fontSize !== 14) props.push(['size', node.fontSize])
   if (node.fontFamily && node.fontFamily !== DEFAULT_FONT_FAMILY)
     props.push(['font', node.fontFamily])
-  if (node.fontWeight !== 400) {
-    if (node.fontWeight === 700) props.push(['weight', 'bold'])
-    else if (node.fontWeight === 500) props.push(['weight', 'medium'])
-    else props.push(['weight', node.fontWeight])
-  }
+  if (node.fontWeight !== 400) props.push(['weight', fontWeightValue(node.fontWeight)])
   if (direction === 'RTL') props.push(['dir', 'rtl'])
   if (node.italic) props.push(['italic', true])
   if (node.textAlignHorizontal !== 'LEFT') {
@@ -238,9 +258,18 @@ function collectTextNodeProps(node: SceneNode, props: JSXProp[]): void {
   if (node.letterSpacing !== 0) props.push(['letterSpacing', node.letterSpacing])
   if (node.textDecoration !== 'NONE')
     props.push(['textDecoration', node.textDecoration.toLowerCase()])
+  collectDecorationProps(
+    omitBy(pick(node, DECORATION_FIELDS), (value, key) => isEqual(value, TEXT_DEFAULTS[key])),
+    node,
+    props
+  )
   if (node.textCase !== 'ORIGINAL') props.push(['textCase', node.textCase.toLowerCase()])
   if (node.maxLines != null) props.push(['maxLines', node.maxLines])
   if (node.textTruncation === 'ENDING' && node.maxLines == null) props.push(['truncate', true])
+  if (node.paragraphSpacing !== 0) props.push(['paragraphSpacing', node.paragraphSpacing])
+  if (node.listSpacing !== 0) props.push(['listSpacing', node.listSpacing])
+  if (node.paragraphIndent !== 0) props.push(['paragraphIndent', node.paragraphIndent])
+  if (node.hangingList) props.push(['hangingList', true])
 }
 
 const TEXT_AUTO_RESIZE: Record<SceneNode['textAutoResize'], string> = {

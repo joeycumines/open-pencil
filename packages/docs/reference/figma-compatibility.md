@@ -22,7 +22,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Canvas guides | 🔲 | Figma supports draggable guides from rulers |
 | Actions menu / command palette | 🔲 | Figma's quick actions search |
 | Context menu | ✅ | Right-click with clipboard, z-order, grouping, component, visibility, lock, move-to-page actions |
-| Keyboard shortcuts | 🟡 | Core shortcuts + components + z-order + visibility/lock implemented; Scale, Arrow, Pencil, flip, text formatting not yet wired |
+| Keyboard shortcuts | 🟡 | Tools, editing, components, z-order, visibility/lock, flip, text formatting, and canvas and layer navigation implemented; Scale, Arrow, Eyedropper, and the zoom tool not yet wired |
 | Find and replace | 🔲 | Text search/replace across document |
 | Layer outlines view | 🔲 | Wireframe view of all layers |
 | Custom file thumbnails | 🔲 | Thumbnail generated on export, but no custom thumbnail picker |
@@ -66,6 +66,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 |---------|--------|-------|
 | Vector networks | ✅ | Figma-compatible model, not simple paths |
 | Pen tool | ✅ | Corner points, bezier curves, open/closed paths |
+| Pencil tool | ✅ | Freehand strokes smoothed into curves, <kbd>⇧</kbd> for straight lines |
 | Edit vector layers | 🟡 | Creation works; advanced vertex editing (bend, delete points, join) limited |
 | Boolean operations (Union, Subtract, Intersect, Exclude) | 🔲 | Combine shapes with boolean ops |
 | Flatten layers | 🔲 | Merge vector paths into single path |
@@ -132,7 +133,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Dash patterns | ✅ | Dash-on/dash-off stroke pattern |
 | Stroke alignment | ✅ | Inside/Center/Outside with clip-based rendering matching Figma behavior |
 | Individual stroke weights per side | ✅ | Top/Right/Bottom/Left with side selector dropdown |
-| Corner radius | ✅ | Uniform and per-corner radius with independent toggle in properties panel |
+| Corner radius | ✅ | Uniform and per-corner radius with independent toggle in properties panel; canvas handles on rectangles, polygons, and stars |
 | Corner smoothing (iOS-style) | 🔲 | Figma's continuous corner rounding |
 | Multiple fills/strokes per layer | 🔲 | Figma allows stacking fills and strokes |
 

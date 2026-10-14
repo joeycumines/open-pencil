@@ -10,6 +10,7 @@ Open and save native Figma files directly. The import/export pipeline uses the s
 
 - **Shapes** — Rectangle (<kbd>R</kbd>), Ellipse (<kbd>O</kbd>), Line (<kbd>L</kbd>), Polygon, Star
 - **Pen tool** — vector networks (not simple paths), bezier curves with tangent handles
+- **Pencil** (<kbd>⇧</kbd><kbd>P</kbd>) — freehand strokes smoothed into editable curves
 - **Text** — canvas-native editing with IME support, double-click to enter edit mode
 - **Rich text** — per-character bold (<kbd>⌘</kbd><kbd>B</kbd>), italic (<kbd>⌘</kbd><kbd>I</kbd>), underline (<kbd>⌘</kbd><kbd>U</kbd>), strikethrough
 - **Auto-layout** — flexbox and CSS Grid via Yoga WASM: direction, gap, padding, justify, align, child sizing, grid tracks. <kbd>⇧</kbd><kbd>A</kbd> to toggle
@@ -29,7 +30,7 @@ Context-sensitive Design | Code | AI | Lint tabs:
 - **Typography** — font picker with virtual scroll and search, weight, size, alignment, style buttons
 - **Layout** — auto-layout controls when enabled
 - **Export** — scale, format (PNG/JPG/WEBP/SVG), live preview
-- **Code** — Design JSX and Tailwind JSX for the selection, with live two-way Design JSX editing that patches your code as layers change; the element around the cursor outlines its layer on the canvas, and design issues are underlined on the property that causes them
+- **Code** — Design JSX, HTML, and Vue and React components for the selection, styled with CSS or Tailwind, with live two-way Design JSX editing that patches your code as layers change; the element around the cursor outlines its layer on the canvas, and design issues are underlined on the property that causes them
 - **Lint** — live design lint for the page or selection: low contrast, small touch targets, unbound colors, off-scale spacing, with issue markers on the canvas and one-click variable binding ([Checking Designs](/user-guide/checking-designs))
 
 ## Rendering
@@ -123,6 +124,7 @@ P2P via WebRTC — no server required. Share a link and edit together.
 - Live cursors with colored arrows and name pills
 - Presence avatars
 - Follow mode — click a peer to follow their viewport
+- Voice calls — talk with the people in the room, peer to peer, with mute, microphone and speaker choice, and a ring on whoever is speaking
 - Local persistence via IndexedDB
 - Secure room IDs via `crypto.getRandomValues()`
 

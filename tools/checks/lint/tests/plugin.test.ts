@@ -16,7 +16,7 @@ import { AST_NODE_TYPES, type TSESTree } from '@typescript-eslint/utils'
 
 import { resolveWorkspaceRoot } from '@open-pencil/package-artifacts-tools'
 
-import { lint, ruleDiagnostics } from './helpers/lint.ts'
+import { lint, lintFiles, ruleDiagnostics } from './helpers/lint.ts'
 
 const temporaryDirectories: string[] = []
 
@@ -90,14 +90,22 @@ test('domain naming uses ownership prefixes, not control-kind suffixes', async (
 
 test('storage rule permits data keys but rejects storage access', async () => {
   const rule = 'no-direct-storage-access'
-  for (const [source, count] of [
-    ['const state = {localStorage: []}', 0],
-    ['localStorage.clear()', 1],
-    ['window.sessionStorage.clear()', 1],
-    ['const value = {localStorage}', 1]
-  ] as const) {
-    const diagnostics = await lint(source, { [`open-pencil/${rule}`]: 'error' })
-    expect(ruleDiagnostics(diagnostics, rule)).toHaveLength(count)
+  const cases = {
+    'data-key.ts': ['const state = {localStorage: []}', 0],
+    'clear.ts': ['localStorage.clear()', 1],
+    'window-session.ts': ['window.sessionStorage.clear()', 1],
+    'shorthand.ts': ['const value = {localStorage}', 1]
+  } as const
+  const diagnostics = ruleDiagnostics(
+    await lintFiles(
+      Object.fromEntries(Object.entries(cases).map(([path, [source]]) => [path, source])),
+      { [`open-pencil/${rule}`]: 'error' }
+    ),
+    rule
+  )
+  for (const [path, [, count]] of Object.entries(cases)) {
+    const found = diagnostics.filter((diagnostic) => diagnostic.filename?.endsWith(path))
+    expect(found, path).toHaveLength(count)
   }
 })
 

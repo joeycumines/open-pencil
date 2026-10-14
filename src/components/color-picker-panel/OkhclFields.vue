@@ -92,7 +92,7 @@ const percentText = (value: number) => `${Math.round(toPercent(value))}%`
         {{ ctx.okhcl.previewColorSpace }}
       </span>
     </div>
-    <p v-if="ctx.okhcl.clipped" class="text-[10px] leading-4 text-[var(--color-warning-text)]">
+    <p v-if="ctx.okhcl.clipped" class="text-[10px] leading-4 text-warning">
       {{ ctx.panels.colorPreviewClipped({ space: ctx.okhcl.previewColorSpace ?? 'display-p3' }) }}
     </p>
   </div>

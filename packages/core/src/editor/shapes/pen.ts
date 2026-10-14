@@ -1,29 +1,15 @@
-import type {
-  SceneNode,
-  VectorNetwork,
-  VectorRegion,
-  VectorSegment
-} from '@open-pencil/scene-graph'
+import type { SceneNode, VectorRegion, VectorSegment } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import { BLACK } from '#core/constants'
+import { createVectorFromNetwork, type CreateShape } from '#core/editor/shapes/vector'
 import type { EditorContext } from '#core/editor/types'
-import { computeAccurateBounds } from '#core/vector'
 
 export interface PenDragOptions {
   keepOpposite?: boolean
   constrainToOpposite?: boolean
   oppositeTangent?: Vector | null
 }
-
-type CreateShape = (
-  type: 'VECTOR',
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  parentId?: string
-) => string
 
 const PEN_DEFAULT_STROKE: SceneNode['strokes'][number] = {
   type: 'SOLID',
@@ -173,42 +159,17 @@ export function createPenActions(ctx: EditorContext, createShape: CreateShape) {
       ? [{ windingRule: 'NONZERO', loops: [ps.segments.map((_, i) => i)] }]
       : []
 
-    const network: VectorNetwork = {
-      vertices: ps.vertices.map((v) => ({ ...v })),
-      segments: ps.segments.map((s) => ({
-        ...s,
-        tangentStart: { ...s.tangentStart },
-        tangentEnd: { ...s.tangentEnd }
-      })),
-      regions
-    }
-
-    const bounds = computeAccurateBounds(network)
-
-    const normalizedVertices = network.vertices.map((v) => ({
-      ...v,
-      x: v.x - bounds.x,
-      y: v.y - bounds.y
-    }))
-
-    const normalizedNetwork: VectorNetwork = {
-      vertices: normalizedVertices,
-      segments: network.segments,
-      regions: network.regions
-    }
-
     const fills = ps.resumedFills ? ps.resumedFills.map((f) => ({ ...f })) : []
     const strokes = ps.resumedStrokes
       ? ps.resumedStrokes.map((s) => ({ ...s }))
       : [{ ...PEN_DEFAULT_STROKE }]
 
-    const nodeId = createShape('VECTOR', bounds.x, bounds.y, bounds.width, bounds.height)
-    ctx.graph.updateNode(nodeId, {
-      vectorNetwork: normalizedNetwork,
-      name: 'Vector',
-      fills,
-      strokes
-    })
+    const nodeId = createVectorFromNetwork(
+      ctx,
+      createShape,
+      { vertices: ps.vertices, segments: ps.segments, regions },
+      { name: 'Vector', fills, strokes }
+    )
     ctx.setSelectedIds(new Set([nodeId]))
 
     ctx.state.penState = null

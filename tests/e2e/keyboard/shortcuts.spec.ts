@@ -106,9 +106,21 @@ test.describe('tool switching', () => {
     expect(await getActiveTool()).toBe('HAND')
   })
 
-  test('S → SECTION', async () => {
-    await editor.page.keyboard.press('s')
+  test('A → FRAME', async () => {
+    await editor.page.keyboard.press('v')
+    await editor.page.keyboard.press('a')
+    expect(await getActiveTool()).toBe('FRAME')
+  })
+
+  test('⇧S → SECTION', async () => {
+    await editor.page.keyboard.press('Shift+KeyS')
     expect(await getActiveTool()).toBe('SECTION')
+  })
+
+  test('S alone leaves the tool unchanged', async () => {
+    await editor.page.keyboard.press('v')
+    await editor.page.keyboard.press('s')
+    expect(await getActiveTool()).toBe('SELECT')
   })
 })
 
