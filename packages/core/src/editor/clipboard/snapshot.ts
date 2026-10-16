@@ -14,6 +14,8 @@ export interface ClipboardSnapshot {
   /** Where the copied layers sat on the canvas when they were copied. */
   placement: ClipboardPlacement
   images: Map<string, Uint8Array>
+  /** Written by Copy properties: Paste skips it and Paste properties reads it, as in Figma. */
+  properties?: boolean
 }
 
 function referencedStyleIds(nodes: SceneNode[]): Set<string> {

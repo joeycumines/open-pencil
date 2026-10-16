@@ -1,7 +1,5 @@
 import { IS_BROWSER, IS_TAURI } from '@open-pencil/core/constants'
 
-import ACP_DESIGN_CONTEXT from '@/app/ai/acp/design-context.md'
-
 export {
   IS_BROWSER,
   IS_TAURI,
@@ -154,5 +152,3 @@ export const DEFAULT_TEXT_WIDTH = 200
 export const DEFAULT_TEXT_HEIGHT = 24
 
 export const ACP_PERMISSION_TIMEOUT_MS = 60_000
-
-export { ACP_DESIGN_CONTEXT }

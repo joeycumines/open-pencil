@@ -57,7 +57,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Measure distances between layers | 🔲 | Alt-hover to show distances |
 | Edit objects in bulk | ✅ | Multi-selection properties panel: edit position, size, appearance, fill, stroke, effects across multiple nodes; shared values display normally, differing values show "Mixed" |
 | Identify matching objects | 🔲 | Find similar layers |
-| Copy/paste properties | 🔲 | Copy fill/stroke/effects between layers |
+| Copy/paste properties | ✅ | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>C</kbd> / <kbd>⌥</kbd><kbd>⌘</kbd><kbd>V</kbd> through the system clipboard, to and from Figma: fills, strokes, effects, corners, styles, variables, auto layout between frames, text style between text layers |
 | Parent-child relationships | ✅ | Full hierarchy with parentIndex, reparenting via drag |
 
 ## Vector Tools
