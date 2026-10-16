@@ -1,3 +1,4 @@
+import { isEmptyObject } from 'es-toolkit'
 import * as v from 'valibot'
 
 import { allRules } from '@open-pencil/core/lint'
@@ -126,7 +127,7 @@ export function updateAutomationSettings(input: unknown): AutomationSettings {
   }
   if (patch.editing?.snapping) applySnappingPreferences(patch.editing.snapping)
   const { showOnCanvas, ...designCheck } = patch.designCheck ?? {}
-  if (Object.keys(designCheck).length > 0) updateDesignCheckPreferences(designCheck)
+  if (!isEmptyObject(designCheck)) updateDesignCheckPreferences(designCheck)
   // Through the menu's setter, so the native View menu checkmark follows.
   if (showOnCanvas !== undefined) setDesignIssuesOnCanvas(showOnCanvas)
 

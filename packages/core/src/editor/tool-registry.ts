@@ -18,6 +18,8 @@ export const EDITOR_TOOLS: EditorToolDef[] = [
   },
   { key: 'PEN', label: 'Pen', shortcut: 'P', flyout: ['PEN', 'PENCIL'] },
   { key: 'TEXT', label: 'Text', shortcut: 'T' },
+  // Figma's S is Slice, and FigJam's sticky tool has no key in Figma Design.
+  { key: 'STICKY', label: 'Sticky note', shortcut: '' },
   { key: 'HAND', label: 'Hand', shortcut: 'H' },
   { key: 'COMMENT', label: 'Comment', shortcut: 'C' }
 ]

@@ -32,10 +32,13 @@ import {
 import { appPreferences } from '@/app/settings/preferences/store'
 import { createSharedEditorMenuActions } from '@/app/shell/menu/actions/editor'
 import { createSelectionMenuActions } from '@/app/shell/menu/actions/selection'
-import { openStorageWorkspace } from '@/app/shell/menu/navigation'
+import { menuFeatureAvailable } from '@/app/shell/menu/features'
+import { browseFiles } from '@/app/shell/menu/navigation'
+import { createSaveMenuActions } from '@/app/shell/menu/save-actions'
 import type {
   AppMenuActionItem,
   AppMenuEntry,
+  AppMenuFeature,
   AppMenuGroupSchema,
   AppMenuIcon
 } from '@/app/shell/menu/schema'
@@ -43,7 +46,6 @@ import { APP_MENU_SCHEMA } from '@/app/shell/menu/schema'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { useAppTheme } from '@/app/shell/theme'
-import { saveDocumentToStorage } from '@/app/storage/workspace/save'
 import { closeTab, activeTab } from '@/app/tabs'
 
 export interface AppMenuGroup {
@@ -80,8 +82,8 @@ function shortcutKeys(shortcut: string | undefined): string[] | undefined {
   })
 }
 
-function isVisible(entry: { target?: string }): boolean {
-  return entry.target !== 'native'
+function isVisible(entry: { target?: string; feature?: AppMenuFeature }): boolean {
+  return entry.target !== 'native' && menuFeatureAvailable(entry.feature)
 }
 
 function isSeparator(entry: AppMenuEntry): entry is Extract<AppMenuEntry, { type: 'separator' }> {
@@ -103,11 +105,11 @@ export function useAppMenu() {
   const translatedMenuItemLabels: Partial<Record<string, keyof typeof menu.value>> = {
     new: 'new',
     open: 'open',
-    'open-storage-workspace': 'openStorageWorkspace',
+    'browse-files': 'browseFiles',
     'open-tour': 'openTour',
     save: 'save',
     'save-as': 'saveAs',
-    'save-to-storage': 'saveToStorage',
+    'save-to': 'saveTo',
     'export-selection': 'exportSelection',
     autosave: 'autosave',
     close: 'closeTab',
@@ -171,13 +173,11 @@ export function useAppMenu() {
       void import('@/app/tabs').then((m) => m.createTab())
     },
     open: () => void openFileDialog(),
-    'open-storage-workspace': () => openStorageWorkspace(router),
+    'browse-files': () => browseFiles(router),
     'open-tour': () => {
       openTour().catch((error: unknown) => console.error('[Tour] Could not open the tour:', error))
     },
-    save: () => void store.saveFigFile(),
-    'save-as': () => void store.saveFigFileAs(),
-    'save-to-storage': () => void saveDocumentToStorage(store),
+    ...createSaveMenuActions(store),
     'export-selection': () => exportSelection('png'),
     ...createSelectionMenuActions(store),
     close: () => {

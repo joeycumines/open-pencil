@@ -9,7 +9,7 @@ import { TOOL_TO_NODE } from '#vue/shared/input/types'
 import type { DragDraw, DragState } from '#vue/shared/input/types'
 
 /** Maps canvas points into the axes of the parent a layer is drawn in. */
-function parentSpace(editor: Editor, parentId: string): DragDraw['toLocal'] {
+export function parentSpace(editor: Editor, parentId: string): DragDraw['toLocal'] {
   const parent = editor.graph.getNode(parentId)
   if (!parent || parent.type === 'CANVAS') return (x, y) => ({ x, y })
   const toLocal = Matrix.invert(getWorldMatrix(parent, editor.graph)) ?? Matrix.identity()

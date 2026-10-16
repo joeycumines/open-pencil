@@ -5,6 +5,7 @@ import { computed } from 'vue'
 
 import { useI18n, useViewportKind } from '@open-pencil/vue'
 
+import { CLOUD_INCLUDED } from '@/app/cloud/integration'
 import {
   settingsDialogOpen,
   registerSettingsNavigation,
@@ -12,6 +13,7 @@ import {
   type SettingsSection
 } from '@/app/settings/dialog'
 import { provideSettingsNavigation } from '@/app/settings/navigation/use'
+import { CloudSettingsSection } from '@/components/cloud/integration'
 import ChatSettingsSection from '@/components/settings/chat/ChatSettingsSection.vue'
 import DiagnosticsSettingsPanel from '@/components/settings/diagnostics/DiagnosticsSettingsPanel.vue'
 import GeneralSettingsPanel from '@/components/settings/general/GeneralSettingsPanel.vue'
@@ -54,7 +56,8 @@ const sections = computed(
       { value: 'mcp', label: settings.value.mcp },
       { value: 'tools', label: settings.value.toolAccess },
       { value: 'media', label: settings.value.media },
-      { value: 'storage', label: settings.value.storage }
+      { value: 'storage', label: settings.value.storage },
+      ...(CLOUD_INCLUDED ? [{ value: 'cloud' as const, label: settings.value.cloud }] : [])
     ] satisfies { value: SettingsSection; label: string }[]
 )
 function onSectionChange(section: string | number): void {
@@ -140,8 +143,12 @@ function onOpenChange(open: boolean): void {
           {{ settings.media }}
         </AppTabsTrigger>
         <AppTabsTrigger value="storage" data-test-id="settings-section-storage">
-          <template #leading><icon-lucide-cloud class="size-3.5" /></template>
+          <template #leading><icon-lucide-database class="size-3.5" /></template>
           {{ settings.storage }}
+        </AppTabsTrigger>
+        <AppTabsTrigger v-if="CLOUD_INCLUDED" value="cloud" data-test-id="settings-section-cloud">
+          <template #leading><icon-lucide-cloud class="size-3.5" /></template>
+          {{ settings.cloud }}
         </AppTabsTrigger>
       </AppTabsList>
 
@@ -178,6 +185,9 @@ function onOpenChange(open: boolean): void {
       </AppTabsContent>
       <AppTabsContent value="storage" as-child>
         <StorageSettingsPanel />
+      </AppTabsContent>
+      <AppTabsContent v-if="CLOUD_INCLUDED" value="cloud" as-child>
+        <CloudSettingsSection />
       </AppTabsContent>
     </AppTabsRoot>
 

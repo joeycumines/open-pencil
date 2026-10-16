@@ -38,5 +38,7 @@
   "tokens": "Token",
   "clear": "Löschen",
   "dismiss": "Schließen",
-  "browserSupport": "Browser-Unterstützung prüfen"
+  "browserSupport": "Browser-Unterstützung prüfen",
+  "showPassword": "Passwort anzeigen",
+  "hidePassword": "Passwort verbergen"
 }

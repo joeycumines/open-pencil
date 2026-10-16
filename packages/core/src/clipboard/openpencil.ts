@@ -36,7 +36,8 @@ const NODE_TYPES: Record<NodeType, true> = {
   COMPONENT_SET: true,
   INSTANCE: true,
   CONNECTOR: true,
-  SHAPE_WITH_TEXT: true
+  SHAPE_WITH_TEXT: true,
+  STICKY: true
 }
 
 interface SerializedGeometryPath {

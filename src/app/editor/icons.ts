@@ -18,6 +18,7 @@ import IconSmile from '~icons/lucide/smile'
 import IconSquare from '~icons/lucide/square'
 import IconSlot from '~icons/lucide/square-dashed'
 import IconStar from '~icons/lucide/star'
+import IconStickyNote from '~icons/lucide/sticky-note'
 import IconTriangle from '~icons/lucide/triangle'
 import IconType from '~icons/lucide/type'
 
@@ -37,6 +38,7 @@ export const toolIcons: Record<Tool, Component> = {
   PEN: IconPenTool,
   PENCIL: IconPencil,
   TEXT: IconType,
+  STICKY: IconStickyNote,
   HAND: IconHand,
   COMMENT: IconMessageCircle
 }
@@ -52,7 +54,8 @@ export const NODE_ICONS: Partial<Record<string, typeof IconSquare>> = {
   LINE: IconMinus,
   TEXT: IconType,
   VECTOR: IconPenTool,
-  RECTANGLE: IconSquare
+  RECTANGLE: IconSquare,
+  STICKY: IconStickyNote
 }
 
 export const AUTO_LAYOUT_ICONS: Partial<Record<string, typeof IconSquare>> = {

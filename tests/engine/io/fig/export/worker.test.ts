@@ -40,7 +40,7 @@ function compressInWorker(message: {
   figKiwiVersion?: number
 }): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(pathToFileURL(coreSourcePath('io/formats/fig/export-worker.ts')), {
+    const worker = new Worker(pathToFileURL(coreSourcePath('io/formats/fig/export/worker.ts')), {
       type: 'module'
     })
     worker.onmessage = (event: MessageEvent<Uint8Array>) => {

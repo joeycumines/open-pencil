@@ -4,7 +4,7 @@ import {
   getInMemoryClipboardHTML,
   setInMemoryClipboardPayload
 } from '@/app/editor/clipboard/memory'
-import { pasteClipboardHTML } from '@/app/editor/clipboard/paste'
+import { pasteClipboardHTML } from '@/app/editor/clipboard/paste/content'
 
 /** Explicit in-app mobile clipboard; shares the same typed capture and paste dispatch. */
 export function createMobileClipboardActions(editor: Editor) {

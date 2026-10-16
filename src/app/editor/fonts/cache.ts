@@ -1,3 +1,4 @@
+import { sumBy } from 'es-toolkit'
 import * as v from 'valibot'
 
 import type { DownloadedFontCache } from '@open-pencil/core/text'
@@ -84,7 +85,7 @@ export async function downloadedFontCacheSummary(): Promise<DownloadedFontCacheS
   )
   return {
     count: entries.length,
-    byteLength: entries.reduce((sum, entry) => sum + entry.byteLength, 0),
+    byteLength: sumBy(entries, (entry) => entry.byteLength),
     updatedAt: entries.length > 0 ? Math.max(...entries.map((entry) => entry.updatedAt)) : null
   }
 }

@@ -13,7 +13,8 @@ import {
   type TextParagraphRange
 } from '@open-pencil/scene-graph'
 
-import { ResourceCache } from '#core/cache/resource'
+import type { ResourceCache } from '#core/cache/resource'
+import { createPathCache } from '#core/canvas/paths/cache'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import {
   drawTextDecorations,
@@ -28,10 +29,7 @@ const MAX_DERIVED_GLYPH_PATHS = 16384
 
 /** Decoded saved glyph outlines, by the glyph's command bytes, which a node keeps until it changes. */
 export function createDerivedGlyphPathCache(): ResourceCache<Uint8Array, Path> {
-  return new ResourceCache({
-    maxEntries: MAX_DERIVED_GLYPH_PATHS,
-    dispose: (path) => path.delete()
-  })
+  return createPathCache({ maxEntries: MAX_DERIVED_GLYPH_PATHS })
 }
 
 /** A saved glyph's outline, decoded once and borrowed from the renderer's cache. */
@@ -44,7 +42,7 @@ function derivedGlyphPath(r: SkiaRenderer, blob: Uint8Array): Path {
 }
 
 export function createGlyphSilhouetteCache(): ResourceCache<string, Path> {
-  return new ResourceCache({ maxEntries: MAX_GLYPH_SILHOUETTES, dispose: (path) => path.delete() })
+  return createPathCache({ maxEntries: MAX_GLYPH_SILHOUETTES })
 }
 
 export function snapDerivedGlyphBaseline(y: number): number {

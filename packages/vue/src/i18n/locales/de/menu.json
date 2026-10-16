@@ -7,11 +7,9 @@
   "text": "Text",
   "new": "Neu",
   "open": "Öffnen…",
-  "openStorageWorkspace": "Speicher-Arbeitsbereich öffnen…",
   "openTour": "Rundgang öffnen",
   "save": "Speichern",
   "saveAs": "Speichern unter…",
-  "saveToStorage": "Im Speicher-Arbeitsbereich speichern…",
   "exportSelection": "Auswahl exportieren…",
   "autosave": "Automatisch in Datei speichern",
   "copy": "Kopieren",
@@ -78,5 +76,7 @@
   "exportSelectionAsSVG": "Auswahl als SVG exportieren",
   "exportSelectionAsPPTX": "Auswahl als PPTX exportieren",
   "exportSelectionAsFig": "Auswahl als .fig exportieren",
-  "togglePreview": "Vorschau"
+  "togglePreview": "Vorschau",
+  "browseFiles": "Dateien durchsuchen…",
+  "saveTo": "Speichern in…"
 }

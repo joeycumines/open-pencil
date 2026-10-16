@@ -1,3 +1,5 @@
+import { sum } from 'es-toolkit'
+
 import type { DiagnosticEvent } from '@/app/diagnostics/types'
 
 export type UsageModelSummary = {
@@ -22,7 +24,7 @@ function sumAttribute(events: DiagnosticEvent[], name: string): number | null {
   const values = events
     .map((event) => event.attributes[name])
     .filter((value): value is number => typeof value === 'number')
-  return values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0)
+  return values.length === 0 ? null : sum(values)
 }
 
 export function summarizeUsage(events: DiagnosticEvent[]): UsageSummary {

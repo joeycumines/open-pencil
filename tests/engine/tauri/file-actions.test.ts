@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import { saveExportedFile } from '@/app/document/export/files'
-import { watchTauriFile } from '@/app/document/io/watch-targets'
+import { watchTauriFile } from '@/app/document/io/watch/targets'
 import { chooseTauriOpenPaths, readTauriDesignFile } from '@/app/shell/menu/files'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'

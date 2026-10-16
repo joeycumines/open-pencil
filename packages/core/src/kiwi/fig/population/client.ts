@@ -1,8 +1,8 @@
 import type { SceneGraph } from '@open-pencil/scene-graph'
 import { randomHex } from '@open-pencil/scene-graph/random'
 
-import { releaseFigArchive } from '#core/kiwi/fig/session/archive'
-import { archiveChanges, trackArchiveChanges } from '#core/kiwi/fig/session/archive-changes'
+import { releaseFigArchive } from '#core/kiwi/fig/session/archive/access'
+import { archiveChanges, trackArchiveChanges } from '#core/kiwi/fig/session/archive/changes'
 import { updateReaderRecovery, releaseReaderRecovery } from '#core/kiwi/fig/session/document-state'
 import type { FigSessionResponse } from '#core/kiwi/fig/session/protocol'
 

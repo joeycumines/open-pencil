@@ -12,6 +12,7 @@ import { weightToStyle } from '#core/text/fonts'
 import { hasGlyphOutlines } from '#core/text/opentype'
 
 import { applyBoundTextEdit } from './components/authoring/text-edit'
+import { applyStickyNameEdit } from './stickies'
 import { pathTextEditChanges } from './text/path-edit'
 import {
   createTextEditSession,
@@ -204,7 +205,10 @@ export function createTextActions(ctx: EditorContext) {
           ctx.runLayoutForNode(result.nodeId)
         }
       })
-      if (before.text !== after.text) applyBoundTextEdit(ctx, result.nodeId, after.text)
+      if (before.text !== after.text) {
+        applyBoundTextEdit(ctx, result.nodeId, after.text)
+        applyStickyNameEdit(ctx, result.nodeId, after.text)
+      }
     })
   }
 

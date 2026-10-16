@@ -1,3 +1,5 @@
+import { isEmptyObject } from 'es-toolkit'
+
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { colorToHex } from '@open-pencil/scene-graph/color'
 
@@ -104,7 +106,7 @@ export function applyLintFixes(target: LintFixTarget, requests: readonly LintFix
         const changes = Object.fromEntries(
           Object.entries(fix.changes).filter(([key, value]) => Reflect.get(node, key) !== value)
         )
-        if (Object.keys(changes).length === 0) continue
+        if (isEmptyObject(changes)) continue
         updates.set(nodeId, { ...updates.get(nodeId), ...changes })
         break
       }

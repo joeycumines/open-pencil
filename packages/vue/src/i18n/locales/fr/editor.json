@@ -4,6 +4,7 @@
   "cornerRadius": "Rayon",
   "pointCount": "Nombre",
   "starRatio": "Rapport",
+  "stickyPlaceholder": "Écrivez ce que vous voulez, @mentionnez quelqu’un",
   "showUI": "Afficher l’interface ({shortcut})",
   "previewing": "Aperçu",
   "resetPreview": "Réinitialiser",

@@ -9,7 +9,7 @@ import {
   getInMemoryClipboardHTML,
   setInMemoryClipboardPayload
 } from '@/app/editor/clipboard/memory'
-import { pasteClipboardHTML, pasteSVGText } from '@/app/editor/clipboard/paste'
+import { pasteClipboardHTML, pasteSVGText } from '@/app/editor/clipboard/paste/content'
 import type {
   BrowserClipboardIO,
   BrowserClipboardReadResult,

@@ -25,5 +25,6 @@
   "newDesign": "Nouveau design",
   "noMatchingFiles": "Aucun fichier ne correspond à « {query} ».",
   "saveAsPrompt": "Enregistrer sous :",
-  "browserFileAPINotSupported": "Votre navigateur ne prend pas en charge l’API de fichiers locaux. Les fichiers seront téléchargés au lieu d’être enregistrés sur place."
+  "browserFileAPINotSupported": "Votre navigateur ne prend pas en charge l’API de fichiers locaux. Les fichiers seront téléchargés au lieu d’être enregistrés sur place.",
+  "newDesignIn": "Nouveau design dans {place}"
 }

@@ -28,6 +28,8 @@ export const commonMessageDefaults = {
   you: 'You',
   youSuffix: 'you',
   connect: 'Connect',
+  showPassword: 'Show password',
+  hidePassword: 'Hide password',
   testConnection: 'Test connection',
   testingConnection: 'Testing…',
   search: 'Search…',

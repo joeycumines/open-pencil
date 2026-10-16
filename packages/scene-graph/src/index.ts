@@ -28,6 +28,7 @@ export {
 export * from './slots/content'
 export * from './slots/authoring'
 export * from './slots/limits'
+export * from './generated'
 export * from './behaviours/kinds'
 export * from './icons/schema'
 export * from './icons/model'
@@ -42,6 +43,10 @@ export * from './comments/document'
 export * from './comments/list'
 export * from './comments/merge'
 export * from './comments/threads'
+export * from './statuses/impact'
+export * from './statuses/node'
+export * from './statuses/schema'
+export * from './statuses/workflow'
 export * from './copy'
 export {
   createDefaultNode,
@@ -905,7 +910,10 @@ export class SceneGraph {
     // `as SourceMetadata` required: cloneNodeProps returns Partial<SceneNode>,
     // so props.source is SourceMetadata | undefined, but we know it's always set.
     props.source = { ...(props.source as SourceMetadata), id: null, orderKey: null }
+    // A copy is a new design nobody has reviewed: Figma's duplicate and clone() drop the status.
+    props.status = null
     const clone = this.createNode(src.type, parentId, { ...props, ...overrides })
+    if (src.status) markSourceFieldsEdited(clone, ['status'])
 
     for (const childId of src.childIds) {
       this.cloneTree(childId, clone.id)

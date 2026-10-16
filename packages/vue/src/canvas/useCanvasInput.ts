@@ -22,12 +22,13 @@ import {
 import { resolveAutoLayoutHover } from '#vue/shared/input/auto-layout-hover'
 import { createClickCounter } from '#vue/shared/input/click-count'
 import { handleDrawMove } from '#vue/shared/input/draw'
-import { handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
-import { setupPanZoom } from '#vue/shared/input/pan-zoom'
+import { handleMoveMove, handleMoveUp } from '#vue/shared/input/move/drag'
+import { setupPanZoom } from '#vue/shared/input/pan/zoom'
 import { applyResize, cancelResizePreview, commitResizePreview } from '#vue/shared/input/resize'
 import { updateHoverCursor } from '#vue/shared/input/select'
 import { resolveShapeHandleHover } from '#vue/shared/input/shape-handles'
 import { useSpaceHeld } from '#vue/shared/input/space-key'
+import { applyStickyScale } from '#vue/shared/input/sticky/scale'
 import type { DragState } from '#vue/shared/input/types'
 import { handleNodeEditMove } from '#vue/shared/input/vector'
 
@@ -329,6 +330,17 @@ export function useCanvasInput(
       return
     }
 
+    if (d.type === 'place') {
+      d.x = cx
+      d.y = cy
+      return
+    }
+
+    if (d.type === 'sticky-scale') {
+      applyStickyScale(d, cx, cy, editor)
+      return
+    }
+
     handleMarqueeMove(d, cx, cy)
   }
 
@@ -364,7 +376,7 @@ export function useCanvasInput(
         editor.commitRotation(d.nodeId, d.origRotation)
       }
       if (editor.state.rotationPreview === preview) editor.setRotationPreview(null)
-    } else if (d.type === 'draw' || d.type === 'gradient' || d.type === 'shape-handle') d.commit()
+    } else if ('commit' in d) d.commit()
     else if (d.type === 'marquee') finishMarquee(editor, d)
 
     drag.value = null
@@ -383,6 +395,7 @@ export function useCanvasInput(
   /** Drops what a resize or pencil stroke showed without changing the document. */
   function discardDrawnPreview(d: DragState) {
     if (d.type === 'resize') cancelResizePreview(d, editor)
+    else if (d.type === 'sticky-scale') d.cancel()
     else if (d.type === 'pencil-drag') editor.pencilCancel()
   }
 
@@ -512,7 +525,12 @@ export function useCanvasInput(
     (event) =>
       editor.onEditorEvent(event, () => {
         const type = drag.value?.type
-        if (type === 'draw' || type === 'rotate' || type === 'shape-handle')
+        if (
+          type === 'draw' ||
+          type === 'rotate' ||
+          type === 'shape-handle' ||
+          type === 'sticky-scale'
+        )
           cancelPointerInteraction()
       })
   )

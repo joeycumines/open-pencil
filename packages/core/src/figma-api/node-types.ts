@@ -17,3 +17,4 @@ export type FigmaSlotNode = FigmaNodeProxy & SlotNode
 export type FigmaSectionNode = FigmaNodeProxy & SectionNode
 export type FigmaGroupNode = FigmaNodeProxy & GroupNode
 export type FigmaBooleanOperationNode = FigmaNodeProxy & BooleanOperationNode
+export type FigmaStickyNode = FigmaNodeProxy & StickyNode

@@ -1,4 +1,5 @@
 <script lang="ts">
+import { clamp } from 'es-toolkit'
 import type { VNode } from 'vue'
 
 import type { ComponentUI } from '@/components/ui/types'
@@ -151,7 +152,7 @@ function moveRow(event: KeyboardEvent) {
   const current = highlighted.value?.value
   const index = matches.value.findIndex((item) => item.value === current)
   const target = index === -1 ? 0 : index + rows * APP_PICKER_GRID_COLUMNS
-  const next = matches.value[Math.min(Math.max(target, 0), matches.value.length - 1)]
+  const next = matches.value[clamp(target, 0, matches.value.length - 1)]
   if (next) listbox.value?.highlightItem(next.value)
 }
 

@@ -436,6 +436,49 @@
       }
     },
     {
+      "files": [
+        "packages/cloud/src/**/*.ts"
+      ],
+      "rules": {
+        "typescript/no-unsafe-assignment": "error",
+        "typescript/no-unsafe-argument": "error",
+        "typescript/no-unsafe-call": "error",
+        "typescript/no-unsafe-member-access": "error",
+        "typescript/no-unsafe-return": "error",
+        "typescript/switch-exhaustiveness-check": "error",
+        "typescript/no-deprecated": "error"
+      }
+    },
+    {
+      "files": ["packages/cloud/src/server/**/*.ts"],
+      "rules": {
+        "open-pencil/no-cloud-raw-sql": "error",
+        "open-pencil/no-cloud-dynamic-html": "error"
+      }
+    },
+    {
+      "files": [
+        "packages/cloud/src/server/db/expressions.ts",
+        "packages/cloud/src/server/db/migrate.ts",
+        "packages/cloud/src/server/db/migrations/**/*.ts"
+      ],
+      "rules": {
+        "open-pencil/no-cloud-raw-sql": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/cloud/src/**/*.ts",
+        "src/app/cloud/**/*.ts",
+        "src/app/collab/**/*.ts",
+        "src/app/integrations/storage/cloud/**/*.ts"
+      ],
+      "rules": {
+        "open-pencil/no-cloud-secret-in-query": "error",
+        "open-pencil/no-cloud-secret-logging": "error"
+      }
+    },
+    {
       "files": ["tools/ci/policy/src/**/*.ts"],
       "rules": {
         "open-pencil/prefer-es-toolkit": "off"
@@ -476,7 +519,8 @@
     {
       "files": [
         "src/**/*.{ts,vue}",
-        "packages/{scene-graph,pen,kiwi,fig,core,dom-css,vue}/src/**/*.{ts,vue}"
+        "packages/{scene-graph,pen,kiwi,fig,core,dom-css,vue}/src/**/*.{ts,vue}",
+        "packages/cloud/src/{client,contract}/**/*.ts"
       ],
       "rules": {
         "compat/compat": "error"
@@ -505,7 +549,9 @@
     {
       "files": [
         "packages/cli/src/**",
-        "packages/mcp/src/**"
+        "packages/mcp/src/**",
+        "packages/cloud/src/runtime/node/**",
+        "packages/cloud/tests/e2e/**"
       ],
       "rules": {
         "no-console": "off"
@@ -556,7 +602,7 @@
     },
     {
       "files": [
-        "packages/core/src/io/formats/fig/export.ts",
+        "packages/core/src/io/formats/fig/export/index.ts",
         "packages/core/src/kiwi/fig/parse/worker.ts"
       ],
       "rules": {

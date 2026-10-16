@@ -6,6 +6,7 @@ import { renderNodesToImage, SceneGraph, SkiaRenderer } from '@open-pencil/core'
 import { getWorldMatrix } from '@open-pencil/scene-graph'
 
 import { initCanvasKit } from '#cli/headless'
+import { NodePathCaches } from '#core/canvas/paths/cache'
 import { renderSceneToCanvas } from '#core/canvas/renderer/pipeline'
 import { prepareSelectionRenderGraph } from '#core/io/formats/raster/render'
 import { extractExportGraph } from '#core/io/subgraph'
@@ -48,6 +49,7 @@ describe('raster export', () => {
     const renderer = {
       viewportImageRendering: true,
       worldViewport: viewport,
+      nodePaths: new NodePathCaches(),
       renderNode() {
         expect(this.viewportImageRendering).toBe(false)
         throw new Error('drawing failed')

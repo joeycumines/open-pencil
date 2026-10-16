@@ -7,7 +7,7 @@ import { compileScript } from './wrap'
 export const evalCode = defineTool({
   name: 'eval',
   description:
-    'Execute JavaScript with full Figma Plugin API access. Use for operations not covered by other tools. The `figma` global is the Figma Plugin API; the `openpencil` global adds what Figma has no API for, such as component behaviours (`openpencil.setBehaviour`, `openpencil.getBehaviour`, `openpencil.behaviourKinds`), slots (`openpencil.createSlot`), and comments (`openpencil.getComments`, `openpencil.getComment`, `openpencil.addComment`, and each comment’s `reply` and `resolve`).',
+    'Execute JavaScript with full Figma Plugin API access. Use for operations not covered by other tools. The `figma` global is the Figma Plugin API; the `openpencil` global adds what Figma has no API for, such as component behaviours (`openpencil.setBehaviour`, `openpencil.getBehaviour`, `openpencil.behaviourKinds`), slots (`openpencil.createSlot`), comments (`openpencil.getComments`, `openpencil.getComment`, `openpencil.addComment`, and each comment’s `reply` and `resolve`), and statuses (`openpencil.statuses`, `openpencil.getStatus`, `openpencil.setStatus`).',
   execution: { kind: 'async', mutation: 'document' },
   capabilities: ['document:read', 'document:write', 'code:execute'],
   availability: 'eval',

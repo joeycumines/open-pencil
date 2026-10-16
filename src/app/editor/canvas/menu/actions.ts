@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 import { nodeToXPath } from '@open-pencil/core/xpath'
 
 import type { EditorStore } from '@/app/editor/active-store'
-import { pasteClipboardToReplace } from '@/app/editor/clipboard/paste-to-replace'
+import { pasteClipboardToReplace } from '@/app/editor/clipboard/paste/replace'
 import { executeClipboardCommand } from '@/app/editor/clipboard/system'
 import { createTextClipboard } from '@/app/editor/clipboard/text'
 import { canVectorizeImageNode, vectorizeImageNode } from '@/app/editor/vectorize'

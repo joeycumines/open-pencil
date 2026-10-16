@@ -35,6 +35,7 @@ export {
   type TextMeasurer
 } from './layout/text-measurement'
 import {
+  isGeneratedFrame,
   layoutSizing,
   type LayoutSizing,
   type SceneGraph,
@@ -208,7 +209,10 @@ function configureFlexContainer(
   yogaNode.setPadding(Edge.Bottom, node.paddingBottom)
   yogaNode.setPadding(Edge.Left, node.paddingLeft)
 
-  const primaryGap = node.primaryAxisAlign === 'SPACE_BETWEEN' ? 0 : node.itemSpacing
+  // Space between takes the place of the gap in Figma's auto layout. A generated frame keeps it
+  // as the least space between its sublayers, as a sticky note keeps its author clear of a long body.
+  const primaryGap =
+    node.primaryAxisAlign === 'SPACE_BETWEEN' && !isGeneratedFrame(node) ? 0 : node.itemSpacing
   yogaNode.setGap(
     Gutter.Column,
     node.layoutMode === 'HORIZONTAL' ? primaryGap : node.counterAxisSpacing

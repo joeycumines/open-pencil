@@ -125,6 +125,20 @@ openpencil eval design.fig -w -c '
 - `openpencil.addComment(text, { node, page, x, y, author })` pins a comment on a layer, which it follows, or at a point of a page; the current page by default. `author` is `"Agent"` when left out.
 - A comment has `id`, `text` (Markdown), `author`, `createdAt`, `resolved`, `page`, `node` (the top-level layer it is pinned to), `position`, and `replies`, and `reply(text, { author })`, `resolve()`, `reopen()`, and `remove()`. `openpencil.getComment(id)` finds one.
 
+Statuses mark where a section, frame, component, or instance stands, from the document's own list such as Draft, In review, or Ready for dev:
+
+```sh
+openpencil eval design.fig -w -c '
+  const checkout = figma.currentPage.findOne(n => n.name === "Checkout")
+  openpencil.setStatus(checkout, "Approved")
+  openpencil.statuses.map(status => status.name)
+'
+```
+
+- `openpencil.statuses` lists the document's statuses in order, each with `name`, `color` (`#RRGGBB`), and `figma`, the status Figma shows for it (`READY_FOR_DEV`, `COMPLETED`, or `null`).
+- `openpencil.getStatus(node)` reads the name of the status a layer shows, or `null`, also while a section around it shows its own.
+- `openpencil.setStatus(node, name)` sets one by name, and `null` clears it. Only sections, frames, components, component sets, and instances directly on a page or in a section take one; anything else fails with an error that says why, and an unknown name lists the statuses there are.
+
 ## Supported API surface
 
 The API is intentionally close to Figma's Plugin API, but it maps to OpenPencil's scene graph and file format.
@@ -199,6 +213,7 @@ Common node properties are readable/writable through the proxy, including:
 - Text lists and paragraphs: `getRangeListOptions` / `setRangeListOptions` for bulleted (`UNORDERED`) and numbered (`ORDERED`) items, `getRangeIndentation` / `setRangeIndentation` for nesting (1–5 for list items), `listSpacing`, `paragraphSpacing`, and `paragraphIndent` for the whole text (`figma.mixed` when paragraphs differ) or per paragraph with `getRangeListSpacing` / `setRangeListSpacing`, `getRangeParagraphSpacing` / `setRangeParagraphSpacing`, and `getRangeParagraphIndent` / `setRangeParagraphIndent`, and `hangingList`
 - Auto-layout: `layoutMode`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `itemSpacing`, padding, sizing, and layout positioning fields
 - Stroke helpers: `strokeWeight`, `strokeAlign`, `dashPattern`
+- Status: `devStatus` on sections, frames, components, component sets, and instances directly on a page or in a section, as `{ type: 'READY_FOR_DEV' | 'COMPLETED' }` or `null` (a description is not kept); it reads `null` while the layer sits where it cannot show one
 
 ### Utilities
 

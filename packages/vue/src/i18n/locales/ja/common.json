@@ -38,5 +38,7 @@
   "tokens": "トークン",
   "clear": "クリア",
   "dismiss": "閉じる",
-  "browserSupport": "ブラウザーの対応状況を確認"
+  "browserSupport": "ブラウザーの対応状況を確認",
+  "showPassword": "パスワードを表示",
+  "hidePassword": "パスワードを隠す"
 }

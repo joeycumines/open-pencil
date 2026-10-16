@@ -20,6 +20,7 @@ import LayersPanel from '@/components/LayersPanel.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
 import MobileHud from '@/components/MobileHud/MobileHud.vue'
 import PropertiesPanel from '@/components/PropertiesPanel.vue'
+import StatusesDialog from '@/components/statuses/StatusesDialog.vue'
 import Toolbar from '@/components/toolbar/Toolbar.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import VariablesDialog from '@/components/variables/VariablesDialog.vue'
@@ -152,5 +153,6 @@ const { pending: roomPending } = useRoomActions()
   </div>
 
   <VariablesDialog />
+  <StatusesDialog />
   <CommentDeleteDialog />
 </template>

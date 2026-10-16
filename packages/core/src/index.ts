@@ -297,7 +297,12 @@ export {
   type IconSearchResult,
   type PlaceIconOptions
 } from './icons'
-export { exportFigFile, compressFigData, compressFigDataSync } from './io/formats/fig/export'
+export {
+  exportFigFile,
+  compressFigData,
+  compressFigDataSync,
+  type FigFileExtrasOptions
+} from './io/formats/fig/export'
 export {
   FIG_KIWI_DEFAULT_VERSION,
   buildFigKiwi,

@@ -1,5 +1,5 @@
 import { getNodeEditCapability, type Editor } from '@open-pencil/core/editor'
-import type { SceneNode } from '@open-pencil/scene-graph'
+import { generatedFrameOwner, generatedFrameText, type SceneNode } from '@open-pencil/scene-graph'
 
 import type { CanvasLabelKind } from '#vue/canvas/labels/edit'
 import type { DragState } from '#vue/shared/input/types'
@@ -82,6 +82,20 @@ export function createTextEditInput(options: TextEditInputOptions) {
     }
   }
 
+  /**
+   * A generated frame, such as a sticky note, keeps its selection while its text is edited, all of
+   * it selected, as in Figma.
+   */
+  function startGeneratedTextEditing(frame: SceneNode) {
+    const body = generatedFrameText(editor.graph, frame)
+    if (!body) return
+    editor.select([frame.id])
+    editor.startTextEditing(body.id)
+    if (editor.state.editingTextId !== body.id) return
+    editor.textEditor?.selectAll()
+    editor.textSelectionChanged()
+  }
+
   function getContainerDescendantHit(
     containerId: string,
     cx: number,
@@ -148,8 +162,10 @@ export function createTextEditInput(options: TextEditInputOptions) {
       editor.state.selectedIds.size === 1 ? [...editor.state.selectedIds][0] : undefined
     if (handleContainerDoubleClick(selectedId, cx, cy)) return
 
-    const hit = hitTestInScope(cx, cy, true)
-    if (!hit) return
+    const found = hitTestInScope(cx, cy, true)
+    if (!found) return
+    // A generated frame's sublayers are edited through the frame.
+    const hit = generatedFrameOwner(editor.graph, found) ?? found
 
     if (hit.type === 'TEXT') {
       const isTopLevelText = hit.parentId === editor.state.currentPageId
@@ -163,6 +179,11 @@ export function createTextEditInput(options: TextEditInputOptions) {
 
     if (hit.type === 'VECTOR') {
       nodeEditEditor.enterNodeEditMode?.(hit.id)
+      return
+    }
+
+    if (generatedFrameText(editor.graph, hit)) {
+      startGeneratedTextEditing(hit)
       return
     }
 

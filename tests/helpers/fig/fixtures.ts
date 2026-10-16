@@ -33,7 +33,8 @@ export const VALID_NODE_TYPES = new Set<string>([
   'INSTANCE',
   'BOOLEAN_OPERATION',
   'CONNECTOR',
-  'SHAPE_WITH_TEXT'
+  'SHAPE_WITH_TEXT',
+  'STICKY'
 ])
 
 const FixtureObjectJSON = v.pipe(v.string(), v.parseJson(), v.record(v.string(), v.unknown()))

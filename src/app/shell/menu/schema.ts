@@ -33,6 +33,10 @@ export interface AppMenuPaletteMetadata {
 
 export type AppMenuHandler = 'editor' | 'shell'
 
+/** A feature an item waits for: it shows only while the feature is available (`./features`). */
+/** Items shown only for a document backed by a file on disk. */
+export type AppMenuFeature = 'local-file'
+
 export interface AppMenuActionItem {
   type?: 'item'
   id: string
@@ -43,6 +47,7 @@ export interface AppMenuActionItem {
   checkbox?: boolean
   target?: AppMenuTarget
   handler?: AppMenuHandler
+  feature?: AppMenuFeature
   palette?: AppMenuPaletteMetadata
   sub?: AppMenuEntry[]
 }
@@ -77,12 +82,12 @@ export const APP_MENU_SCHEMA = [
       { id: 'new', label: 'New', shortcut: 'MOD+N' },
       { id: 'open', label: 'Open…', shortcut: 'MOD+O' },
       { id: 'open-recent', label: 'Open Recent', target: 'native' },
-      { id: 'open-storage-workspace', label: 'Open Storage Workspace…', handler: 'shell' },
+      { id: 'browse-files', label: 'Browse Files…', handler: 'shell' },
       { id: 'open-tour', label: 'Open the Tour', handler: 'shell' },
       { type: 'separator' },
       { id: 'save', label: 'Save', shortcut: 'MOD+S' },
       { id: 'save-as', label: 'Save As…', shortcut: 'MOD+SHIFT+S' },
-      { id: 'save-to-storage', label: 'Save to Storage…' },
+      { id: 'save-to', label: 'Save To…' },
       { type: 'separator' },
       {
         id: 'export-selection',
@@ -113,7 +118,7 @@ export const APP_MENU_SCHEMA = [
         ]
       },
       { type: 'separator' },
-      { id: 'autosave', label: 'Autosave', checkbox: true },
+      { id: 'autosave', label: 'Autosave', checkbox: true, feature: 'local-file' },
       { id: 'close', label: 'Close Tab', shortcut: 'MOD+W' },
       // Windows, Linux, and the browser menu; macOS shows it in the application menu instead.
       { type: 'separator' },

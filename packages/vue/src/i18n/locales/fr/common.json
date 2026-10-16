@@ -38,5 +38,7 @@
   "tokens": "jetons",
   "clear": "Effacer",
   "dismiss": "Ignorer",
-  "browserSupport": "Vérifier la compatibilité"
+  "browserSupport": "Vérifier la compatibilité",
+  "showPassword": "Afficher le mot de passe",
+  "hidePassword": "Masquer le mot de passe"
 }

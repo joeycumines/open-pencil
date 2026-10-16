@@ -12,6 +12,7 @@ import {
   type TextParagraphStyle
 } from '@open-pencil/scene-graph'
 
+import { TEXT_CASE, TEXT_DECORATION } from '../enums'
 import { AUTO } from '../overrides/text'
 import { SPAN_STYLE_FIELDS, type SpanStyle } from '../text-content'
 import { collectDecorationProps } from './decoration'
@@ -55,9 +56,9 @@ function spanProps(style: SpanStyle, node: SceneNode): JSXProp[] {
   if (style.lineHeight !== undefined) props.push(['lineHeight', style.lineHeight ?? AUTO])
   if (style.letterSpacing !== undefined) props.push(['letterSpacing', style.letterSpacing])
   if (style.textDecoration !== undefined)
-    props.push(['textDecoration', style.textDecoration.toLowerCase()])
+    props.push(['textDecoration', TEXT_DECORATION.print(style.textDecoration)])
   collectDecorationProps(style, node, props)
-  if (style.textCase !== undefined) props.push(['textCase', style.textCase.toLowerCase()])
+  if (style.textCase !== undefined) props.push(['textCase', TEXT_CASE.print(style.textCase)])
   if (style.hyperlink) props.push(['href', style.hyperlink.value])
   return props
 }

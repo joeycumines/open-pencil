@@ -14,6 +14,7 @@ import {
   selectionIsLocked
 } from '#vue/shared/input/select/move'
 import { tryStartShapeHandleDrag } from '#vue/shared/input/shape-handles'
+import { tryStartStickyScale } from '#vue/shared/input/sticky/scale'
 import type { DragState } from '#vue/shared/input/types'
 
 export interface HitTestFns {
@@ -50,6 +51,11 @@ function tryStartHandleDrag(
   // An open gradient's handles replace the layer's selection handles, which then do not respond.
   if (editedGradient(editor.graph, editor.state.gradientEdit)) return false
   if (tryStartShapeHandleDrag(editor, sx, sy, altKey, setDrag)) return true
+  const scaleDrag = tryStartStickyScale(cx, cy, editor)
+  if (scaleDrag) {
+    setDrag(scaleDrag)
+    return true
+  }
   const resizeDrag = tryStartResize(cx, cy, editor)
   if (resizeDrag) {
     setDrag(resizeDrag)

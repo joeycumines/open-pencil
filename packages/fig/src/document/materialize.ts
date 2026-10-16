@@ -22,6 +22,7 @@ import {
   type MaterializedComponentOccurrence
 } from '../instance-overrides/source-children'
 import { nodeChangeToProps } from '../node-change'
+import { generatedFrameCodec } from '../node-change/generated/codecs'
 import { figArchiveRecordInfo, type FigArchiveRecordInfo } from '../record-patch'
 import { applyDocumentLayoutBindings } from './bindings/layout'
 import { applyDocumentPaintBindings } from './bindings/paint'
@@ -329,6 +330,7 @@ function materializeReaderInto(
     const node = graph.createNode(nodeType, parentId, props)
     sources.set(occurrence.sourceId, node.id)
     if (node.type === 'COMPONENT') componentIds.set(occurrence.sourceId, node.id)
+    generatedFrameCodec(node.type)?.read(graph, node, occurrence.properties, blobs)
     for (const child of occurrence.children) createShells(child, node.id)
   }
   for (const page of pages) createShells(page, graph.rootId)

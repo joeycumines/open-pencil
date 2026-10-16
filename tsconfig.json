@@ -49,6 +49,12 @@
       "#feedback/*": [
         "./packages/feedback/src/*"
       ],
+      "@open-pencil/cloud/*": [
+        "./packages/cloud/src/*"
+      ],
+      "#cloud/*": [
+        "./packages/cloud/src/*"
+      ],
       "#dom-css/*": [
         "./packages/dom-css/src/*"
       ],

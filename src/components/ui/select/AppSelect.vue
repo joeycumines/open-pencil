@@ -8,7 +8,7 @@ import {
   SelectValue
 } from 'reka-ui'
 import { tv } from 'tailwind-variants'
-import { computed, useSlots } from 'vue'
+import { computed, ref, useSlots, watch } from 'vue'
 
 import { useRetainedPopup } from '@open-pencil/vue'
 
@@ -56,8 +56,20 @@ const selectedLabel = computed(
       .flatMap((group) => group.options)
       .find((option) => option.value === modelValue.value)?.label
 )
-const contentPlacement = computed(
+const livePlacement = computed(
   () => placement ?? (slots.trigger || selectedLabel.value === undefined ? 'below' : 'over')
+)
+/**
+ * The menu keeps the placement it opened with: choosing the first option on a placeholder would
+ * switch it while the menu closes, and Reka then skips restoring what it hid from assistive tech.
+ */
+const contentPlacement = ref(livePlacement.value)
+watch(
+  popupOpen,
+  (open) => {
+    if (open) contentPlacement.value = livePlacement.value
+  },
+  { flush: 'sync' }
 )
 const contentUI = computed(() => ({
   content: ui?.content,
@@ -97,7 +109,7 @@ const itemUI = computed(() => ({ item: ui?.item, indicator: ui?.indicator }))
             :disabled="option.disabled"
             :ui="itemUI"
           >
-            {{ option.label }}
+            <slot name="option" :option="option">{{ option.label }}</slot>
             <template #end><slot name="option-end" :option="option" /></template>
           </AppSelectItem>
         </SelectGroup>

@@ -13,6 +13,16 @@ export type OutboxJob = {
 
 export type SyncUIState = 'idle' | 'syncing' | 'offline' | 'error'
 
+/**
+ * When a job that waits for the person, such as a conflict or storage that refuses it, would run
+ * next: never, until something resets it.
+ */
+export const PARKED_ATTEMPT_AT = Number.MAX_SAFE_INTEGER
+
+export function isParkedJob(job: OutboxJob): boolean {
+  return job.nextAttemptAt === PARKED_ATTEMPT_AT
+}
+
 /** Pure helper: drop older putCanvas jobs for same canvas when a newer revision is enqueued. */
 export function supersedePutCanvasJobs(
   jobs: OutboxJob[],

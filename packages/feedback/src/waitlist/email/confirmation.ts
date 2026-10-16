@@ -19,8 +19,7 @@ const ConfirmationEmail = defineComponent({
         actionURL: props.confirmURL,
         note: {
           text: 'Did not sign up? Ignore this email and the address is deleted in seven days, or',
-          linkLabel: 'remove it now',
-          linkURL: props.leaveURL
+          link: { label: 'remove it now', url: props.leaveURL }
         }
       })
   }

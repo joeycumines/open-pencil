@@ -16,6 +16,7 @@ import {
   componentPropertyScope,
   inferComponentSetProperties
 } from './component-properties'
+import { elementNodeType } from './elements'
 import { applySizeOverrides, propsToOverrides } from './props-overrides'
 import { prepareScalarBindings } from './scalar-bindings'
 import type { DesignJSXServices } from './services'
@@ -24,39 +25,6 @@ import { FRAGMENT, isTreeNode } from './tree'
 import type { TreeNode } from './tree'
 import type { RenderOptions } from './types'
 import { isVariable, resolveVariableId, type DesignVariable } from './vars'
-
-const TYPE_MAP: Partial<Record<string, NodeType>> = {
-  frame: 'FRAME',
-  view: 'FRAME',
-  rectangle: 'RECTANGLE',
-  rect: 'RECTANGLE',
-  ellipse: 'ELLIPSE',
-  text: 'TEXT',
-  line: 'LINE',
-  star: 'STAR',
-  polygon: 'POLYGON',
-  vector: 'VECTOR',
-  group: 'GROUP',
-  section: 'SECTION',
-  component: 'COMPONENT',
-  'component-set': 'COMPONENT_SET',
-  componentset: 'COMPONENT_SET',
-  div: 'FRAME',
-  main: 'FRAME',
-  header: 'FRAME',
-  footer: 'FRAME',
-  nav: 'FRAME',
-  article: 'FRAME',
-  aside: 'FRAME',
-  span: 'TEXT',
-  p: 'TEXT',
-  h1: 'TEXT',
-  h2: 'TEXT',
-  h3: 'TEXT',
-  h4: 'TEXT',
-  h5: 'TEXT',
-  h6: 'TEXT'
-}
 
 export interface RenderResult {
   id: string
@@ -503,6 +471,27 @@ async function renderNode<Artwork>(
   return node
 }
 
+/**
+ * The elements rendered their own way rather than as the layer their definition names, or null
+ * for any other element.
+ */
+function renderOwnElement<Artwork>(
+  services: DesignJSXServices<Artwork>,
+  graph: SceneGraph,
+  tree: TreeNode,
+  parentId: string
+): Promise<SceneNode> | null {
+  switch (tree.type) {
+    case 'icon':
+    case 'svg':
+      return renderArtworkNode(services, graph, tree, parentId)
+    case 'instance':
+      return renderInstanceNode(graph, tree, parentId)
+    default:
+      return null
+  }
+}
+
 async function renderNodeContent<Artwork>(
   services: DesignJSXServices<Artwork>,
   graph: SceneGraph,
@@ -511,9 +500,8 @@ async function renderNodeContent<Artwork>(
   onNode?: RenderOptions['onNode'],
   scope?: RekaScope
 ): Promise<SceneNode> {
-  if (tree.type === 'icon' || tree.type === 'svg')
-    return renderArtworkNode(services, graph, tree, parentId)
-  if (tree.type === 'instance') return renderInstanceNode(graph, tree, parentId)
+  const own = renderOwnElement(services, graph, tree, parentId)
+  if (own) return own
   const reka = await renderRekaNode(graph, tree, parentId, scope, {
     render: (child, childParentId, childScope) =>
       renderNode(services, graph, child, childParentId, onNode, childScope),
@@ -530,7 +518,7 @@ async function renderNodeContent<Artwork>(
 
   if (isTextContent(tree))
     throw new Error(`<${TEXT_CONTENT_NAMES[tree.type]}> must be inside <Text>`)
-  const nodeType = TYPE_MAP[tree.type]
+  const nodeType = elementNodeType(tree.type)
   if (!nodeType) throw new Error(`Unknown element: <${tree.type}>`)
 
   const { overrides, bindings } = elementOverrides(graph, nodeType, tree, parentId)

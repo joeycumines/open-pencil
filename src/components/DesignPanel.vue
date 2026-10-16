@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 import { getNodeEditCapability } from '@open-pencil/core/editor'
-import { readIcon } from '@open-pencil/scene-graph'
+import { layerResizes, readIcon } from '@open-pencil/scene-graph'
 import { useI18n, useSceneComputed, useSelectionState, useEditorCommands } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
@@ -40,6 +40,9 @@ import PositionSection from './properties/PositionSection.vue'
 import SelectionColorsSection from './properties/selection/SelectionColorsSection.vue'
 import SelectionLayoutSection from './properties/selection/SelectionLayoutSection.vue'
 import SelectionActionsControl from './properties/SelectionActionsControl.vue'
+import StatusesSection from './properties/status/StatusesSection.vue'
+import StatusSection from './properties/status/StatusSection.vue'
+import StickySection from './properties/sticky/StickySection.vue'
 import StrokeSection from './properties/stroke/StrokeSection.vue'
 import TypographySection from './properties/TypographySection.vue'
 import VariablesSection from './properties/VariablesSection.vue'
@@ -111,6 +114,7 @@ const { panels } = useI18n()
         <SelectionActionsControl :show-boolean-operations="showBooleanOperations" />
       </template>
     </PanelHeader>
+    <StatusSection />
     <ComponentPropertiesSection />
     <PositionSection />
     <ConstraintsSection />
@@ -188,6 +192,7 @@ const { panels } = useI18n()
         </template>
       </PanelHeader>
 
+      <StatusSection />
       <ComponentPropertiesSection v-if="node.type === 'INSTANCE'" />
       <VariantAuthoringSection
         v-if="
@@ -206,9 +211,11 @@ const { panels } = useI18n()
       <FramePresetSelect v-if="node.type === 'FRAME' && !readIcon(node)" />
 
       <IconSection />
+      <StickySection />
       <PositionSection />
       <ConstraintsSection />
-      <LayoutSection />
+      <!-- A sticky note's size follows its text and its scale; Figma leaves W and H read-only. -->
+      <LayoutSection v-if="layerResizes(node)" />
       <AppearanceSection />
       <MaskSection />
       <TypographySection v-if="node.type === 'TEXT'" />
@@ -229,6 +236,7 @@ const { panels } = useI18n()
   >
     <PageSection />
     <VariablesSection @open-dialog="openVariablesDialog(store)" />
+    <StatusesSection />
     <ExportSection />
   </div>
 </template>

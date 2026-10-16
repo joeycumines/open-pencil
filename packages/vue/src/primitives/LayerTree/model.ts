@@ -1,6 +1,6 @@
 import { isEqual } from 'es-toolkit'
 
-import { readIcon, slotPropertyId } from '@open-pencil/scene-graph'
+import { isGeneratedFrame, readIcon, slotPropertyId } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { LayerNode, LayerRow, LayerSelectionMode } from '#vue/primitives/LayerTree/context'
@@ -41,7 +41,10 @@ export function buildLayerTreeModel(graph: SceneGraph, parentId: string): LayerT
       if (!sceneNode || sceneNode.internalOnly) continue
       const node = nodeToLayerNode(sceneNode)
       byId.set(node.id, node)
-      if (sceneNode.childIds.length > 0) node.children = buildChildren(node.id)
+      // A generated frame, such as a sticky note, is one layer; its template owns what is inside.
+      if (sceneNode.childIds.length > 0 && !isGeneratedFrame(sceneNode)) {
+        node.children = buildChildren(node.id)
+      }
       children.push(node)
     }
     return children

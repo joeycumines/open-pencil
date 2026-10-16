@@ -32,9 +32,7 @@ export class EffectRasterCache extends ResourceCache<string, EffectRasterCacheEn
   }
 
   deleteDependencies(nodeId: string): void {
-    for (const [ownerId, entry] of this) {
-      if (entry.dependencyIds.includes(nodeId)) this.delete(ownerId)
-    }
+    this.deleteWhere((entry) => entry.dependencyIds.includes(nodeId))
   }
 }
 

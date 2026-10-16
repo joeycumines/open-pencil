@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computedAsync } from '@vueuse/core'
-import { omit } from 'es-toolkit'
+import { isEmptyObject, omit } from 'es-toolkit'
 import { tv } from 'tailwind-variants'
 import { computed, reactive, useId, watch } from 'vue'
 
@@ -205,7 +205,7 @@ function commitExpression(modeId: string) {
   const expressions: Record<string, TokenExpression> =
     css && typeof resolved === 'number' ? { ...others, [modeId]: { css, resolved } } : others
   emit('updateToken', {
-    expressions: Object.keys(expressions).length > 0 ? expressions : undefined
+    expressions: isEmptyObject(expressions) ? undefined : expressions
   })
 }
 

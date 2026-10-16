@@ -94,7 +94,8 @@ Najczęściej używane właściwości można odczytywać i zapisywać przez poś
 - wygląd: `fills`, `strokes`, `effects`, `opacity`, `visible`, `locked`, `blendMode`, `clipsContent`;
 - tekst: `characters`, `fontSize`, `fontName`, `fontWeight`, wyrównanie, interlinia, odstęp między znakami i funkcje zakresów stylów;
 - automatyczny układ: `layoutMode`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `itemSpacing`, wypełnienie, rozmiary i położenie;
-- obwiednia: `strokeWeight`, `strokeAlign`, `dashPattern`.
+- obwiednia: `strokeWeight`, `strokeAlign`, `dashPattern`;
+- status: `devStatus` sekcji, ramek, komponentów, zestawów komponentów i instancji leżących bezpośrednio na stronie lub w sekcji: `{ type: 'READY_FOR_DEV' | 'COMPLETED' }` albo `null` (opis nie jest zachowywany); odczytuje się jako `null`, dopóki warstwa leży tam, gdzie status nie jest widoczny.
 
 ### Narzędzia pomocnicze
 

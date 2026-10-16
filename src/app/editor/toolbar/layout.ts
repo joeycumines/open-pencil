@@ -19,12 +19,18 @@ export interface ToolbarLayout {
 /** The one entry the toolbar always shows, so it is never empty. */
 export const PINNED_TOOLBAR_ENTRY: ToolbarEntry = 'SELECT'
 
+/**
+ * Tools the toolbar keeps hidden until shown from Customize toolbar, such as FigJam's sticky
+ * note, which Figma's own toolbar does not offer.
+ */
+const HIDDEN_BY_DEFAULT: readonly ToolbarEntry[] = ['STICKY']
+
 export const DEFAULT_TOOLBAR_LAYOUT: Readonly<ToolbarLayout> = {
   groups: [
     ...EDITOR_TOOLS.map((tool) => [...(tool.flyout ?? [tool.key])]),
     ...TOOLBAR_ACTIONS.map((action) => [action])
   ],
-  hidden: []
+  hidden: [...HIDDEN_BY_DEFAULT]
 }
 
 const ENTRIES = DEFAULT_TOOLBAR_LAYOUT.groups.flat()
@@ -65,7 +71,8 @@ function placeMissing(groups: ToolbarEntry[][], entry: ToolbarEntry) {
 
 /**
  * Reads a stored layout: unknown entries and repeats are dropped, actions stand alone, empty
- * groups go, and entries it does not mention are placed as `placeMissing` describes.
+ * groups go, and entries it does not mention are placed as `placeMissing` describes, hidden when
+ * the default layout hides them.
  */
 export function normalizeToolbarLayout(
   storedGroups: readonly (readonly unknown[])[],
@@ -88,8 +95,10 @@ export function normalizeToolbarLayout(
     }
     if (group.length > 0) groups.push(group)
   }
-  for (const entry of ENTRIES) if (!placed.has(entry)) placeMissing(groups, entry)
-  const hidden = uniq(storedHidden.filter(isToolbarEntry)).filter(
+  const missing = ENTRIES.filter((entry) => !placed.has(entry))
+  for (const entry of missing) placeMissing(groups, entry)
+  const hiddenMissing = missing.filter((entry) => HIDDEN_BY_DEFAULT.includes(entry))
+  const hidden = uniq([...storedHidden.filter(isToolbarEntry), ...hiddenMissing]).filter(
     (entry) => entry !== PINNED_TOOLBAR_ENTRY
   )
   return { groups, hidden }

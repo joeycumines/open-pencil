@@ -360,6 +360,13 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 | `reply_to_comment` | Answer a thread, which reopens it if it was resolved |
 | `resolve_comment` | Resolve a thread once its feedback is addressed, or reopen it |
 
+### Statuses
+
+| Tool | Description |
+|------|-------------|
+| `get_statuses` | List the document's statuses and the sections, frames, components, and instances that show one, optionally only one status |
+| `set_status` | Give a layer one of the document's statuses by name, or clear it |
+
 ### Navigation
 
 | Tool | Description |

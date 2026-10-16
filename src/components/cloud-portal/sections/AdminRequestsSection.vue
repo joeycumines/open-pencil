@@ -1,0 +1,63 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+
+import { useCloudPortalMessages, useI18n } from '@open-pencil/vue'
+
+import { usePortal } from '@/app/cloud-portal/context'
+import { portalDate } from '@/app/cloud-portal/format'
+import { usePortalAction, usePortalLoad } from '@/app/cloud-portal/state'
+import AppAlert from '@/components/ui/feedback/AppAlert.vue'
+
+import PortalAccessRequests from '../console/PortalAccessRequests.vue'
+import type { AccessRequest, AccessRequestStatus } from '../types'
+
+const emit = defineEmits<{ changed: [] }>()
+const portal = usePortal()
+const messages = useCloudPortalMessages()
+const { locale } = useI18n()
+const filter = ref<AccessRequestStatus>('pending')
+
+const {
+  data: requests,
+  error: loadError,
+  reload
+} = usePortalLoad(async (): Promise<AccessRequest[]> => {
+  const { enrollments } = await portal.api.enrollments(filter.value)
+  return enrollments.map((enrollment) => ({
+    id: enrollment.id,
+    name: enrollment.name,
+    email: enrollment.email,
+    reason: enrollment.reason,
+    requestedOn: portalDate(enrollment.requestedAt, locale.value),
+    status: enrollment.status,
+    reviewedBy: enrollment.reviewedBy
+  }))
+}, [])
+
+const {
+  subject: busy,
+  error: reviewError,
+  run: review
+} = usePortalAction(async (id: string, action: 'approve' | 'reject' | 'revoke') => {
+  await portal.api.reviewEnrollment(id, action)
+  emit('changed')
+  await reload()
+})
+const error = computed(() => reviewError.value ?? loadError.value)
+
+watch(filter, () => void reload())
+</script>
+
+<template>
+  <div class="flex flex-col gap-3">
+    <AppAlert v-if="error" tone="error" :heading="messages.errorTitle" :description="error" />
+    <PortalAccessRequests
+      v-model:filter="filter"
+      :requests="requests"
+      :busy="busy"
+      @approve="(id) => review(id, 'approve')"
+      @reject="(id) => review(id, 'reject')"
+      @revoke="(id) => review(id, 'revoke')"
+    />
+  </div>
+</template>

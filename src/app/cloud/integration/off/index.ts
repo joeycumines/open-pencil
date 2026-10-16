@@ -1,0 +1,49 @@
+import { noop } from 'es-toolkit'
+import { computed } from 'vue'
+
+import type { WorkspaceSummary } from '@open-pencil/cloud/contract'
+
+import type { CloudAccount } from '@/app/cloud/servers/store'
+import type { SaveDestination, SaveFailure } from '@/app/storage/save-to/model'
+
+/**
+ * What a build without Cloud (`VITE_OPENPENCIL_CLOUD=off`) resolves `@/app/cloud/integration`
+ * to: the same names, offering nothing. Only types come from Cloud's modules, so none of its code
+ * is bundled.
+ */
+export const CLOUD_INCLUDED: boolean = false
+
+// Still the identifier Home and Save to compare locations with; no provider registers it.
+export { CLOUD_STORAGE_PROVIDER_ID } from '@/app/cloud/sessions/token'
+
+export function startCloud(): () => void {
+  return noop
+}
+
+export function isCloudBinding(): boolean {
+  return false
+}
+
+export async function cloudSaveDestinations(): Promise<SaveDestination[]> {
+  return []
+}
+
+export function signInToSaveTo(): boolean {
+  return false
+}
+
+export async function cloudUploadFailure(): Promise<SaveFailure | null> {
+  return null
+}
+
+export function useHomeCloud() {
+  return {
+    signedIn: computed(() => false),
+    account: computed<(CloudAccount & { host: string }) | null>(() => null),
+    workspaces: computed<WorkspaceSummary[]>(() => []),
+    serverId: computed<string | null>(() => null),
+    connect: noop,
+    newWorkspace: noop,
+    signOut: () => Promise.resolve()
+  }
+}

@@ -526,31 +526,31 @@ export function clipNodeShape(
 
 export function getVectorPaths(r: SkiaRenderer, node: SceneNode): Path[] | null {
   if (!node.vectorNetwork) return null
-  const cached = r.vectorPathCache.get(node.id)
+  const cached = r.nodePaths.vector.get(node.id)
   if (cached) return cached
   const paths = vectorNetworkToPath(r.ck, node.vectorNetwork)
-  r.vectorPathCache.set(node.id, paths)
+  r.nodePaths.store(r.nodePaths.vector, node.id, paths)
   return paths
 }
 
 export function getFillGeometry(r: SkiaRenderer, node: SceneNode): Path[] | null {
   if (node.fillGeometry.length === 0) return null
-  const cached = r.fillGeometryCache.get(node.id)
+  const cached = r.nodePaths.fillGeometry.get(node.id)
   if (cached) return cached
   const paths = node.fillGeometry.map((g) =>
     geometryBlobToPath(r.ck, g.commandsBlob, g.windingRule)
   )
-  r.fillGeometryCache.set(node.id, paths)
+  r.nodePaths.store(r.nodePaths.fillGeometry, node.id, paths)
   return paths
 }
 
 export function getStrokeGeometry(r: SkiaRenderer, node: SceneNode): Path[] | null {
   if (node.strokeGeometry.length === 0) return null
-  const cached = r.strokeGeometryCache.get(node.id)
+  const cached = r.nodePaths.strokeGeometry.get(node.id)
   if (cached) return cached
   const paths = node.strokeGeometry.map((g) =>
     geometryBlobToPath(r.ck, g.commandsBlob, g.windingRule)
   )
-  r.strokeGeometryCache.set(node.id, paths)
+  r.nodePaths.store(r.nodePaths.strokeGeometry, node.id, paths)
   return paths
 }

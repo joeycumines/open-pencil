@@ -99,5 +99,5 @@ export async function buildDemoDocument(): Promise<Uint8Array> {
   const { ck, renderer } = await measuringRenderer()
   const graph = await buildDemoGraph(renderer)
   await drawShaderStills(graph)
-  return exportFigFile(graph, ck, renderer)
+  return exportFigFile(graph, { ck, renderer })
 }

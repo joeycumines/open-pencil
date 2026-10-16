@@ -19,7 +19,7 @@ import {
   restorePageFromSnapshot as restorePageSnapshot,
   snapshotPage as createPageSnapshot,
   type PageSnapshot
-} from './history/snapshot'
+} from './history/snapshot/page'
 import { restoreSubtree, snapshotSubtree } from './history/subtree'
 import type { EditorContext } from './types'
 

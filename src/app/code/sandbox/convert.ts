@@ -1,3 +1,5 @@
+import { mapValues } from 'es-toolkit'
+
 import {
   angularGradient,
   backgroundBlur,
@@ -87,8 +89,7 @@ function convertValue(value: unknown): unknown {
     return helper(...value.args.map(convertValue))
   }
   if (Array.isArray(value)) return value.map(convertValue)
-  if (isRecord(value))
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, convertValue(v)]))
+  if (isRecord(value)) return mapValues(value, (entry) => convertValue(entry))
   return value
 }
 

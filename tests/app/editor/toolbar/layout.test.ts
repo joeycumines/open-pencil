@@ -27,14 +27,17 @@ function layout(groups: ToolbarEntry[][], hidden: ToolbarEntry[] = []): ToolbarL
 
 describe('normalizeToolbarLayout', () => {
   test('keeps the default layout as it is', () => {
-    expect(layout(DEFAULT_TOOLBAR_LAYOUT.groups)).toEqual(DEFAULT_TOOLBAR_LAYOUT)
+    expect(layout(DEFAULT_TOOLBAR_LAYOUT.groups, DEFAULT_TOOLBAR_LAYOUT.hidden)).toEqual(
+      DEFAULT_TOOLBAR_LAYOUT
+    )
   })
 
   test('drops unknown entries, repeats and empty groups', () => {
     const groups = [['SELECT', 'LASSO', 'SELECT'], [], ['FRAME', 'SECTION', 'FRAME']]
     const result = normalizeToolbarLayout(groups, ['HAND', 'HAND', 'GHOST'])
     expect(result.groups.slice(0, 2)).toEqual([['SELECT'], ['FRAME', 'SECTION']])
-    expect(result.hidden).toEqual(['HAND'])
+    // The sticky tool is placed hidden, as the default layout keeps it.
+    expect(result.hidden).toEqual(['HAND', 'STICKY'])
   })
 
   test('never hides Move', () => {
@@ -43,7 +46,13 @@ describe('normalizeToolbarLayout', () => {
 
   test('keeps commands out of flyouts', () => {
     const result = layout([['SELECT', 'insert-icon', 'HAND'], ['COMMENT']])
-    expect(result.groups.slice(-4)).toEqual([['TEXT'], ['insert-icon'], ['HAND'], ['COMMENT']])
+    expect(result.groups.slice(-5)).toEqual([
+      ['TEXT'],
+      ['STICKY'],
+      ['insert-icon'],
+      ['HAND'],
+      ['COMMENT']
+    ])
   })
 
   test('puts a tool the stored layout lacks into its default flyout', () => {
@@ -56,6 +65,7 @@ describe('normalizeToolbarLayout', () => {
     const stored: ToolbarEntry[][] = [['TEXT'], ['SELECT'], SHAPES, ['HAND']]
     expect(layout(stored).groups).toEqual([
       ['TEXT'],
+      ['STICKY'],
       ['SELECT'],
       ['FRAME', 'SECTION'],
       SHAPES,
@@ -64,6 +74,16 @@ describe('normalizeToolbarLayout', () => {
       ['COMMENT'],
       ['insert-icon']
     ])
+  })
+})
+
+describe('tools hidden by default', () => {
+  test('a layout stored before the sticky tool gets it hidden, and a shown one stays shown', () => {
+    const before = DEFAULT_TOOLBAR_LAYOUT.groups.map((group) =>
+      group.filter((entry) => entry !== 'STICKY')
+    )
+    expect(layout(before).hidden).toEqual(['STICKY'])
+    expect(layout(DEFAULT_TOOLBAR_LAYOUT.groups, []).hidden).toEqual([])
   })
 })
 

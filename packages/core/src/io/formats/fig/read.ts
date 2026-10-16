@@ -11,7 +11,7 @@ import {
   localFigArchive,
   registerFigArchive,
   workerFigArchive
-} from '#core/kiwi/fig/session/archive'
+} from '#core/kiwi/fig/session/archive/access'
 import { createFigSessionWorker } from '#core/kiwi/fig/session/client'
 import {
   registerReaderRecovery,

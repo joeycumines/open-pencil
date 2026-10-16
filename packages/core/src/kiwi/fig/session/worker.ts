@@ -1,5 +1,5 @@
 import { serializeSceneGraph } from '#core/kiwi/fig/parse/transfer'
-import { createFigArchiveOperations } from '#core/kiwi/fig/session/archive'
+import { createFigArchiveOperations } from '#core/kiwi/fig/session/archive/access'
 import type {
   FigSessionOpenRequest,
   FigSessionRequest,

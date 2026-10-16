@@ -4,9 +4,12 @@ import { prefetchFigmaSchema } from '@open-pencil/core/kiwi'
 import { createDocumentViewportActions, downloadBlob } from '@/app/document/io/browser'
 import { createDOMOpenActions } from '@/app/document/io/dom'
 import { createOpenActions, createReloadActions } from '@/app/document/io/read'
-import { createDocumentSourceActions, createDocumentSourceState } from '@/app/document/io/source'
+import {
+  createDocumentSourceActions,
+  createDocumentSourceState
+} from '@/app/document/io/source/actions'
 import type { ViewportSize } from '@/app/document/io/types'
-import { createFileWatcher } from '@/app/document/io/watch'
+import { createFileWatcher } from '@/app/document/io/watch/watcher'
 import type { EditorPreparationController } from '@/app/editor/preparation/controller'
 
 type DocumentIOState = EditorState & {

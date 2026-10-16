@@ -11,7 +11,8 @@
   },
   "exports": {
     "./contract": "./src/contract/index.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./email": "./src/waitlist/email/layout.ts"
   },
   "scripts": {
     "dev": "wrangler dev",

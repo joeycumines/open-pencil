@@ -38,5 +38,7 @@
   "tokens": "tokenów",
   "clear": "Wyczyść",
   "dismiss": "Zamknij",
-  "browserSupport": "Sprawdź obsługę w przeglądarkach"
+  "browserSupport": "Sprawdź obsługę w przeglądarkach",
+  "showPassword": "Pokaż hasło",
+  "hidePassword": "Ukryj hasło"
 }

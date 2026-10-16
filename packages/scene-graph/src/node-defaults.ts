@@ -202,6 +202,7 @@ export function createDefaultNode(
     componentScale: 1,
     variableModes: {},
     exportSettings: [],
+    status: null,
     pluginData: [],
     pluginRelaunchData: [],
     internalOnly: false,

@@ -4,6 +4,7 @@
   "cornerRadius": "Радиус",
   "pointCount": "Количество",
   "starRatio": "Соотношение",
+  "stickyPlaceholder": "Пишите что угодно, @упоминайте кого угодно",
   "showUI": "Показать интерфейс ({shortcut})",
   "previewing": "Просмотр",
   "resetPreview": "Сбросить",

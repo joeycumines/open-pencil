@@ -1,6 +1,7 @@
 import { watch } from 'vue'
 import type { RouteLocationNormalizedLoaded, Router } from 'vue-router'
 
+import { isRoomId } from '@/app/collab/room/id'
 import { activeRoom } from '@/app/collab/rooms'
 
 export const SHARE_ROUTE_PREFIX = '/share/'
@@ -9,15 +10,19 @@ export function shareRoutePath(roomId: string): string {
   return `${SHARE_ROUTE_PREFIX}${roomId}`
 }
 
-/** The path for the active tab's room: its share link, or `/` after leaving a share link. */
-function roomPathFor(roomId: string | null, currentPath: string): string {
-  if (roomId) return shareRoutePath(roomId)
+/**
+ * The path for the active tab's room: its share link, or `/` after leaving a share link. Only
+ * peer-to-peer rooms have share links; a Cloud document's room is the server's relay channel, so
+ * its ID never goes in the address.
+ */
+export function roomPathFor(roomId: string | null, currentPath: string): string {
+  if (roomId && isRoomId(roomId)) return shareRoutePath(roomId)
   return currentPath.startsWith(SHARE_ROUTE_PREFIX) ? '/' : currentPath
 }
 
 /**
- * Keeps the address bar on the active tab's room: `/share/<id>` while a room tab is active, and
- * back to `/` when the active tab is not in a room, so a reload or a copied URL opens what is
+ * Keeps the address bar on the active tab's room: `/share/<id>` while a shared room's tab is
+ * active, and back to `/` when the active tab is not in one, so a reload or a copied URL opens what is
  * on screen.
  */
 export function syncRoomRoute(router: Router, route: RouteLocationNormalizedLoaded): () => void {

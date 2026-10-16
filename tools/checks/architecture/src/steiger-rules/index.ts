@@ -17,6 +17,7 @@ import {
   createTextRule,
   filePrefix,
   FILE_PREFIX_GROUP_ALLOWLIST,
+  fileStem,
   PACKAGE_ALIASES,
   PACKAGE_ALIAS_OWNERS,
   relativePath,
@@ -33,8 +34,10 @@ const preferDomainFoldersOverFilenamePrefixes: Rule = {
     for (const folder of collectFolders(root)) {
       const folderRel = relativePath(root.path, folder.path)
       const groups = new Map<string, string[]>()
+      const names = new Set<string>()
       for (const child of folder.children ?? []) {
         if (child.type !== 'file' || !TEXT_EXTENSIONS.has(path.extname(child.path))) continue
+        names.add(fileStem(child.path))
         const prefix = filePrefix(child.path)
         if (!prefix) continue
         const files = groups.get(prefix) ?? []
@@ -42,10 +45,11 @@ const preferDomainFoldersOverFilenamePrefixes: Rule = {
         groups.set(prefix, files)
       }
       for (const [prefix, files] of groups) {
-        if (files.length < 3) continue
+        // `email.ts` beside `email-runtime.ts` is a domain as much as three `email-*` files are.
+        if (files.length < 3 && !names.has(prefix)) continue
         if (FILE_PREFIX_GROUP_ALLOWLIST.has(`${folderRel}::${prefix}`)) continue
         diagnostics.push({
-          message: `Use a ${prefix}/ domain folder instead of ${files.length} sibling files with the ${prefix}- filename prefix.`,
+          message: `Use a ${prefix}/ domain folder instead of sibling files named ${prefix} and ${prefix}-*.`,
           location: { path: folder.path }
         })
       }
@@ -333,8 +337,16 @@ const noNonUIImportsInSharedUI = createImportRule(
   }
 )
 
-// The editor's root and router, plus the desktop Software Update window's page entry.
-const VIEW_ENTRYPOINTS = new Set(['src/App.vue', 'src/main.ts', 'src/router.ts', 'src/updater.ts'])
+// The editor's root and router, the desktop Software Update window's page entry, and the Cloud
+// portal's entry and router.
+const VIEW_ENTRYPOINTS = new Set([
+  'src/App.vue',
+  'src/main.ts',
+  'src/router.ts',
+  'src/updater.ts',
+  'src/cloud/main.ts',
+  'src/cloud/router.ts'
+])
 
 const noViewsImportedOutsideEntry = createImportRule(
   'open-pencil/no-views-imported-outside-entry',
@@ -342,6 +354,29 @@ const noViewsImportedOutsideEntry = createImportRule(
     if (!resolved?.startsWith('src/views/')) return null
     if (VIEW_ENTRYPOINTS.has(sourceRel)) return null
     return 'Views are top-level composition entrypoints and must not be imported by app services or reusable components.'
+  }
+)
+
+// The Cloud portal is served by the Cloud server on its own; it reuses the app's UI, never the
+// editor, so its build stays small.
+const CLOUD_PORTAL_SOURCES = [
+  'src/cloud/',
+  'src/views/cloud/',
+  'src/app/cloud-portal/',
+  'src/components/cloud-portal/',
+  'src/theme/cloud-portal/'
+]
+const EDITOR_ONLY_MODULES = ['src/app/editor/', 'src/app/shell/']
+
+const noEditorImportsInCloudPortal = createImportRule(
+  'open-pencil/no-editor-imports-in-cloud-portal',
+  (sourceRel, specifier, resolved) => {
+    if (!CLOUD_PORTAL_SOURCES.some((prefix) => sourceRel.startsWith(prefix))) return null
+    const editorOnly =
+      specifier.startsWith('canvaskit-wasm') ||
+      EDITOR_ONLY_MODULES.some((prefix) => resolved?.startsWith(prefix))
+    if (!editorOnly) return null
+    return 'The Cloud portal must not import editor sessions, CanvasKit, or the app shell, so `bun run build:cloud-portal` stays small.'
   }
 )
 
@@ -534,6 +569,7 @@ export const openPencilArchitecturePlugin = {
     noAppImportsComponentsOrViews,
     noComponentsImportViews,
     noViewsImportedOutsideEntry,
+    noEditorImportsInCloudPortal,
     noNonUIImportsInSharedUI,
     noAppImportsInSharedUI,
     noPropertyPanelInternalsOutsidePanel,

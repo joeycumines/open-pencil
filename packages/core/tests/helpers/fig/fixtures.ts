@@ -34,7 +34,8 @@ export const VALID_NODE_TYPES = new Set<string>([
   'INSTANCE',
   'BOOLEAN_OPERATION',
   'CONNECTOR',
-  'SHAPE_WITH_TEXT'
+  'SHAPE_WITH_TEXT',
+  'STICKY'
 ])
 
 /** Read a shared JSON fixture and validate it; a module import would escape the package root. */

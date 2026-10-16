@@ -71,10 +71,18 @@ export type EmailLayoutProps = {
   actionLabel: string
   actionURL: string
   /** Small print under the button, with an optional link at its end. */
-  note: { text: string; linkLabel: string; linkURL: string }
+  note?: { text: string; link?: { label: string; url: string } }
 }
 
+function noteContent(note: NonNullable<EmailLayoutProps['note']>) {
+  if (!note.link) return note.text
+  const { label, url } = note.link
+  return [`${note.text} `, h(Link, { href: url, style: styles.link }, () => label), '.']
+}
+
+/** The branded email every OpenPencil service sends: the waitlist and Cloud alike. */
 export function emailLayout(props: EmailLayoutProps): VNode {
+  const { note } = props
   return h(HTML, { lang: 'en' }, () => [
     h(Head),
     h(Preview, () => props.preview),
@@ -86,11 +94,7 @@ export function emailLayout(props: EmailLayoutProps): VNode {
         h(Section, () =>
           h(Button, { href: props.actionURL, style: styles.button }, () => props.actionLabel)
         ),
-        h(Text, { style: styles.note }, () => [
-          `${props.note.text} `,
-          h(Link, { href: props.note.linkURL, style: styles.link }, () => props.note.linkLabel),
-          '.'
-        ])
+        note ? h(Text, { style: styles.note }, () => noteContent(note)) : null
       ]),
       h(Text, { style: styles.footer }, () => [
         'OpenPencil, the open-source design editor · ',

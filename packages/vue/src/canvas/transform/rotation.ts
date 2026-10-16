@@ -1,6 +1,7 @@
 import { ROTATION_SNAP_DEGREES } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
 import { createSceneGeometry } from '@open-pencil/core/geometry'
+import { layerRotates } from '@open-pencil/scene-graph'
 
 import {
   hitTestCornerRotationByMatrix,
@@ -23,7 +24,8 @@ export function tryStartRotation(
   if (editor.state.selectedIds.size !== 1) return false
   const id = [...editor.state.selectedIds][0]
   const node = editor.graph.getNode(id)
-  if (!node || node.locked) return false
+  // A generated frame such as a sticky note may stay upright.
+  if (!node || node.locked || !layerRotates(node)) return false
 
   const geometry = createSceneGeometry(editor.graph, editor.state.rotationPreview)
   const center = geometry.rotationOrigin(node)

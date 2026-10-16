@@ -1,3 +1,4 @@
+import { sumBy } from 'es-toolkit'
 import * as v from 'valibot'
 
 import { extractFigThumbnailFromReader } from '@open-pencil/fig'
@@ -201,7 +202,8 @@ export function createS3StorageAdapter(runtime: StorageProviderRuntime): S3Stora
         signal
       )
       if (!bytes) throw new Error(`Document not found: ${id}`)
-      return bytes
+      // Buckets do not record which version a copy came from, so S3 documents are last-writer-wins.
+      return { bytes, revision: null }
     },
 
     async putDocument(id, bytes, metadata, onProgress) {
@@ -228,6 +230,7 @@ export function createS3StorageAdapter(runtime: StorageProviderRuntime): S3Stora
         }),
         'application/json'
       )
+      return { revision: null }
     },
 
     async getDocumentMetadata(id) {
@@ -258,7 +261,7 @@ export function createS3StorageAdapter(runtime: StorageProviderRuntime): S3Stora
       const config = await resolveConfig(runtime)
       const objects = await listObjects(config, `${STORAGE_NAMESPACE}/`)
       return {
-        bytesUsed: objects.reduce((total, object) => total + (object.size ?? 0), 0),
+        bytesUsed: sumBy(objects, (object) => object.size ?? 0),
         objectCount: objects.length,
         documentCount: objects.filter((object) => documentIdFromFigKey(object.key)).length
       }

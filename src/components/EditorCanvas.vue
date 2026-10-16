@@ -15,6 +15,7 @@ import IconLucidePanelLeft from '~icons/lucide/panel-left'
 import IconLucidePanelRight from '~icons/lucide/panel-right'
 import IconLucidePanelTop from '~icons/lucide/panel-top'
 
+import type { PlacedStatusLabel } from '@open-pencil/core/canvas'
 import {
   AUTO_LAYOUT_PADDING_EDITOR_OFFSET_X,
   AUTO_LAYOUT_PADDING_EDITOR_OFFSET_Y,
@@ -32,6 +33,7 @@ import {
   useCanvasDrop,
   useCanvasInput,
   useCanvasIssueMarkers,
+  useCanvasStatusLabels,
   useCanvasVirtualReference,
   useTextEdit,
   type AutoLayoutValueField
@@ -48,6 +50,7 @@ import CommentsLayer from '@/components/comments/CommentsLayer.vue'
 import IssueMarkerTooltip from '@/components/design-check/IssueMarkerTooltip.vue'
 import PreparationOverlay from '@/components/preparation/canvas/Overlay.vue'
 import FollowFrame from '@/components/presence/FollowFrame.vue'
+import StatusLabelMenu from '@/components/statuses/StatusLabelMenu.vue'
 import AppDropOverlay from '@/components/ui/feedback/AppDropOverlay.vue'
 import { motionStyles } from '@/theme/motion/styles'
 import { floatingSurface } from '@/theme/overlay'
@@ -112,17 +115,22 @@ useCanvas(sceneCanvasRef, store, {
     store.state.canvasPresentation = colorSpace
   }
 })
-const { hitTestSectionTitle, hitTestComponentLabel, hitTestFrameTitle, hitTestIssueMarker } =
-  useCanvas(canvasRef, store, {
-    layer: 'overlays',
-    get showRulers() {
-      return appRuntimeConfig.showRulers && store.state.showRulers && paneView.value.play === null
-    },
-    getOverlayObstacles: () => canvasOverlayObstacles(canvasRef.value),
-    shouldSuspendRender,
-    getRenderState,
-    onViewportResize
-  })
+const {
+  hitTestSectionTitle,
+  hitTestComponentLabel,
+  hitTestFrameTitle,
+  hitTestIssueMarker,
+  hitTestStatusLabel
+} = useCanvas(canvasRef, store, {
+  layer: 'overlays',
+  get showRulers() {
+    return appRuntimeConfig.showRulers && store.state.showRulers && paneView.value.play === null
+  },
+  getOverlayObstacles: () => canvasOverlayObstacles(canvasRef.value),
+  shouldSuspendRender,
+  getRenderState,
+  onViewportResize
+})
 const {
   cursorOverride,
   canvasLabelEdit,
@@ -151,6 +159,14 @@ watch(isActivePane, (active) => {
 onUnmounted(cleanupInteractions)
 
 const { activeTab: propertiesTab } = useAIChat()
+const openStatusLabel = shallowRef<PlacedStatusLabel | null>(null)
+const { cursor: statusLabelCursor } = useCanvasStatusLabels(canvasRef, store, {
+  hitTest: hitTestStatusLabel,
+  onActivate: (label) => {
+    activatePane()
+    openStatusLabel.value = label
+  }
+})
 const { detailMarker: hoveredIssueMarker, cursor: issueMarkerCursor } = useCanvasIssueMarkers(
   canvasRef,
   store,
@@ -227,7 +243,10 @@ const valueEditorIcon = computed(() => {
 })
 
 const cursor = computed(() =>
-  toolCursor(store.state.activeTool, issueMarkerCursor.value ?? cursorOverride.value)
+  toolCursor(
+    store.state.activeTool,
+    issueMarkerCursor.value ?? statusLabelCursor.value ?? cursorOverride.value
+  )
 )
 </script>
 
@@ -263,6 +282,11 @@ const cursor = computed(() =>
         <PlayIslands :view="paneView" :drawn="drawnView" :canvas="canvasRef" />
         <AppDropOverlay :visible="isDraggingOver" />
         <IssueMarkerTooltip :marker="hoveredIssueMarker" :canvas="canvasRef" />
+        <StatusLabelMenu
+          :label="openStatusLabel"
+          :canvas="canvasRef"
+          @close="openStatusLabel = null"
+        />
         <CanvasLabelEditor
           :edit="canvasLabelEdit"
           :presentation="canvasLabelEditPresentation"

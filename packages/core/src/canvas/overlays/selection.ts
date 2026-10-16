@@ -1,6 +1,6 @@
 import type { Canvas } from 'canvaskit-wasm'
 
-import { slotPropertyId } from '@open-pencil/scene-graph'
+import { layerRotates, slotPropertyId } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { computeBounds, rotatedCorners } from '@open-pencil/scene-graph/geometry'
 import Matrix from '@open-pencil/scene-graph/matrix'
@@ -287,7 +287,10 @@ function drawTextPathSelection(
   )
 }
 
-/** Figma's corner handles and our rotation stalk; a layer too small for handles shows none. */
+/**
+ * Figma's corner handles and our rotation stalk, absent for a layer that does not turn; a layer
+ * too small for handles shows none.
+ */
 function drawBoundsHandles(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -295,13 +298,14 @@ function drawBoundsHandles(
   minY: number,
   maxX: number,
   maxY: number,
-  stalk: RotationHandleLayout
+  stalk: RotationHandleLayout | null
 ): void {
   if (!hasTransformHandles((maxX - minX) * r.zoom, (maxY - minY) * r.zoom)) return
   r.drawHandle(canvas, minX, minY)
   r.drawHandle(canvas, maxX, minY)
   r.drawHandle(canvas, minX, maxY)
   r.drawHandle(canvas, maxX, maxY)
+  if (!stalk) return
   canvas.drawLine(stalk.edge.x, stalk.edge.y, stalk.handle.x, stalk.handle.y, r.selectionPaint)
   r.drawHandle(canvas, stalk.handle.x, stalk.handle.y)
 }
@@ -351,12 +355,15 @@ export function drawNodeSelection(
         y1,
         x2,
         y2,
-        rotationHandleLayout(node, createSceneGeometry(graph, preview), r.zoom, {
-          x: x1,
-          y: y1,
-          width: x2 - x1,
-          height: y2 - y1
-        })
+        // A generated frame such as a sticky note may stay upright.
+        !layerRotates(node)
+          ? null
+          : rotationHandleLayout(node, createSceneGeometry(graph, preview), r.zoom, {
+              x: x1,
+              y: y1,
+              width: x2 - x1,
+              height: y2 - y1
+            })
       )
     },
     preview

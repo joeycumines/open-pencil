@@ -42,3 +42,4 @@ export type {
   DesignIssueSeverity,
   PlacedIssueMarker
 } from './issues/types'
+export { hitTestStatusLabels, type PlacedStatusLabel } from './labels/status'

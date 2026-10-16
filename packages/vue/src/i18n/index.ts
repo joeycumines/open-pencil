@@ -22,9 +22,12 @@ export {
   useRenderingMessages,
   useRenameMessages,
   useSettingsMessages,
+  useStatusMessages,
   useStorageMessages,
   useToolMessages,
   useUpdateMessages,
+  useCloudMessages,
+  useCloudPortalMessages,
   useVariableMessages,
   useVariableTypeMessages
 } from '#vue/i18n/useI18n'

@@ -25,5 +25,6 @@
   "newDesign": "Nuovo design",
   "noMatchingFiles": "Nessun file corrisponde a «{query}».",
   "saveAsPrompt": "Salva con nome:",
-  "browserFileAPINotSupported": "Il browser non supporta l’API dei file locali. I file verranno scaricati anziché salvati nella posizione corrente."
+  "browserFileAPINotSupported": "Il browser non supporta l’API dei file locali. I file verranno scaricati anziché salvati nella posizione corrente.",
+  "newDesignIn": "Nuovo design in {place}"
 }

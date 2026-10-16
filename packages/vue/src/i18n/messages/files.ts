@@ -33,6 +33,7 @@ export const filesMessageDefaults = {
   searchFiles: 'Search files…',
   searchRecentAndStorageFiles: 'Search recent and storage files…',
   newDesign: 'New design',
+  newDesignIn: params('New design in {place}'),
   noMatchingFiles: params('No files match “{query}”.'),
   saveAsPrompt: 'Save as:',
   browserFileAPINotSupported:

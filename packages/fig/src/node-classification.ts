@@ -1,10 +1,11 @@
+import { GENERATED_FRAME_TYPES } from '@open-pencil/scene-graph'
+
 const UNSUPPORTED_FRAGMENT_TYPES: ReadonlySet<string> = new Set([
   'STYLE',
   'STYLE_SET',
   'INTERNAL_ONLY_NODE',
   'WIDGET',
   'STAMP',
-  'STICKY',
   'SHAPE_WITH_TEXT',
   'CONNECTOR',
   'CODE_BLOCK',
@@ -22,8 +23,13 @@ const CONTAINER_AND_RESOURCE_TYPES: ReadonlySet<string> = new Set([
   'VARIABLE'
 ])
 
+/**
+ * Whether a record is dropped on paste. FigJam's generated frames are kept once their type is
+ * defined as one, as a sticky note is.
+ */
 export function isUnsupportedFigFragmentType(type: string | undefined): boolean {
-  return UNSUPPORTED_FRAGMENT_TYPES.has(type ?? '')
+  const generated: ReadonlySet<string> = GENERATED_FRAME_TYPES
+  return UNSUPPORTED_FRAGMENT_TYPES.has(type ?? '') && !generated.has(type ?? '')
 }
 
 /** Clipboard bounds exclude containers, resources, and unsupported scene records. */

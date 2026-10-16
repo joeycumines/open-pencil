@@ -11,6 +11,8 @@ import AppInput from '@/components/ui/input/AppInput.vue'
 
 import HomeJoinRoom from './HomeJoinRoom.vue'
 
+/** The place a new design is created in, when it is not a local file. */
+const { destination = null } = defineProps<{ destination?: string | null }>()
 const emit = defineEmits<{ 'new-document': [] }>()
 const query = defineModel<string>({ required: true })
 const { menu, files } = useI18n()
@@ -76,7 +78,9 @@ watch(
         @click="emit('new-document')"
       >
         <template #leading><icon-lucide-plus class="size-3.5" /></template>
-        {{ files.newDesign }}
+        <span class="max-w-56 truncate">{{
+          destination ? files.newDesignIn({ place: destination }) : files.newDesign
+        }}</span>
       </AppButton>
     </div>
   </div>

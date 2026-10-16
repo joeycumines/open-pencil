@@ -1,6 +1,6 @@
 import { motionStyles } from '../motion/styles'
 import { floatingSurface } from '../overlay'
-import { panelFieldBase } from '../panel/field'
+import { panelFieldBase } from '../panel/field/base'
 
 const appComboboxTheme = {
   slots: {

@@ -28,6 +28,7 @@ import {
   extractPluginRelaunchData,
   readNodeChangePluginData
 } from './plugin-data'
+import { extractNodeStatus } from './status'
 import { styleRefId } from './style/refs'
 import { importStyleRuns } from './style/runs'
 import { importParagraphStyles } from './text/lines'
@@ -126,6 +127,7 @@ const NODE_TYPE_MAP: Record<string, NodeType | 'DOCUMENT' | 'VARIABLE'> = {
   SYMBOL: 'COMPONENT',
   CONNECTOR: 'CONNECTOR',
   SHAPE_WITH_TEXT: 'SHAPE_WITH_TEXT',
+  STICKY: 'STICKY',
   // Map to TEXT while retaining a format-neutral text path for rendering/editing.
   TEXT_PATH: 'TEXT'
 }
@@ -725,6 +727,7 @@ export function nodeChangeToProps(
     variableBindingScales: sourceVariableBindingScales(nc),
     variableModes: extractVariableModes(nc),
     exportSettings: extractExportSettings(nc),
+    status: extractNodeStatus(nc),
     pluginData: extractPluginData(nc),
     librarySource: extractLibrarySource(nc),
     pluginRelaunchData: extractPluginRelaunchData(nc),

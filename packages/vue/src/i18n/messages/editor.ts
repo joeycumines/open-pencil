@@ -11,6 +11,8 @@ export const editorMessageDefaults = {
   pointCount: 'Count',
   /** The word before a star's inner ratio beside its dragged handle. */
   starRatio: 'Ratio',
+  /** What an empty sticky note shows in its body on the canvas. */
+  stickyPlaceholder: 'Type anything, @mention anyone',
   showUI: params('Show UI ({shortcut})'),
   previewing: 'Previewing',
   startPreview: params('Preview ({shortcut})'),

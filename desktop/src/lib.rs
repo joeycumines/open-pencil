@@ -6,6 +6,7 @@ mod fonts;
 mod http;
 mod menu;
 mod menu_events;
+mod opener;
 #[cfg(target_os = "macos")]
 mod window;
 
@@ -17,7 +18,10 @@ use deep_link::path_matches_suffix;
 use fig_container::build_fig_file;
 use fonts::{list_system_fonts, load_system_font};
 use http::{cancel_http_request, proxy_http_request, ProxyHttpRequests};
-use menu::{install_app_menu, native_menu_checked, set_native_menu_checked};
+use menu::{
+    install_app_menu, native_menu_checked, set_native_menu_checked, set_native_menu_features,
+    update_app_menu, NativeMenuInputs, NativeMenuState,
+};
 use menu_events::handle_menu_event;
 use std::{
     path::{Path, PathBuf},
@@ -44,6 +48,27 @@ struct PendingOpen(Mutex<Vec<PendingOpenFile>>);
 
 /// Rooms from `openpencil://join` links, waiting for the frontend to open them.
 struct PendingRooms(Mutex<Vec<String>>);
+
+/// Cloud invitations and shared links from `openpencil://cloud` links, waiting for the frontend.
+struct PendingCloudLinks(Mutex<Vec<deep_link::CloudLink>>);
+
+#[tauri::command]
+fn take_pending_cloud_links(state: tauri::State<PendingCloudLinks>) -> Vec<deep_link::CloudLink> {
+    state
+        .0
+        .lock()
+        .map(|mut pending| pending.drain(..).collect())
+        .unwrap_or_default()
+}
+
+/// Native-test builds take a link through the same path a launch or an opened URL does.
+#[cfg(feature = "native-test")]
+#[tauri::command]
+fn native_test_open_deep_link(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let url = url::Url::parse(&url).map_err(|error| error.to_string())?;
+    queue_deep_links(&app, vec![url]);
+    Ok(())
+}
 
 #[tauri::command]
 fn take_pending_rooms(state: tauri::State<PendingRooms>) -> Vec<String> {
@@ -89,7 +114,7 @@ fn sharing_disabled_by_env() -> bool {
 
 #[tauri::command]
 fn set_recent_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
-    install_app_menu(&app, &paths).map_err(|error| error.to_string())
+    update_app_menu(&app, |inputs| inputs.recent_files = paths)
 }
 
 /// Name of the MCP entry point installed by `@open-pencil/mcp`.
@@ -280,6 +305,7 @@ fn queue_open_paths<R: tauri::Runtime>(app: &tauri::AppHandle<R>, paths: Vec<Pat
 fn queue_deep_links<R: tauri::Runtime>(app: &tauri::AppHandle<R>, urls: Vec<url::Url>) {
     let mut files = Vec::new();
     let mut rooms = Vec::new();
+    let mut cloud_links = Vec::new();
     for url in urls.iter().filter(|url| url.scheme() == "openpencil") {
         match deep_link::parse_deep_link(url) {
             Ok(deep_link::DeepLink::Open(open)) => files.push(PendingOpenFile {
@@ -288,6 +314,7 @@ fn queue_deep_links<R: tauri::Runtime>(app: &tauri::AppHandle<R>, urls: Vec<url:
                 deep_link: true,
             }),
             Ok(deep_link::DeepLink::Join(join)) => rooms.push(join.room),
+            Ok(deep_link::DeepLink::Cloud(link)) => cloud_links.push(link),
             // The sign-in that opened the browser is waiting; it checks the state itself.
             Ok(deep_link::DeepLink::OAuth(callback)) => {
                 let _ = app.emit("oauth-callback", callback);
@@ -295,12 +322,35 @@ fn queue_deep_links<R: tauri::Runtime>(app: &tauri::AppHandle<R>, urls: Vec<url:
                     let _ = window.set_focus();
                 }
             }
-            Err(error) => eprintln!("[deep-link] refused {url}: {error:?}"),
+            // Cloud links carry a secret in the fragment, so a refused link is not echoed.
+            Err(error) => eprintln!(
+                "[deep-link] refused {}: {error:?}",
+                url.host_str().unwrap_or("")
+            ),
         }
     }
 
     queue_pending(app, files);
     queue_rooms(app, rooms);
+    queue_cloud_links(app, cloud_links);
+}
+
+fn queue_cloud_links<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    links: Vec<deep_link::CloudLink>,
+) {
+    if links.is_empty() {
+        return;
+    }
+
+    if let Ok(mut pending) = app.state::<PendingCloudLinks>().0.lock() {
+        pending.extend(links);
+    }
+
+    let _ = app.emit("open-cloud-links", ());
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
 }
 
 fn queue_rooms<R: tauri::Runtime>(app: &tauri::AppHandle<R>, rooms: Vec<String>) {
@@ -341,7 +391,9 @@ pub fn run() {
 
     #[cfg(feature = "native-test")]
     {
-        builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+        builder = builder
+            .manage(opener::OpenedExternalUrls::default())
+            .plugin(tauri_plugin_wdio_webdriver::init());
     }
 
     #[cfg(all(
@@ -361,6 +413,8 @@ pub fn run() {
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(ProxyHttpRequests::default())
         .manage(PendingRooms(Mutex::new(Vec::new())))
+        .manage(NativeMenuState(Mutex::new(NativeMenuInputs::default())))
+        .manage(PendingCloudLinks(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
             agents::agent_lookup,
             build_fig_file,
@@ -372,17 +426,24 @@ pub fn run() {
             credential_store_availability,
             credential_write,
             mcp_lookup,
+            #[cfg(feature = "native-test")]
+            native_test_open_deep_link,
+            opener::open_external_url,
+            #[cfg(feature = "native-test")]
+            opener::take_native_test_opened_urls,
             path_matches_suffix,
             list_system_fonts,
             load_system_font,
             proxy_http_request,
             cancel_http_request,
             set_recent_files,
+            set_native_menu_features,
             native_menu_checked,
             set_native_menu_checked,
             take_pending_open,
             take_pending_rooms,
             sharing_disabled_by_env,
+            take_pending_cloud_links,
             webview_version
         ])
         .plugin(tauri_plugin_opener::init())
@@ -433,7 +494,10 @@ pub fn run() {
                 queue_deep_links(app.handle(), urls);
             }
 
-            Ok(install_app_menu(app.handle(), &[])?)
+            Ok(install_app_menu(
+                app.handle(),
+                &NativeMenuInputs::default(),
+            )?)
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

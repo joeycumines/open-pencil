@@ -133,7 +133,8 @@ API намеренно близок к Figma Plugin API, но работает �
 - радиусы: `cornerRadius`, `topLeftRadius`, `topRightRadius`, `bottomRightRadius`, `bottomLeftRadius`;
 - текст: `characters`, `fontSize`, `fontName`, `fontWeight`, выравнивание, интерлиньяж, межбуквенный интервал и функции для диапазонов стилей;
 - автоматическая компоновка: `layoutMode`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `itemSpacing`, отступы, размеры и положение;
-- обводка: `strokeWeight`, `strokeAlign`, `dashPattern`.
+- обводка: `strokeWeight`, `strokeAlign`, `dashPattern`;
+- статус: `devStatus` у секций, фреймов, компонентов, наборов компонентов и экземпляров, лежащих прямо на странице или в секции: `{ type: 'READY_FOR_DEV' | 'COMPLETED' }` или `null` (описание не сохраняется); он читается как `null`, пока слой лежит там, где статус не показывается.
 
 ### Служебные возможности
 

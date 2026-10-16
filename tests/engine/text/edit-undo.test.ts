@@ -40,6 +40,7 @@ function setup() {
     requestRefresh: () => {
       state.sceneVersion++
     },
+    getUserName: () => '',
     requestRepaint: () => {
       state.renderVersion++
     },

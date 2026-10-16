@@ -2,10 +2,10 @@
 import { colorToCSS } from '@open-pencil/scene-graph/color'
 import { useI18n, useInlineRename } from '@open-pencil/vue'
 
+import { initials } from '@/app/presence/initials'
 import type { FollowTarget } from '@/app/presence/types'
-import { initials } from '@/app/shell/ui'
 import IconButton from '@/components/ui/button/IconButton.vue'
-import { avatar } from '@/theme/collaboration/avatar'
+import { avatar } from '@/theme/collaboration/avatar/person'
 import { presenceList } from '@/theme/collaboration/presence-list'
 
 import { isFollowing, type PresenceAgentRow, type PresencePersonRow } from './rows'

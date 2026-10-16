@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { createEditor } from '@open-pencil/core/editor'
 
-import { handleMoveMove, handleMoveUp, MOVE_DRAG_START_THRESHOLD_PX } from '#vue/shared/input/move'
+import {
+  handleMoveMove,
+  handleMoveUp,
+  MOVE_DRAG_START_THRESHOLD_PX
+} from '#vue/shared/input/move/drag'
 import { createSelectionMoveDrag } from '#vue/shared/input/select/move'
 import type { DragMove } from '#vue/shared/input/types'
 

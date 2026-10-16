@@ -1,4 +1,5 @@
 import type { Editor } from '@open-pencil/core/editor'
+import { layerRotates } from '@open-pencil/scene-graph'
 
 import {
   buildResizeCursor,
@@ -33,7 +34,7 @@ function getRotationCursorForSelection(cx: number, cy: number, editor: Editor): 
 
   const id = [...editor.state.selectedIds][0]
   const node = editor.graph.getNode(id)
-  if (!node) return null
+  if (!node || !layerRotates(node)) return null
 
   const corner = hitTestCornerRotationByMatrix(
     cx,

@@ -4,6 +4,7 @@
   "cornerRadius": "Radius",
   "pointCount": "Anzahl",
   "starRatio": "Verhältnis",
+  "stickyPlaceholder": "Beliebigen Text eingeben, jemanden mit @ erwähnen",
   "showUI": "UI anzeigen ({shortcut})",
   "previewing": "Vorschau",
   "resetPreview": "Zurücksetzen",

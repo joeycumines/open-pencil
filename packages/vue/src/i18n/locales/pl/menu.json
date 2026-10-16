@@ -7,11 +7,9 @@
   "text": "Tekst",
   "new": "Nowy",
   "open": "Otwórz…",
-  "openStorageWorkspace": "Otwórz obszar przechowywania…",
   "openTour": "Otwórz przewodnik",
   "save": "Zapisz",
   "saveAs": "Zapisz jako…",
-  "saveToStorage": "Zapisz w obszarze przechowywania…",
   "exportSelection": "Eksportuj zaznaczenie…",
   "autosave": "Automatyczny zapis do pliku",
   "copy": "Kopiuj",
@@ -78,5 +76,7 @@
   "exportSelectionAsSVG": "Eksportuj zaznaczenie jako SVG",
   "exportSelectionAsPPTX": "Eksportuj zaznaczenie jako PPTX",
   "exportSelectionAsFig": "Eksportuj zaznaczenie jako .fig",
-  "togglePreview": "Podgląd"
+  "togglePreview": "Podgląd",
+  "browseFiles": "Przeglądaj pliki…",
+  "saveTo": "Zapisz w…"
 }

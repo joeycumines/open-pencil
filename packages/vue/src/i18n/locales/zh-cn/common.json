@@ -38,5 +38,7 @@
   "tokens": "token",
   "clear": "清除",
   "dismiss": "关闭",
-  "browserSupport": "查看浏览器支持情况"
+  "browserSupport": "查看浏览器支持情况",
+  "showPassword": "显示密码",
+  "hidePassword": "隐藏密码"
 }

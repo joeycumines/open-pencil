@@ -4,6 +4,7 @@
   "cornerRadius": "Promień",
   "pointCount": "Liczba",
   "starRatio": "Proporcja",
+  "stickyPlaceholder": "Wpisz cokolwiek, @wspomnij kogoś",
   "showUI": "Pokaż interfejs ({shortcut})",
   "previewing": "Podgląd",
   "resetPreview": "Resetuj",

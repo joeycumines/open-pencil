@@ -28,6 +28,14 @@ export { vectorNetworkToCenterlinePath, fitCircleArc, isClosedThinCrescent } fro
 export { regenerateFillGeometry } from './fill-geometry'
 export { addStrokeRunToPath, strokeRuns, type StrokeRun } from './path-helpers'
 
+/**
+ * Fill types go on the detached `Path`: CanvasKit 0.41's `PathBuilder.setFillType` returns an
+ * undeleted copy of the builder, which leaks about 860 bytes per call.
+ */
+function fillType(ck: CanvasKit, windingRule: WindingRule) {
+  return windingRule === 'EVENODD' ? ck.FillType.EvenOdd : ck.FillType.Winding
+}
+
 export function vectorNetworkToPath(ck: CanvasKit, network: VectorNetwork): Path[] {
   const { vertices, segments, regions } = network
 
@@ -40,10 +48,9 @@ export function vectorNetworkToPath(ck: CanvasKit, network: VectorNetwork): Path
         for (const segmentIndex of loop) regionSegmentIndexes.add(segmentIndex)
         addLoopToPath(regionPath, loop, segments, vertices)
       }
-      regionPath.setFillType(
-        region.windingRule === 'EVENODD' ? ck.FillType.EvenOdd : ck.FillType.Winding
-      )
-      paths.push(regionPath.detachAndDelete())
+      const path = regionPath.detachAndDelete()
+      path.setFillType(fillType(ck, region.windingRule))
+      paths.push(path)
     }
 
     const openSegments = segments.filter((_, index) => !regionSegmentIndexes.has(index))
@@ -121,6 +128,7 @@ export function geometryBlobToPath(
     }
   }
 
-  path.setFillType(windingRule === 'EVENODD' ? ck.FillType.EvenOdd : ck.FillType.Winding)
-  return path.detachAndDelete()
+  const result = path.detachAndDelete()
+  result.setFillType(fillType(ck, windingRule))
+  return result
 }

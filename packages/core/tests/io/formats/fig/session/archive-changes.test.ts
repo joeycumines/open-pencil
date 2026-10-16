@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 
 import { computeAllLayouts, exportFigFile, initCodec, parseFigFile, SceneGraph } from '@open-pencil/core'
 
-import { archiveChanges } from '#core/kiwi/fig/session/archive-changes'
+import { archiveChanges } from '#core/kiwi/fig/session/archive/changes'
 
 /** A row whose saved child positions are not where auto layout puts them. */
 async function openRow() {

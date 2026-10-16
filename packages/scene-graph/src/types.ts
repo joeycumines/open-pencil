@@ -121,6 +121,7 @@ export type NodeType =
   | 'INSTANCE'
   | 'CONNECTOR'
   | 'SHAPE_WITH_TEXT'
+  | 'STICKY'
 
 export type FillType =
   | 'SOLID'
@@ -715,6 +716,12 @@ export interface SceneNode {
   componentScale: number
   variableModes: VariableModeMap
   exportSettings: ExportSetting[]
+  /**
+   * The id of the status a team gave the layer, a state of the document's workflow such as Ready
+   * for dev. It stays while the layer sits where it cannot show one; `effectiveStatus` tells
+   * whether it shows.
+   */
+  status: string | null
 
   pluginData: PluginDataEntry[]
   pluginRelaunchData: PluginRelaunchDataEntry[]

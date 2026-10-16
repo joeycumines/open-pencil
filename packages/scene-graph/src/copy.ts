@@ -289,6 +289,8 @@ export function cloneNodeProps(
     pluginData: copySpread(src.pluginData),
     pluginRelaunchData: copySpread(src.pluginRelaunchData),
     exportSettings: copySpread(src.exportSettings),
+    // Generated instance descendants have no status of their own.
+    status: componentId === null ? src.status : null,
     componentPropertyValues: { ...src.componentPropertyValues },
     derivedLayout: src.derivedLayout ? { ...src.derivedLayout } : null,
     arcData: src.arcData ? copyArcData(src.arcData) : null,

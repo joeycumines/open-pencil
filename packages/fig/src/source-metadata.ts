@@ -29,6 +29,7 @@ const EDITED_RAW_FIELDS: Partial<Record<string, readonly string[]>> = {
   layoutGrids: ['layoutGrids'],
   guides: ['guides'],
   exportSettings: ['exportSettings'],
+  status: ['sectionStatusInfo'],
   cornerRadius: ['cornerRadius'],
   independentCorners: ['rectangleCornerRadiiIndependent'],
   topLeftRadius: ['rectangleTopLeftCornerRadius', 'rectangleCornerRadiiIndependent'],

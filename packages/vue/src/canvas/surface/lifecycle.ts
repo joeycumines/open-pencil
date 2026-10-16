@@ -22,6 +22,7 @@ import { createCanvasRenderLoop } from '#vue/canvas/surface/render-loop'
 import { useCanvasResizeObserver } from '#vue/canvas/surface/resize-observer'
 import { createShaderRasterizer } from '#vue/canvas/surface/shader/rasterizer'
 import type { UseCanvasOptions } from '#vue/canvas/surface/types'
+import { editorMessages } from '#vue/i18n/messages/editor'
 
 type SurfaceManagerState = {
   renderer: SkiaRenderer | null
@@ -55,6 +56,22 @@ export function createCanvasSurfaceManager({
     presentation: null
   }
   let sceneBackingRenderTimer: ReturnType<typeof setTimeout> | null = null
+
+  // The scene of an editing canvas shows an empty sticky note's placeholder in the interface
+  // language, and draws it again when the language changes.
+  const showsStickyPlaceholder = options?.layer !== 'overlays'
+  let stickyPlaceholder: string = editorMessages.get().stickyPlaceholder
+  const stopStickyPlaceholder = editorMessages.subscribe((messages) => {
+    if (messages.stickyPlaceholder === stickyPlaceholder) return
+    stickyPlaceholder = messages.stickyPlaceholder
+    if (!state.renderer || !showsStickyPlaceholder) return
+    state.renderer.stickyPlaceholder = stickyPlaceholder
+    editor.requestRender()
+  })
+
+  function showStickyPlaceholder(renderer: SkiaRenderer) {
+    if (showsStickyPlaceholder) renderer.stickyPlaceholder = stickyPlaceholder
+  }
 
   function clearSceneBackingRenderTimer() {
     if (sceneBackingRenderTimer === null) return
@@ -111,6 +128,7 @@ export function createCanvasSurfaceManager({
     state.renderer.presentationColorSpace = result.presentation ?? 'srgb'
     state.renderer.tracksSceneSettlement = options?.layer !== 'overlays'
     state.renderer.tiledSceneEnabled = options?.sceneRenderer === 'tiled'
+    showStickyPlaceholder(state.renderer)
     editor.setCanvasKit(ck, state.renderer)
     // The scene surface draws shader frames; an overlay surface has none to draw.
     if (options?.layer !== 'overlays' && !editor.hasShaderRasterizer())
@@ -223,6 +241,7 @@ export function createCanvasSurfaceManager({
   )
 
   function destroy() {
+    stopStickyPlaceholder()
     stopPresentationRefresh()
     stopColorSpaceRefresh()
     clearSceneBackingRenderTimer()

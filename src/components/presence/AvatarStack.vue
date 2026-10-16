@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import { useCommonMessages } from '@open-pencil/vue'
 
-import { avatarStack } from '@/theme/collaboration/avatar-stack'
+import { avatarStack } from '@/theme/collaboration/avatar/stack'
 
 import PersonAvatar from './PersonAvatar.vue'
 import type { PresencePersonRow } from './rows'

@@ -7,11 +7,9 @@
   "text": "Текст",
   "new": "Создать",
   "open": "Открыть…",
-  "openStorageWorkspace": "Открыть рабочее пространство хранилища…",
   "openTour": "Открыть тур",
   "save": "Сохранить",
   "saveAs": "Сохранить как…",
-  "saveToStorage": "Сохранить в хранилище…",
   "exportSelection": "Экспорт выделения…",
   "autosave": "Автосохранение в файл",
   "copy": "Копировать",
@@ -78,5 +76,7 @@
   "exportSelectionAsSVG": "Экспортировать выделение как SVG",
   "exportSelectionAsPPTX": "Экспортировать выделение как PPTX",
   "exportSelectionAsFig": "Экспортировать выделение как .fig",
-  "togglePreview": "Просмотр"
+  "togglePreview": "Просмотр",
+  "browseFiles": "Обзор файлов…",
+  "saveTo": "Сохранить в…"
 }

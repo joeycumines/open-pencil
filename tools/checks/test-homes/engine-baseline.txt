@@ -9,9 +9,9 @@ tests/engine/app/ai/catalog.test.ts
 tests/engine/app/ai/context.test.ts
 tests/engine/app/ai/failure.test.ts
 tests/engine/app/ai/markdown.test.ts
-tests/engine/app/ai/model-roles.test.ts
-tests/engine/app/ai/model-settings.test.ts
-tests/engine/app/ai/model.test.ts
+tests/engine/app/ai/model/providers.test.ts
+tests/engine/app/ai/model/roles.test.ts
+tests/engine/app/ai/model/settings.test.ts
 tests/engine/app/ai/profile-selection.test.ts
 tests/engine/app/ai/vision.test.ts
 tests/engine/app/automation/child-ready.test.ts
@@ -151,8 +151,8 @@ tests/engine/figma/api/expanded.test.ts
 tests/engine/figma/api/find/all-with-criteria.test.ts
 tests/engine/figma/api/flatten-renderer.test.ts
 tests/engine/figma/api/frozen/arrays.test.ts
-tests/engine/figma/api/grouping-compat.test.ts
-tests/engine/figma/api/grouping.test.ts
+tests/engine/figma/api/grouping/compat.test.ts
+tests/engine/figma/api/grouping/group.test.ts
 tests/engine/figma/api/images.test.ts
 tests/engine/figma/api/internals/not-exposed.test.ts
 tests/engine/figma/api/layout/plugin-compat.test.ts
@@ -325,8 +325,8 @@ tests/engine/mcp/stdio/reconnect.test.ts
 tests/engine/mcp/test-support/discovery-isolation.test.ts
 tests/engine/mcp/tools.test.ts
 tests/engine/mcp/transport/paths.test.ts
-tests/engine/mcp/webmcp-settings.test.ts
-tests/engine/mcp/webmcp.test.ts
+tests/engine/mcp/webmcp/registration.test.ts
+tests/engine/mcp/webmcp/settings.test.ts
 tests/engine/pen/file.test.ts
 tests/engine/pen/layout.test.ts
 tests/engine/pen/var-padding.test.ts
@@ -386,9 +386,9 @@ tests/engine/render/canvas/retained-backing-pixels.test.ts
 tests/engine/render/canvas/retained-backing.test.ts
 tests/engine/render/canvas/schema-fill-fallback.test.ts
 tests/engine/render/canvas/surface-replacement.test.ts
-tests/engine/render/canvas/text-font-variations.test.ts
-tests/engine/render/canvas/text-preparation-cache.test.ts
-tests/engine/render/canvas/text.test.ts
+tests/engine/render/canvas/text/font-variations.test.ts
+tests/engine/render/canvas/text/preparation-cache.test.ts
+tests/engine/render/canvas/text/render.test.ts
 tests/engine/render/canvas/tiles/cache.test.ts
 tests/engine/render/canvas/tiles/geometry.test.ts
 tests/engine/render/canvas/tiles/gold-preview.test.ts
@@ -396,7 +396,7 @@ tests/engine/render/canvas/tiles/planner.test.ts
 tests/engine/render/canvas/tiles/render.test.ts
 tests/engine/render/canvas/tiles/scheduler.test.ts
 tests/engine/render/canvas/variable-modes.test.ts
-tests/engine/render/canvas/visual/boolean.test.ts
+tests/engine/render/canvas/visual/boolean-matrix.test.ts
 tests/engine/render/jsx/component/properties.test.ts
 tests/engine/render/jsx/component/property-references.test.ts
 tests/engine/render/jsx/component/set-properties.test.ts

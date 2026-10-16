@@ -1,3 +1,4 @@
+import { uniq } from 'es-toolkit'
 import { computed, reactive, ref, watch } from 'vue'
 
 import { IS_TAURI } from '@open-pencil/core/constants'
@@ -39,7 +40,7 @@ function initialAnswers(): OnboardingAnswers {
     .filter((providerID) => existingOnboardingConnection(providerID))
   return {
     goals: aiModelSettings.value.assignments.vision === null ? ['design'] : ['design', 'vision'],
-    access: [...new Set(access)],
+    access: uniq(access),
     spending: 'existing'
   }
 }

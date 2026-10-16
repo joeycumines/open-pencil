@@ -49,7 +49,7 @@ beforeAll(async () => {
   const { ck, renderer } = await measuringRenderer()
   const built = await buildDemoGraph(renderer)
   // The .fig the app opens, without the shader stills: the editor draws those on open.
-  const bytes = await exportFigFile(built, ck, renderer)
+  const bytes = await exportFigFile(built, { ck, renderer })
   graph = await readFigFile(new File([bytes.slice()], 'Demo.fig'))
   populateAllFigPages(graph)
 })

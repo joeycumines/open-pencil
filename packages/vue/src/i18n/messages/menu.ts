@@ -10,11 +10,11 @@ export const menuMessageDefaults = {
 
   new: 'New',
   open: 'Open…',
-  openStorageWorkspace: 'Open storage workspace…',
+  browseFiles: 'Browse files…',
   openTour: 'Open the Tour',
   save: 'Save',
   saveAs: 'Save as…',
-  saveToStorage: 'Save to storage…',
+  saveTo: 'Save to…',
   exportSelection: 'Export selection…',
   exportSelectionAsPNG: 'Export selection as PNG',
   exportSelectionAsSVG: 'Export selection as SVG',

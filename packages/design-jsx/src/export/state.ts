@@ -1,5 +1,6 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
+import { CONSTRAINT, MASK_TYPE } from '../enums'
 import type { getNodeContext } from './helpers'
 import { helperCall, type JSXProp, type JSXValue } from './value'
 
@@ -19,7 +20,10 @@ function collectConstraintProps(
   if (!horizontal && !vertical) return
   props.push([
     'constraints',
-    { horizontal: horizontal?.toLowerCase(), vertical: vertical?.toLowerCase() }
+    {
+      horizontal: horizontal && CONSTRAINT.print(horizontal),
+      vertical: vertical && CONSTRAINT.print(vertical)
+    }
   ])
 }
 
@@ -58,7 +62,7 @@ export function collectStateProps(
 ): void {
   collectConstraintProps(node, ctx, props)
   collectSizeLimitProps(node, props)
-  if (node.isMask) props.push(['mask', node.maskType.toLowerCase()])
+  if (node.isMask) props.push(['mask', MASK_TYPE.print(node.maskType)])
   if (!node.visible) props.push(['visible', false])
   if (node.locked) props.push(['locked', true])
   collectBindingProps(node, graph, props)

@@ -15,6 +15,7 @@ import {
   type SceneGraph,
   type SceneNode
 } from '@open-pencil/core'
+import { pngSize } from '@open-pencil/fig'
 import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -59,11 +60,6 @@ const SPECS: FixtureSpec[] = [
     figKiwiVersion: 101
   }
 ]
-
-function pngDimensions(png: Uint8Array): { w: number; h: number } {
-  const dv = new DataView(png.buffer, png.byteOffset, png.byteLength)
-  return { w: dv.getUint32(16), h: dv.getUint32(20) }
-}
 
 function buildPathMap(graph: SceneGraph): Map<string, SceneNode> {
   const map = new Map<string, SceneNode>()
@@ -479,9 +475,7 @@ function verifyFixture(spec: FixtureSpec): void {
       await g0Ready
       const thumb = g0Zip['thumbnail.png']
       expect(thumb.byteLength).toBe(spec.thumbnailSize)
-      const { w, h } = pngDimensions(thumb)
-      expect(w).toBe(spec.thumbnailWidth)
-      expect(h).toBe(spec.thumbnailHeight)
+      expect(pngSize(thumb)).toEqual({ width: spec.thumbnailWidth, height: spec.thumbnailHeight })
     })
 
     test('original fig-kiwi container', async () => {

@@ -3,9 +3,10 @@ import { compact } from 'es-toolkit/array'
 import { jsx, type SyntaxNode } from '@open-pencil/emit'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
+import { elementTag } from '../elements'
 import { rekaExport, type RekaExport } from './behaviours'
 import { iconProps } from './icons'
-import { collectProps, NODE_TYPE_TO_TAG } from './props'
+import { collectProps } from './props'
 import { textChildren } from './text'
 import { propAttribute } from './value'
 
@@ -65,7 +66,7 @@ function nodeToJSX(
     layerIds?.push(node.id)
     return [jsx.element('Icon', icon.map(propAttribute), [], depth)]
   }
-  const tag = reka.tags.get(node.id) ?? NODE_TYPE_TO_TAG[node.type]
+  const tag = reka.tags.get(node.id) ?? elementTag(node.type)
   if (!tag) return []
   layerIds?.push(node.id)
   const ownProps = reka.props.get(node.id)
@@ -101,7 +102,7 @@ export function sceneNodeAttributes(
   graph: SceneGraph
 ): JSXAttributeSource[] | null {
   const node = graph.getNode(nodeId)
-  if (!node || !NODE_TYPE_TO_TAG[node.type]) return null
+  if (!node || !elementTag(node.type)) return null
   const props = collectProps(node, graph)
   if (node.type === 'TEXT') props.push(['text', node.text])
   return props.map((prop) => ({
@@ -137,7 +138,7 @@ function textContent(node: SceneNode, tag: string): string | null {
 
 export function designJSXElement(nodeId: string, graph: SceneGraph): DesignJSXElement | null {
   const node = graph.getNode(nodeId)
-  const tag = node && NODE_TYPE_TO_TAG[node.type]
+  const tag = node && elementTag(node.type)
   const printed = sceneNodeAttributes(nodeId, graph)
   if (!node || !tag || !printed) return null
   // A text layer's content is written as its children, not as the `text` attribute.
@@ -150,7 +151,7 @@ export function designJSXElement(nodeId: string, graph: SceneGraph): DesignJSXEl
   if (isText) return { tag, attributes, text: textContent(node, tag), childIds: [] }
   const childIds = graph
     .getChildren(node.id)
-    .filter((child) => NODE_TYPE_TO_TAG[child.type])
+    .filter((child) => elementTag(child.type))
     .map((child) => child.id)
   return { tag, attributes, text: null, childIds }
 }

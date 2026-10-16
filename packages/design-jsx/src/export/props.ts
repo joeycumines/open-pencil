@@ -4,12 +4,12 @@ import {
   createDefaultNode,
   layoutSizing,
   type SceneGraph,
-  type SceneNode,
-  type NodeType
+  type SceneNode
 } from '@open-pencil/scene-graph'
 import { DEFAULT_FONT_FAMILY } from '@open-pencil/scene-graph/constants'
 import { resolveNodeTextDirection } from '@open-pencil/scene-graph/text-direction'
 
+import { BLEND_MODE, TEXT_ALIGN, TEXT_ALIGN_VERTICAL, TEXT_CASE, TEXT_DECORATION } from '../enums'
 import { collectDecorationProps } from './decoration'
 import {
   collectCornerRadii,
@@ -25,22 +25,6 @@ import type { JSXProp } from './value'
 export type { JSXProp } from './value'
 
 /** The element that represents each node type; other types are not exported. */
-export const NODE_TYPE_TO_TAG: Partial<Record<NodeType, string>> = {
-  FRAME: 'Frame',
-  RECTANGLE: 'Rectangle',
-  ROUNDED_RECTANGLE: 'Rectangle',
-  ELLIPSE: 'Ellipse',
-  TEXT: 'Text',
-  LINE: 'Line',
-  STAR: 'Star',
-  POLYGON: 'Polygon',
-  VECTOR: 'Vector',
-  GROUP: 'Group',
-  SECTION: 'Section',
-  COMPONENT: 'Component',
-  COMPONENT_SET: 'Frame',
-  INSTANCE: 'Frame'
-}
 
 function collectGridSizingProps(node: SceneNode, props: JSXProp[]): void {
   props.push(['grid', true])
@@ -141,7 +125,7 @@ function collectAppearanceProps(node: SceneNode, props: JSXProp[]): void {
   if (node.opacity < 1) props.push(['opacity', Math.round(node.opacity * 100) / 100])
   if (node.rotation !== 0) props.push(['rotate', Math.round(node.rotation * 100) / 100])
   if (node.blendMode !== 'PASS_THROUGH' && node.blendMode !== 'NORMAL') {
-    props.push(['blendMode', node.blendMode.toLowerCase()])
+    props.push(['blendMode', BLEND_MODE.print(node.blendMode)])
   }
   if (node.clipsContent) props.push(['overflow', 'hidden'])
   collectEffectProps(node, props)
@@ -249,21 +233,21 @@ function collectTextNodeProps(node: SceneNode, props: JSXProp[]): void {
   if (direction === 'RTL') props.push(['dir', 'rtl'])
   if (node.italic) props.push(['italic', true])
   if (node.textAlignHorizontal !== 'LEFT') {
-    props.push(['textAlign', node.textAlignHorizontal.toLowerCase()])
+    props.push(['textAlign', TEXT_ALIGN.print(node.textAlignHorizontal)])
   }
   if (node.textAlignVertical !== 'TOP') {
-    props.push(['textAlignVertical', node.textAlignVertical.toLowerCase()])
+    props.push(['textAlignVertical', TEXT_ALIGN_VERTICAL.print(node.textAlignVertical)])
   }
   if (node.lineHeight != null) props.push(['lineHeight', node.lineHeight])
   if (node.letterSpacing !== 0) props.push(['letterSpacing', node.letterSpacing])
   if (node.textDecoration !== 'NONE')
-    props.push(['textDecoration', node.textDecoration.toLowerCase()])
+    props.push(['textDecoration', TEXT_DECORATION.print(node.textDecoration)])
   collectDecorationProps(
     omitBy(pick(node, DECORATION_FIELDS), (value, key) => isEqual(value, TEXT_DEFAULTS[key])),
     node,
     props
   )
-  if (node.textCase !== 'ORIGINAL') props.push(['textCase', node.textCase.toLowerCase()])
+  if (node.textCase !== 'ORIGINAL') props.push(['textCase', TEXT_CASE.print(node.textCase)])
   if (node.maxLines != null) props.push(['maxLines', node.maxLines])
   if (node.textTruncation === 'ENDING' && node.maxLines == null) props.push(['truncate', true])
   if (node.paragraphSpacing !== 0) props.push(['paragraphSpacing', node.paragraphSpacing])

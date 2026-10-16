@@ -4,7 +4,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import { collectNodePositions, pushPositionUndo } from './history/position'
-import { fitEnclosingGroupsWithUndo } from './structure/group-bounds'
+import { fitEnclosingGroupsWithUndo } from './structure/group/bounds'
 import type { EditorContext } from './types'
 
 const NUDGE_COMMIT_DELAY = 300

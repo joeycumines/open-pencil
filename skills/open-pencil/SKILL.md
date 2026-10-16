@@ -201,6 +201,15 @@ openpencil eval design.fig -w -c 'openpencil.getComment("c_…").reply("Title is
 
 `openpencil.addComment(text, { node, page, x, y, author })` leaves a new one. Over MCP the same is `get_comments`, `add_comment`, `reply_to_comment`, and `resolve_comment`. Comment text is Markdown.
 
+Statuses say where a section, frame, component, or instance stands, from the document's own list. Read the list, find what is ready, and move a layer on once your work on it is done:
+
+```bash
+openpencil eval design.fig -c 'openpencil.statuses.map(s => s.name)'
+openpencil eval design.fig -w -c 'openpencil.setStatus(figma.currentPage.findOne(n => n.name === "Checkout"), "In review")'
+```
+
+`openpencil.getStatus(node)` reads one. Over MCP the same is `get_statuses` and `set_status`.
+
 ### Diff
 
 Compare nodes and documents, and apply patches:

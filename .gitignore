@@ -96,3 +96,8 @@ scratch/
 # Feedback Worker local state and secrets
 packages/feedback/.wrangler/
 packages/feedback/.dev.vars
+
+# OpenPencil Cloud local and build outputs
+packages/cloud/deploy/generated/
+packages/cloud/dist-standalone/
+dist-cloud-portal/

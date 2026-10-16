@@ -1,3 +1,5 @@
+import { sumBy } from 'es-toolkit'
+
 import type { SceneNode } from '@open-pencil/scene-graph'
 import { getAbsolutePositionFull, getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import { computeAbsoluteBounds } from '@open-pencil/scene-graph/geometry'
@@ -101,7 +103,7 @@ function distributeMultipleNodes(
 
   const start = bounds.get(first.id)?.[coordinate] ?? 0
   const end = (bounds.get(last.id)?.[coordinate] ?? 0) + (bounds.get(last.id)?.[size] ?? 0)
-  const totalSize = sorted.reduce((sum, node) => sum + (bounds.get(node.id)?.[size] ?? 0), 0)
+  const totalSize = sumBy(sorted, (node) => bounds.get(node.id)?.[size] ?? 0)
   const gap = (end - start - totalSize) / (sorted.length - 1)
   let cursor = start
 

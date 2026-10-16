@@ -1,8 +1,9 @@
 import * as v from 'valibot'
 
-import type { Fill, SceneNode, TextDecorationStyle } from '@open-pencil/scene-graph'
+import type { Fill, SceneNode } from '@open-pencil/scene-graph'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
+import { TEXT_DECORATION_STYLE } from '../enums'
 import { parseScriptInput } from '../validation'
 import { fillFromValue, isFillValue } from './fills'
 
@@ -14,14 +15,9 @@ export const CURRENT_COLOR = 'currentColor'
 const Length = v.pipe(v.number(), v.finite())
 const AutoLength = v.union([Length, v.literal(AUTO)])
 
-const DECORATION_STYLES = {
-  solid: 'SOLID',
-  dotted: 'DOTTED',
-  wavy: 'WAVY'
-} as const satisfies Record<string, TextDecorationStyle>
-
 const TextProps = v.object({
-  textDecorationStyle: v.optional(v.picklist(['solid', 'dotted', 'wavy'])),
+  // Read by TEXT_DECORATION_STYLE, so an unknown style warns rather than failing the render.
+  textDecorationStyle: v.optional(v.string()),
   textDecorationColor: v.optional(
     v.custom<string | Color | Fill>(isFillValue, 'Expected a colour or a paint')
   ),
@@ -45,8 +41,8 @@ export function applyTextDetailOverrides(
 ): void {
   const parsed = parseScriptInput('Invalid <Text> props', TextProps, props)
   const color = parsed.textDecorationColor
-  if (parsed.textDecorationStyle !== undefined)
-    o.textDecorationStyle = DECORATION_STYLES[parsed.textDecorationStyle]
+  const style = TEXT_DECORATION_STYLE.parse(parsed.textDecorationStyle)
+  if (style) o.textDecorationStyle = style
   if (color !== undefined) {
     o.textDecorationFills =
       typeof color === 'string' && color.toLowerCase() === CURRENT_COLOR.toLowerCase()

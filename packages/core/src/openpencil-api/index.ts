@@ -22,8 +22,10 @@ import {
   type CommentHandle,
   type NewComment
 } from './comments'
+import { getStatus, listStatuses, setStatus, type StatusInfo } from './statuses'
 
 export { BehaviourHandle, type NodeRef } from './behaviours'
+export type { StatusInfo } from './statuses'
 export {
   CommentHandle,
   DEFAULT_COMMENT_AUTHOR,
@@ -81,5 +83,26 @@ export class OpenPencilAPI {
    */
   addComment(text: string, options?: NewComment): CommentHandle {
     return addComment(this.figma.graph, this.figma.currentPageId, text, options)
+  }
+
+  /**
+   * The document's statuses, such as Ready for dev or the team's own Approved, with each one's
+   * color and the status Figma shows for it, if any.
+   */
+  get statuses(): StatusInfo[] {
+    return listStatuses(this.figma.graph)
+  }
+
+  /** The name of the status a section, frame, component, set or instance shows, or null. */
+  getStatus(node: NodeRef): string | null {
+    return getStatus(this.figma.graph, node)
+  }
+
+  /**
+   * Give a layer one of the document's statuses by name, or clear it with null. Only sections,
+   * frames, components, sets and instances directly on a page or in a section take one.
+   */
+  setStatus(node: NodeRef, status: string | null): void {
+    setStatus(this.figma.graph, node, status)
   }
 }

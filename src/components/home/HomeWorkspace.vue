@@ -4,12 +4,18 @@ import { computed, ref, watch } from 'vue'
 
 import { useDocumentWorkspace, useI18n, useViewportKind } from '@open-pencil/vue'
 
+import { CLOUD_INCLUDED, CLOUD_STORAGE_PROVIDER_ID } from '@/app/cloud/integration'
+import { useHomeLocations } from '@/app/home/locations'
 import {
   activeStorageProviderID,
+  createStorageAdapter,
   readStoragePreferences,
   storagePreferencesComplete,
+  sameStorageLocation,
+  storageLocationOf,
   storageProviderRegistry,
-  type StorageDocument
+  type StorageDocument,
+  type StorageLocation
 } from '@/app/integrations/storage'
 import {
   clearRecentFiles,
@@ -21,10 +27,15 @@ import {
 import { useCredentialSettings } from '@/app/settings/credentials/preferences/use'
 import { openSettingsDialog } from '@/app/settings/dialog'
 import { openFileFromPath } from '@/app/shell/menu/use'
-import { createStorageWorkspaceSource } from '@/app/storage/workspace/source'
+import { createStoredDocument } from '@/app/storage/workspace/create'
+import { activeStorageLocation, createStorageWorkspaceSource } from '@/app/storage/workspace/source'
 import { openStorageDocumentInNewTab } from '@/app/tabs'
+import { CloudSharedSection, CloudWorkspaceSection } from '@/components/cloud/integration'
 import DocumentEntry from '@/components/home/document/DocumentEntry.vue'
+import HomeLayout from '@/components/home/HomeLayout.vue'
 import HomeSearchActions from '@/components/home/search/HomeSearchActions.vue'
+import HomeLocationMenu from '@/components/home/sidebar/HomeLocationMenu.vue'
+import HomeSidebar from '@/components/home/sidebar/HomeSidebar.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
@@ -36,6 +47,14 @@ const view = useLocalStorage<'grid' | 'list'>('open-pencil:home-files-view', 'gr
 const query = ref('')
 const openError = ref<string | null>(null)
 const storageConfigured = ref(storagePreferencesComplete(activeStorageProviderID.value))
+const places = useHomeLocations()
+
+/** A new design lands in the place Home shows: a Cloud workspace, the bucket, or a local file. */
+function newDocument() {
+  const target = newDesignTarget.value
+  if (target) void createStoredDocument(target.location)
+  else emit('new-document')
+}
 
 const workspace = useDocumentWorkspace<RecentDocument>({
   source: {
@@ -46,7 +65,10 @@ const workspace = useDocumentWorkspace<RecentDocument>({
       const document = recentFiles.value.find((candidate) => candidate.id === documentId)
       if (!document) return Promise.resolve(null)
       if (document.kind === 'local') return loadRecentFileThumbnail(document.path)
-      return createStorageWorkspaceSource(() => undefined).loadPreview(document.documentId)
+      return createStorageWorkspaceSource(
+        () => undefined,
+        () => storageLocationOf(document)
+      ).loadPreview(document.documentId)
     }
   },
   refreshOnFocus: false,
@@ -97,6 +119,43 @@ const storageDescription = computed(() => {
   }
   return bucket ? `${label} · ${bucket}` : label
 })
+/** The storage bucket as the sidebar lists it, or a prompt to set it up. */
+const sidebarStorage = computed(() => {
+  if (!storageConfigured.value)
+    return { label: storage.value.workspace, detail: settings.value.notConfigured }
+  const bucket = readStoragePreferences(activeStorageProviderID.value).bucket?.trim()
+  return { label: bucket || storage.value.workspace, detail: storageDescription.value }
+})
+/** Where New design creates, named on the button; a local file when this is null. */
+const newDesignTarget = computed<{ location: StorageLocation; label: string } | null>(() => {
+  const workspace = places.workspace.value
+  const serverId = places.serverId.value
+  if (workspace && serverId && workspace.role !== 'viewer') {
+    return {
+      location: {
+        providerId: CLOUD_STORAGE_PROVIDER_ID,
+        profileId: serverId,
+        containerId: workspace.id
+      },
+      label: workspace.name
+    }
+  }
+  // Shared documents belong to other people's workspaces, so a new one goes to the person's own.
+  const own = places.workspaces.value.find((entry) => entry.role !== 'viewer')
+  if (places.location.value.kind === 'shared' && own && serverId) {
+    return {
+      location: { providerId: CLOUD_STORAGE_PROVIDER_ID, profileId: serverId, containerId: own.id },
+      label: own.name
+    }
+  }
+  if (places.location.value.kind === 'storage' && storageConfigured.value) {
+    return {
+      location: { providerId: activeStorageProviderID.value },
+      label: sidebarStorage.value.label
+    }
+  }
+  return null
+})
 const storagePreviewURL = storageWorkspace.previewURL
 const vStoragePreview = storageWorkspace.previewDirective
 const normalizedQuery = computed(() => query.value.trim().toLocaleLowerCase(locale.value))
@@ -131,15 +190,18 @@ async function openRecent(document: RecentDocument): Promise<void> {
       await openFileFromPath(document.path)
       return
     }
-    const storageDocument = storageDocuments.value.find(
-      (candidate) => candidate.id === document.documentId
-    )
+    const location = storageLocationOf(document)
+    // The listing carries the revision that tells whether this device's copy is still current;
+    // offline, the copy opens as it is.
+    const listing = sameStorageLocation(location, activeStorageLocation())
+      ? storageDocuments.value
+      : await createStorageAdapter(location)
+          .listDocuments()
+          .catch(() => [])
+    const listed = listing.find((candidate) => candidate.id === document.documentId)
     await openStorageDocumentInNewTab(
-      storageDocument ?? {
-        id: document.documentId,
-        name: document.name,
-        updatedAt: document.updatedAt
-      }
+      listed ?? { id: document.documentId, name: document.name, updatedAt: document.updatedAt },
+      location
     )
   } catch (error) {
     forgetRecentDocument(document.id)
@@ -164,16 +226,54 @@ function formattedDate(updatedAt: string): string {
 </script>
 
 <template>
-  <main
-    class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-canvas text-surface"
-    data-test-id="recent-files-home"
-  >
-    <section
-      class="mx-auto flex w-full max-w-7xl flex-col pt-4 pr-[max(1rem,env(safe-area-inset-right))] pb-4 pl-[max(1rem,env(safe-area-inset-left))] sm:px-6 sm:py-5"
-    >
-      <HomeSearchActions v-model="query" @new-document="emit('new-document')" />
+  <HomeLayout data-test-id="recent-files-home">
+    <template #sidebar>
+      <HomeSidebar
+        :cloud="CLOUD_INCLUDED"
+        :active="places.active.value"
+        :account="places.account.value"
+        :workspaces="places.workspaces.value"
+        :storage="sidebarStorage"
+        @select="places.select"
+        @connect="places.connect"
+        @account-settings="places.accountSettings"
+        @storage-settings="places.storageSettings"
+        @switch-server="places.connect"
+        @new-workspace="places.newWorkspace"
+        @sign-out="places.signOut"
+      />
+    </template>
+    <template #locations>
+      <HomeLocationMenu
+        :cloud="CLOUD_INCLUDED"
+        :active="places.active.value"
+        :account="places.account.value"
+        :workspaces="places.workspaces.value"
+        :storage="sidebarStorage"
+        @select="places.select"
+        @connect="places.connect"
+        @new-workspace="places.newWorkspace"
+      />
+    </template>
+    <HomeSearchActions
+      v-model="query"
+      :destination="newDesignTarget?.label ?? null"
+      @new-document="newDocument"
+    />
 
-      <p v-if="openError" class="mb-4 text-xs text-error" role="alert">{{ openError }}</p>
+    <p v-if="openError" class="mb-4 text-xs text-error" role="alert">{{ openError }}</p>
+    <CloudWorkspaceSection
+      v-if="places.workspace.value && places.serverId.value"
+      :server-id="places.serverId.value"
+      :workspace="places.workspace.value"
+      :query="normalizedQuery"
+    />
+    <CloudSharedSection
+      v-else-if="places.location.value.kind === 'shared' && places.serverId.value"
+      :server-id="places.serverId.value"
+      :query="normalizedQuery"
+    />
+    <template v-else>
       <p
         v-if="noSearchMatches"
         class="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted"
@@ -181,7 +281,7 @@ function formattedDate(updatedAt: string): string {
         {{ files.noMatchingFiles({ query: query.trim() }) }}
       </p>
 
-      <section v-if="!noSearchMatches">
+      <section v-if="!noSearchMatches && places.location.value.kind === 'recent'">
         <div class="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2">
           <div class="col-span-2 min-w-0 sm:col-span-1">
             <h1 class="text-base font-semibold">{{ files.recentFiles }}</h1>
@@ -253,7 +353,7 @@ function formattedDate(updatedAt: string): string {
         </div>
       </section>
 
-      <section class="mt-7">
+      <section v-if="places.location.value.kind === 'storage'">
         <div class="mb-3 flex items-start gap-3">
           <div class="min-w-0">
             <h2 class="text-base font-semibold">{{ storage.workspace }}</h2>
@@ -366,6 +466,6 @@ function formattedDate(updatedAt: string): string {
           {{ storage.emptyStorageWorkspace }}
         </div>
       </section>
-    </section>
-  </main>
+    </template>
+  </HomeLayout>
 </template>

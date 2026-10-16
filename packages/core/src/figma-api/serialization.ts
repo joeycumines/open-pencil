@@ -1,5 +1,6 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
+import { pluginChildren } from './accessors/sticky'
 import type { NodeProxyHost } from './proxy'
 
 function resolveBindings(graph: SceneGraph, node: SceneNode): Record<string, unknown> | undefined {
@@ -70,7 +71,7 @@ export function nodeProxyToJSON(
   // Include variable bindings with resolved values
   const bindings = resolveBindings(graph, n)
   if (bindings) obj.boundVariables = bindings
-  const children = graph.getChildren(nodeId)
+  const children = pluginChildren(graph, nodeId)
   if (children.length > 0) {
     if (maxDepth !== undefined && currentDepth >= maxDepth) {
       obj.childCount = children.length

@@ -1,3 +1,4 @@
+import { orderBy, uniq } from 'es-toolkit'
 import * as v from 'valibot'
 import * as Y from 'yjs'
 
@@ -55,7 +56,7 @@ export function migrateLegacyLayers(
   meta: YMeta,
   layerIds: Iterable<string>
 ): string[] {
-  const legacy = [...new Set(layerIds)].filter((id) => {
+  const legacy = uniq(Array.from(layerIds)).filter((id) => {
     const ynode = ynodes.get(id)
     return ynode !== undefined && isLegacyLayer(ynode)
   })
@@ -89,7 +90,7 @@ export function migrateLegacyLayers(
       const listed = legacyChildIdsOf(ynodes.get(parentId)).filter(
         (id) => ynodes.get(id) && (migrating.has(id) || legacyParentOrEntry(ynodes, id, parentId))
       )
-      const order = [...new Set(listed)]
+      const order = uniq(listed)
       const unlisted = [...migrating].filter((id) => !order.includes(id)).sort()
       order.push(...unlisted)
       const keys = siblingOrderKeys(
@@ -147,11 +148,11 @@ function legacyPageOf(ynodes: YNodes, id: string): string | undefined {
  */
 function claimLegacyRoot(ynodes: YNodes, meta: YMeta, roots: ReadonlySet<string>): void {
   if (readRoot(meta) !== undefined) return
-  // Sorting is stable, so roots with as many children stay in id order.
-  const ranked = [...roots]
-    .sort()
-    .map((id) => ({ id, children: legacyChildIdsOf(ynodes.get(id)).length }))
-    .sort((a, b) => b.children - a.children)
+  const ranked = orderBy(
+    [...roots].map((id) => ({ id, children: legacyChildIdsOf(ynodes.get(id)).length })),
+    ['children', 'id'],
+    ['desc', 'asc']
+  )
   const root = ranked.at(0)
   if (root) claimRoot(meta, root.id)
 }

@@ -8,6 +8,7 @@ import {
 } from '@open-pencil/scene-graph'
 import { isIdentityGradientTransform } from '@open-pencil/scene-graph/gradient'
 
+import { STROKE_ALIGN, STROKE_CAP, STROKE_JOIN } from '../enums'
 import { formatColor, formatShadow } from './helpers'
 import { helperCall, plainValue, type HelperCall, type JSXProp, type JSXValue } from './value'
 
@@ -126,10 +127,10 @@ function strokeValue(stroke: Stroke): StrokeValue {
     color: formatColor(stroke.color, stroke.color.a),
     opacity: stroke.opacity === stroke.color.a ? undefined : stroke.opacity,
     weight: stroke.weight === 1 ? undefined : stroke.weight,
-    align: stroke.align === 'INSIDE' ? undefined : stroke.align.toLowerCase(),
+    align: stroke.align === 'INSIDE' ? undefined : STROKE_ALIGN.print(stroke.align),
     dash: stroke.dashPattern && stroke.dashPattern.length > 0 ? [...stroke.dashPattern] : undefined,
-    cap: stroke.cap?.toLowerCase(),
-    join: stroke.join?.toLowerCase(),
+    cap: stroke.cap && STROKE_CAP.print(stroke.cap),
+    join: stroke.join && STROKE_JOIN.print(stroke.join),
     visible: stroke.visible ? undefined : false
   }
 }
@@ -151,8 +152,8 @@ const DEFAULT_STROKE_JOIN = 'MITER'
  */
 function fitsStrokeShorthand(node: SceneNode, stroke: StrokeValue): boolean {
   if (stroke.visible !== undefined || stroke.opacity !== undefined) return false
-  const nodeCap = node.strokeCap.toLowerCase()
-  const nodeJoin = node.strokeJoin.toLowerCase()
+  const nodeCap = STROKE_CAP.print(node.strokeCap)
+  const nodeJoin = STROKE_JOIN.print(node.strokeJoin)
   return (stroke.cap ?? nodeCap) === nodeCap && (stroke.join ?? nodeJoin) === nodeJoin
 }
 
@@ -169,9 +170,10 @@ export function collectStrokeProps(node: SceneNode, props: JSXProp[]): void {
   } else if (strokes.length > 0) {
     props.push(['strokes', strokes])
   }
-  if (node.strokeCap !== DEFAULT_STROKE_CAP) props.push(['strokeCap', node.strokeCap.toLowerCase()])
+  if (node.strokeCap !== DEFAULT_STROKE_CAP)
+    props.push(['strokeCap', STROKE_CAP.print(node.strokeCap)])
   if (node.strokeJoin !== DEFAULT_STROKE_JOIN) {
-    props.push(['strokeJoin', node.strokeJoin.toLowerCase()])
+    props.push(['strokeJoin', STROKE_JOIN.print(node.strokeJoin)])
   }
   if (node.dashPattern.length > 0) props.push(['dashPattern', [...node.dashPattern]])
   if (node.independentStrokeWeights) {

@@ -7,6 +7,7 @@ import { clampExportScale } from '../export-scale'
 import { iconSchema, iconTintSchema } from '../icons/schema'
 import type { Rect } from '../primitives'
 import { shaderPaintSchema } from '../shaders/schema'
+import { nodeStatusSchema, statusWorkflowSchema } from '../statuses/schema'
 import {
   MODE_ATTRIBUTE_PATTERN,
   TOKEN_UNITS,
@@ -208,6 +209,10 @@ export const OPEN_PENCIL_PLUGIN_DATA = {
   ),
   /** Canvas comment threads, deleted ones included, on the DOCUMENT node. */
   comments: jsonPluginDataField('comments', 'bookkeeping', comments),
+  /** The statuses layers can be in, on the DOCUMENT node. */
+  statuses: jsonPluginDataField('statuses', 'bookkeeping', statusWorkflowSchema),
+  /** A layer's status, any state of the workflow; Figma's `sectionStatusInfo` knows only two. */
+  status: jsonPluginDataField('status', 'format', nodeStatusSchema),
   /** Unit and CSS expressions, on each VARIABLE. */
   token: jsonPluginDataField('token', 'format', token),
   /** Mode conditions by mode id, on each VARIABLE_SET. */

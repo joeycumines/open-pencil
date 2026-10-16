@@ -1,5 +1,6 @@
 import { sceneNodeToJSX, selectionToJSX } from '@open-pencil/design-jsx'
 import { parsePenFile } from '@open-pencil/pen'
+import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { layoutAuthoredNodes } from '#core/layout'
 
@@ -177,36 +178,39 @@ export const figFormat: IOFormatAdapter<'fig'> = {
     return { graph, sourceFormat: 'fig' }
   },
   async writeDocument(graph, options?: FigWriteOptions, context?: IOContext) {
-    const data = await exportFigFile(
-      graph,
-      context?.canvasKit,
-      context?.renderer,
-      options?.thumbnailPageId,
-      options?.renderThumbnail ?? false
-    )
-    return {
-      format: 'fig',
-      mimeType: 'application/octet-stream',
-      extension: 'fig',
-      data
-    }
+    return writeFig(graph, options, context, options?.thumbnailPageId)
   },
   async exportContent(request, options?: FigWriteOptions, context?: IOContext) {
+    // A whole document is written as it is, so one opened from an archive keeps that archive.
+    if (request.target.scope === 'document')
+      return writeFig(request.graph, options, context, options?.thumbnailPageId, request.fileName)
     const extracted = extractExportGraph(request.graph, request.target)
-    const data = await exportFigFile(
+    return writeFig(
       extracted.graph,
-      context?.canvasKit,
-      context?.renderer,
+      options,
+      context,
       options?.thumbnailPageId ?? extracted.pageId ?? undefined,
-      options?.renderThumbnail ?? false
+      request.fileName
     )
-    return {
-      format: 'fig',
-      mimeType: 'application/octet-stream',
-      extension: 'fig',
-      data
-    }
   }
+}
+
+/** A `.fig` named as asked, or else after the file it is written to, or else Untitled. */
+async function writeFig(
+  graph: SceneGraph,
+  options: FigWriteOptions | undefined,
+  context: IOContext | undefined,
+  pageId: string | undefined,
+  fileName?: string
+): Promise<ExportResult> {
+  const data = await exportFigFile(graph, {
+    ck: context?.canvasKit,
+    renderer: context?.renderer,
+    pageId,
+    renderHeadlessThumbnail: options?.renderThumbnail ?? false,
+    documentName: options?.documentName ?? fileName?.replace(/\.fig$/i, '')
+  })
+  return { format: 'fig', mimeType: 'application/octet-stream', extension: 'fig', data }
 }
 
 export const penFormat: IOFormatAdapter<'pen'> = {

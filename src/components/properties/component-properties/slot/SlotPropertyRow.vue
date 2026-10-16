@@ -14,7 +14,7 @@ import IconButton from '@/components/ui/button/IconButton.vue'
 import { menuItem, useMenuUI } from '@/components/ui/menu/menu'
 import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
-import { panelFieldBase } from '@/theme/panel/field'
+import { panelFieldBase } from '@/theme/panel/field/base'
 
 import AddInstancesPopover from './AddInstancesPopover.vue'
 import SlotLimitsPopover from './SlotLimitsPopover.vue'

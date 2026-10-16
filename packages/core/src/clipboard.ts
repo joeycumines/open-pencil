@@ -17,12 +17,12 @@ import {
   collectComponentPropertyIds,
   firstUnclaimedLocalId,
   layerSourceGuids
-} from '#core/io/formats/fig/export-setup'
+} from '#core/io/formats/fig/export/setup'
 import {
   appendVariableNodeChanges,
   assignSharedStyleGuids,
   assignVariableGuids
-} from '#core/io/formats/fig/variable-export'
+} from '#core/io/formats/fig/export/variables'
 
 import { withFigExportRuntime } from './canvas/text/shape'
 import { prepareClipboardImport } from './clipboard/fig-import'

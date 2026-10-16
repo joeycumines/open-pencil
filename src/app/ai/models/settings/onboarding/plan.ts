@@ -1,3 +1,5 @@
+import { uniq } from 'es-toolkit'
+
 import { AI_PROVIDERS, type AIProviderID, type ModelOption } from '@open-pencil/core/constants'
 
 import { modelProviderName } from '@/app/ai/models/provider-name'
@@ -286,7 +288,7 @@ export function planConnections(roles: Omit<OnboardingPlan, 'connections'>): Onb
     .filter((model) => !model.profileId)
     .map((model) => model.providerID)
     .filter(isOnboardingAccess)
-  return [...new Set(providers)]
+  return uniq(providers)
 }
 
 /** Whether every role the person asked about has a model. */

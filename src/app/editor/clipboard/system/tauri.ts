@@ -7,7 +7,7 @@ import {
   getInMemoryClipboardHTML,
   setInMemoryClipboardPayload
 } from '@/app/editor/clipboard/memory'
-import { pasteClipboardHTML, pasteSVGText } from '@/app/editor/clipboard/paste'
+import { pasteClipboardHTML, pasteSVGText } from '@/app/editor/clipboard/paste/content'
 import type { SystemClipboard } from '@/app/editor/clipboard/system/types'
 import {
   readTauriClipboardText,

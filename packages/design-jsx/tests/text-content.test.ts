@@ -97,10 +97,10 @@ describe('Span', () => {
     expect(warnings).toEqual([])
   })
 
-  test('rejects decoration details it cannot draw', async () => {
-    await expect(renderText('<Text textDecorationStyle="dashed">a</Text>')).rejects.toThrow(
-      'Invalid <Text> props'
-    )
+  test('warns about a decoration style it cannot draw', async () => {
+    const { node, warnings } = await renderText('<Text textDecorationStyle="dashed">a</Text>')
+    expect(node.textDecorationStyle).toBe('SOLID')
+    expect(warnings[0]).toStartWith('Unknown textDecorationStyle "dashed" on <text> is ignored')
   })
 
   test('nests, the inner span winning', async () => {

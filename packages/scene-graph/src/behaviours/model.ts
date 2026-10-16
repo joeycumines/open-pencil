@@ -1,3 +1,5 @@
+import { mapValues } from 'es-toolkit'
+
 import type { SceneGraph } from '../index'
 import { readPluginData, withPluginData } from '../plugin-data/field'
 import { OPEN_PENCIL_PLUGIN_DATA } from '../plugin-data/fields'
@@ -175,8 +177,6 @@ export function renameBehaviourProperties(
   behaviour: Behaviour,
   rename: (propertyId: string) => string
 ): Behaviour {
-  const mapValues = <T>(record: Record<string, T>, change: (value: T) => T) =>
-    Object.fromEntries(Object.entries(record).map(([key, value]) => [key, change(value)]))
   return {
     ...behaviour,
     booleans: mapValues(behaviour.booleans, (binding) => ({

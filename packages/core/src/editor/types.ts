@@ -41,6 +41,7 @@ export type Tool =
   | 'POLYGON'
   | 'STAR'
   | 'TEXT'
+  | 'STICKY'
   | 'PEN'
   | 'PENCIL'
   | 'HAND'
@@ -216,6 +217,8 @@ export interface EditorOptions {
   ) => Promise<ArrayBuffer | null>
   resolveFigmaClipboardImages?: FigmaClipboardImageResolver
   getViewportSize?: () => { width: number; height: number }
+  /** The name of whoever is editing, which a sticky note they place is signed with. */
+  getUserName?: () => string
   /** Where icons are searched and fetched; defaults to Iconify. */
   icons?: IconProvider
   /** What draws shader frames, which needs a GPU; without one, saved frames stay. */
@@ -236,6 +239,7 @@ export interface EditorContext {
   ) => Promise<ArrayBuffer | null>
   resolveFigmaClipboardImages: FigmaClipboardImageResolver | null
   getViewportSize: () => { width: number; height: number }
+  getUserName: () => string
   icons: IconProvider
   getCk: () => CanvasKit | null
   getRenderer: () => SkiaRenderer | null

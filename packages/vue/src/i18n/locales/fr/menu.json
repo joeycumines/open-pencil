@@ -7,11 +7,9 @@
   "text": "Texte",
   "new": "Nouveau",
   "open": "Ouvrir…",
-  "openStorageWorkspace": "Ouvrir l’espace de stockage…",
   "openTour": "Ouvrir la visite",
   "save": "Enregistrer",
   "saveAs": "Enregistrer sous…",
-  "saveToStorage": "Enregistrer dans l’espace de stockage…",
   "exportSelection": "Exporter la sélection…",
   "autosave": "Enregistrement automatique",
   "copy": "Copier",
@@ -78,5 +76,7 @@
   "exportSelectionAsSVG": "Exporter la sélection en SVG",
   "exportSelectionAsPPTX": "Exporter la sélection en PPTX",
   "exportSelectionAsFig": "Exporter la sélection en .fig",
-  "togglePreview": "Aperçu"
+  "togglePreview": "Aperçu",
+  "browseFiles": "Parcourir les fichiers…",
+  "saveTo": "Enregistrer dans…"
 }

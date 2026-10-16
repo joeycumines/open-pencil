@@ -70,11 +70,6 @@ import type { Color } from '@open-pencil/scene-graph/primitives'
  */
 export const COLLAB_APP_ID = 'openpencil/5'
 
-/**
- * The most a room message may decode to, compressed or not. A peer's update past it is dropped
- * before it is decoded, so a small compressed reply cannot expand without bound.
- */
-export const MAX_COLLAB_MESSAGE_BYTES = 256 * 1024 * 1024
 // 32 base36 characters provide roughly 165 bits of entropy. The room ID is a
 // bearer credential and must resist offline enumeration from public signaling topics.
 export const ROOM_ID_LENGTH = 32
@@ -89,6 +84,8 @@ export const WEB_APP_ORIGIN = 'https://app.openpencil.dev'
 export const PRIVACY_URL = 'https://openpencil.dev/overview/privacy'
 /** The OpenPencil Cloud section of the website, with its waitlist form. */
 export const CLOUD_WAITLIST_URL = 'https://openpencil.dev/#cloud'
+/** The hosted OpenPencil Cloud server, offered first when connecting. */
+export const OFFICIAL_CLOUD_URL = 'https://cloud.openpencil.dev'
 /** Where the desktop app's installers are published. */
 export const DESKTOP_DOWNLOAD_URL = 'https://github.com/open-pencil/open-pencil/releases/latest'
 export const NODE_DOWNLOAD_URL = 'https://nodejs.org/en/download'
@@ -99,6 +96,8 @@ export const NODE_DOWNLOAD_URL = 'https://nodejs.org/en/download'
  */
 const DOCS_ORIGIN = 'https://openpencil.dev'
 export const MCP_SERVER_DOCS_URL = `${DOCS_ORIGIN}/programmable/mcp-server`
+/** The guide to OpenPencil Cloud, linked from the Cloud server's own pages. */
+export const CLOUD_DOCS_URL = `${DOCS_ORIGIN}/user-guide/openpencil-cloud`
 export const WEBMCP_DOCS_URL = `${MCP_SERVER_DOCS_URL}#webmcp`
 export const MCP_CONNECTIONS_DOCS_URL = `${DOCS_ORIGIN}/programmable/ai-chat#external-mcp-connections`
 export const CODING_AGENTS_GUIDE_URL = `${DOCS_ORIGIN}/programmable/coding-agents`

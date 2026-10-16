@@ -1,3 +1,5 @@
+import { sumBy } from 'es-toolkit'
+
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { DocumentFontStatus } from '#core/text/font/status'
@@ -28,7 +30,7 @@ function countDescendants(graph: SceneGraph, rootId: string): number {
 
 function countNodes(graph: SceneGraph, pageId: string): number {
   const page = graph.getNode(pageId)
-  return page?.childIds.reduce((count, id) => count + countDescendants(graph, id), 0) ?? 0
+  return page ? sumBy(page.childIds, (id) => countDescendants(graph, id)) : 0
 }
 
 function nodeFrame(node: SceneNode) {

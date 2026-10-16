@@ -89,7 +89,6 @@ describe('importClipboardNodes: filtering', () => {
     const nonVisualTypes = [
       'WIDGET',
       'STAMP',
-      'STICKY',
       'CONNECTOR',
       'CODE_BLOCK',
       'SHAPE_WITH_TEXT',

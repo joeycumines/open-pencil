@@ -80,6 +80,10 @@ Do not submit placeholder PRs. Remove template comments before opening a PR. Do 
 
 CodeRabbit may flag PR description or readability issues for maintainers to review. Missing template sections or validation details are normal review feedback; they are not, by themselves, a personal judgment on the contributor. Maintainers may close PRs manually when they are clearly automated, not written in English, unrelated to the project, or impossible to review without substantial guesswork. If you are unsure how to fix something, please open a detailed issue instead of submitting a placeholder PR.
 
+## Licensing
+
+A contribution is licensed under the license of the files it changes, as [`REUSE.toml`](./REUSE.toml) maps them: MIT for most of the repository, and Apache-2.0 for OpenPencil Cloud's server, relay, administration, and the pages it serves (section 5 of the Apache License). New files under those paths take the same license.
+
 ## Commits
 
 ### Attribution
