@@ -74,7 +74,8 @@ export function bindCollabGraphEvents({
   let bound = true
 
   function record(update: (pending: LocalEdit) => void) {
-    if (getSuppressGraphSync() || !getYdoc() || !getYnodes()) return
+    // A read-only document makes no edits of its own; what changes it is the room's.
+    if (store.state.readOnly || getSuppressGraphSync() || !getYdoc() || !getYnodes()) return
     if (isLocalEditEmpty(edit)) queueMicrotask(flush)
     update(edit)
   }
@@ -347,5 +348,33 @@ export function createYjsGraphSync({
       })
   }
 
-  return { syncNodeToYjs, syncLocalEdit, syncAllNodesToYjs, applyYjsToGraph }
+  /**
+   * Removes the layers under the document's root that the room does not hold. A stored document
+   * opened in several tabs numbers its layers afresh each time, so its copies of layers the room
+   * already has would otherwise sit beside the room's own.
+   */
+  function dropLayersOutsideRoom() {
+    const graph = getStore().graph
+    const ynodes = getYnodes()
+    if (!ynodes) return
+    const outside: string[] = []
+    const visit = (id: string) => {
+      for (const childId of graph.getNode(id)?.childIds ?? []) {
+        if (ynodes.has(childId)) visit(childId)
+        else outside.push(childId)
+      }
+    }
+    visit(graph.rootId)
+    for (const id of outside) graph.deleteNode(id)
+    // The page the tab was on may have been the file's own; it moves to one of the room's.
+    if (outside.length > 0) ensureCurrentPageExists(getStore())
+  }
+
+  return {
+    syncNodeToYjs,
+    syncLocalEdit,
+    syncAllNodesToYjs,
+    applyYjsToGraph,
+    dropLayersOutsideRoom
+  }
 }

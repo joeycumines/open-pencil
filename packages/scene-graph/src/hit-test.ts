@@ -1,4 +1,5 @@
 import type { SceneGraph, SceneNode, NodeType } from './'
+import { hitsConnectorLine } from './connectors/hit'
 import { getWorldMatrix } from './coordinate'
 import Matrix from './matrix'
 
@@ -172,6 +173,10 @@ function hitTestChildren(
       continue
     }
 
+    if (child.type === 'CONNECTOR') {
+      if (hitsConnectorLine(graph, child, px, py, pad)) return child
+      continue
+    }
     if (containsPoint(px, py, child, graph, transformCache, pad)) return child
   }
 

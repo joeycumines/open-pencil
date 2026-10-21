@@ -204,6 +204,34 @@ describe('text preparation cache', () => {
     }
   })
 
+  test('shares measured sizes between layers whose text shapes the same', async () => {
+    const f = await fixture()
+    let measured = 0
+    const measure = (node: typeof f.node, width = 200) =>
+      f.cache.measure(node, width, 1, f.provider, () => {
+        measured++
+        return { width, height: node.text.length }
+      })
+    const parentId = expectDefined(f.node.parentId, 'text node parent')
+    // An instance's copies repeat the source text, whatever box each one sits in.
+    const copy = f.graph.createNode('TEXT', parentId, { text: f.node.text, width: 80 })
+    const other = f.graph.createNode('TEXT', parentId, { text: 'Other text' })
+    try {
+      measure(f.node)
+      measure(copy)
+      expect(measured).toBe(1)
+      measure(copy, 120)
+      measure(other)
+      expect(measured).toBe(3)
+      // An explicit invalidation drops the sizes the layer shares instead of reading them back.
+      f.cache.deleteNode(f.node.id)
+      measure(f.node)
+      expect(measured).toBe(4)
+    } finally {
+      f.dispose()
+    }
+  })
+
   test('reuses native paragraphs during movement and invalidates text layout inputs', async () => {
     const f = await fixture()
     try {

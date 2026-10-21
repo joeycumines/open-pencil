@@ -146,6 +146,21 @@ function collectPositionProps(
   if (node.y !== 0) props.push(['y', node.y])
 }
 
+/** A layer's opacity and whether it is hidden, for an element that writes its own props. */
+export function presenceProps(node: SceneNode): JSXProp[] {
+  const props: JSXProp[] = []
+  if (node.opacity < 1) props.push(['opacity', Math.round(node.opacity * 100) / 100])
+  if (!node.visible) props.push(['visible', false])
+  return props
+}
+
+/** Where a layer sits in its parent, as the export writes any layer's position. */
+export function positionProps(node: SceneNode, graph: SceneGraph): JSXProp[] {
+  const props: JSXProp[] = []
+  collectPositionProps(node, getNodeContext(node, graph), props)
+  return props
+}
+
 function collectSizingProps(
   node: SceneNode,
   ctx: ReturnType<typeof getNodeContext>,

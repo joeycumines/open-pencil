@@ -1,10 +1,12 @@
 import { createHead } from '@unhead/vue/client'
 import { createApp, nextTick } from 'vue'
 
+import { ReadOnlyDocumentError } from '@open-pencil/core/editor'
 import { createRetainedScopePlugin } from '@open-pencil/vue'
 
 import './app.css'
 import { recordRuntimeError } from '@/app/diagnostics'
+import { installCanvasKitBinary } from '@/app/editor/canvas/canvaskit'
 import { preloadFonts } from '@/app/editor/fonts'
 import { installBundledFonts } from '@/app/editor/fonts/bundled'
 import { observeBootErrors } from '@/app/shell/support/boot'
@@ -21,6 +23,7 @@ import router from './router'
  */
 export async function boot(): Promise<void> {
   installBundledFonts()
+  installCanvasKitBinary()
   preloadFonts()
   const head = createHead()
   const app = createApp(App)
@@ -36,6 +39,8 @@ export async function boot(): Promise<void> {
   }
   // Component errors after boot reach only this handler, not the window; keep them diagnosable.
   app.config.errorHandler = (error, _instance, info) => {
+    // A panel's edit to a read-only document does nothing, as in Figma.
+    if (error instanceof ReadOnlyDocumentError) return
     recordRuntimeError(error, 'vue', info)
     console.error(error)
   }

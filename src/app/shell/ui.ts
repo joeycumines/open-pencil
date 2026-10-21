@@ -1,6 +1,8 @@
 import { useEventListener } from '@vueuse/core'
 import { ref } from 'vue'
 
+import { ReadOnlyDocumentError } from '@open-pencil/core/editor'
+
 import { recordRuntimeError } from '@/app/diagnostics'
 import { isTauri } from '@/app/tauri/env'
 import type { ProgressAmount } from '@/components/ui/feedback/progress'
@@ -136,11 +138,20 @@ function setupGlobalErrorHandler() {
   if (errorHandlersInitialized) return
   errorHandlersInitialized = true
 
+  // An edit to a read-only document does nothing, as in Figma, wherever it came from.
   useEventListener(window, 'error', (e) => {
+    if (e.error instanceof ReadOnlyDocumentError) {
+      e.preventDefault()
+      return
+    }
     recordRuntimeError(e.error ?? e.message, 'window')
     error(e.message || 'An unexpected error occurred')
   })
   useEventListener(window, 'unhandledrejection', (e) => {
+    if (e.reason instanceof ReadOnlyDocumentError) {
+      e.preventDefault()
+      return
+    }
     recordRuntimeError(e.reason, 'rejection')
     const msg = e.reason instanceof Error ? e.reason.message : String(e.reason)
     error(msg || 'An unexpected error occurred')

@@ -1,7 +1,12 @@
 import { Buffer } from 'node:buffer'
 import { resolve } from 'node:path'
 
-import type { McpServer, ToolCallback, ToolAnnotations } from '@modelcontextprotocol/server'
+import type {
+  McpServer,
+  ToolCallback,
+  ToolAnnotations,
+  ServerContext
+} from '@modelcontextprotocol/server'
 // eslint-disable-next-line open-pencil/no-mixed-case-acronym-identifiers -- Upstream export spelling.
 import { toStandardJsonSchema as toStandardJSONSchema } from '@valibot/to-json-schema'
 import * as v from 'valibot'
@@ -17,6 +22,7 @@ import { isToolEnabled } from '#mcp/tool/policy'
 import { SELECTION_SCOPE_FILE_OUTPUT_ERROR } from '#mcp/tool/scope'
 
 export type RPCSender = (body: Record<string, unknown>) => Promise<unknown>
+export type MCPToolSettled = (context: ServerContext) => Promise<void>
 
 const automationTargetSchema = {
   document_id: v.optional(
@@ -39,6 +45,11 @@ function splitAutomationTarget(args: Record<string, unknown>): {
 }
 
 type RPCResponse = { ok?: boolean; result?: unknown; target?: unknown; error?: string }
+
+/** The app's recent files; the server keeps only those `open_file` could reach. */
+const RecentFilesResult = v.object({
+  files: v.array(v.object({ path: v.string(), name: v.string(), updated_at: v.string() }))
+})
 
 async function sendCommand(
   sendRPC: RPCSender,
@@ -69,6 +80,8 @@ export interface RegisterToolsOptions {
   mcpRoot?: string | null
   sendRPC: RPCSender
   agentSession?: MCPAgentSession
+  /** Transport lifecycle cleanup after tool execution, including cancellation. */
+  onToolSettled?: MCPToolSettled
 }
 
 function toolAnnotations(effect: ToolEffect): ToolAnnotations {
@@ -111,7 +124,13 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         annotations: toolAnnotations(descriptor.effect),
         _meta: { 'openpencil/capabilities': descriptor.capabilities }
       },
-      handler
+      async (args, context) => {
+        try {
+          return await handler(args, context)
+        } finally {
+          await options.onToolSettled?.(context)
+        }
+      }
     )
   }
 
@@ -272,6 +291,24 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         }
       }
     )
+
+    register('list_recent_files', { inputSchema: v.strictObject({}) }, async () => {
+      try {
+        const res = await sendCommand(sendRPC, 'list_recent_files', {})
+        const { files } = v.parse(RecentFilesResult, res.result)
+        const insideRoot = await Promise.all(
+          files.map((file) =>
+            resolveSafePath(file.path, resolvedRoot).then(
+              () => true,
+              () => false
+            )
+          )
+        )
+        return ok({ files: files.filter((_, index) => insideRoot[index]) })
+      } catch (e) {
+        return fail(e)
+      }
+    })
 
     register(
       'new_document',

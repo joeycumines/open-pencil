@@ -1,4 +1,5 @@
 import {
+  attachedConnectors,
   createsComponentCycle,
   recordInstanceOverride,
   slotPropertyId
@@ -22,12 +23,14 @@ import {
 } from '@open-pencil/scene-graph/color'
 import type { OkHCLColor, OkHCLPayload } from '@open-pencil/scene-graph/color'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
+import type { ShapeWithTextType } from '@open-pencil/scene-graph/shape-with-text'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
 import type { FigmaEffect } from '#core/figma-api/effects'
 
 import { prepareFollowedFieldEdit, fitGroupsAround } from './accessor-utils'
 import { installBasicNodeProxyAccessors } from './accessors/basic'
+import { installConnectorNodeProxyAccessors } from './accessors/connector'
 import { installLayoutNodeProxyAccessors } from './accessors/layout'
 import { installStickyNodeProxyAccessors, pluginChildren } from './accessors/sticky'
 import { installStrokeNodeProxyAccessors } from './accessors/strokes'
@@ -52,6 +55,7 @@ import { installInstanceOverrideAccessors, type FigmaInstanceOverride } from './
 import { getPageBackgrounds, setPageBackgrounds } from './page-backgrounds'
 import * as PluginData from './plugin-data'
 import { nodeProxyToJSON } from './serialization'
+import { installShapeWithTextAccessors } from './shape-with-text'
 import { installSlotAccessors, prepareSlotMove, prepareSlotRemoval } from './slots'
 import type { FigmaLetterSpacing, FigmaLineHeight } from './text'
 import * as TextProxy from './text'
@@ -165,11 +169,12 @@ export class FigmaNodeProxy {
   declare readonly explicitVariableModes: Readonly<Record<string, string>>
   declare readonly resolvedVariableModes: Readonly<Record<string, string>>
   declare readonly overrides: FigmaInstanceOverride[] | undefined
-  /** A sticky note's body, its author line, and whether it is wide; undefined on other layers. */
+  /** A sticky note's body or a shape's label, a sticky's author line, and whether it is wide. */
   declare readonly text: FigmaNodeProxy | undefined
   declare readonly authorName: string | undefined
   declare authorVisible: boolean | undefined
   declare isWideWidth: boolean | undefined
+  declare shapeType: ShapeWithTextType | undefined
   declare resetOverrides: () => void
 
   declare strokeWeight: number
@@ -450,7 +455,10 @@ export class FigmaNodeProxy {
     assertNodeEditable(this[INTERNAL_GRAPH], this[INTERNAL_ID])
     prepareSlotRemoval(this[INTERNAL_GRAPH], this[INTERNAL_ID])
     const parentId = this._raw().parentId
+    // Connectors go with a layer they attach to, as Figma removes them.
+    const attached = attachedConnectors(this[INTERNAL_GRAPH], [this[INTERNAL_ID]])
     this[INTERNAL_GRAPH].deleteNode(this[INTERNAL_ID])
+    for (const connector of attached) this[INTERNAL_GRAPH].deleteNode(connector.id)
     fitGroupsAround(this[INTERNAL_GRAPH], parentId, this[INTERNAL_API].groupFitOptions)
   }
 
@@ -579,6 +587,7 @@ const proxyInternals = {
 
 installStrokeNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)
 installStickyNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)
+installConnectorNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)
 installTextNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals, MIXED)
 installTextRangeMethods(FigmaNodeProxy.prototype, proxyInternals, MIXED)
 installLayoutNodeProxyAccessors(FigmaNodeProxy.prototype, proxyInternals)
@@ -587,3 +596,4 @@ installComponentPropertyAccessors(FigmaNodeProxy.prototype, proxyInternals)
 installInstanceOverrideAccessors(FigmaNodeProxy.prototype, proxyInternals)
 installSlotAccessors(FigmaNodeProxy.prototype, proxyInternals)
 installDevStatusAccessors(FigmaNodeProxy.prototype, proxyInternals)
+installShapeWithTextAccessors(FigmaNodeProxy.prototype, proxyInternals)

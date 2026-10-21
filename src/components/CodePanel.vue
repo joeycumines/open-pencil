@@ -139,6 +139,8 @@ const stylingOptions = computed(() => [
 ])
 /** Components are generated; Design JSX and HTML are edited into layers. */
 const readOnly = computed(() => source.value === 'vue' || source.value === 'react')
+/** A read-only document's code is read, never previewed or applied back. */
+const codeReadOnly = computed(() => readOnly.value || store.state.readOnly)
 const editorLabel = computed(() => {
   if (source.value === 'html-css') return code.value.editorHTMLCSSLabel
   if (source.value === 'vue') return code.value.sourceVue
@@ -204,7 +206,7 @@ async function commitCurrentSession(): Promise<void> {
 }
 
 async function runPreview(version: number): Promise<void> {
-  if (version !== updateVersion || readOnly.value || !draft.value.trim()) return
+  if (version !== updateVersion || codeReadOnly.value || !draft.value.trim()) return
   const edits = takeCanvasEdits()
   status.value = 'updating'
   error.value = ''
@@ -450,7 +452,7 @@ watch(
         :autofocus="composing"
         :model-value="draft"
         :language="source"
-        :read-only="readOnly"
+        :read-only="codeReadOnly"
         :label="editorLabel"
         :layer-links="codeLayers.links.value"
         :layer-issues="codeLayers.issues.value"
@@ -484,7 +486,7 @@ watch(
       </span>
       <div class="flex items-center gap-1">
         <AppButton
-          v-if="edited && !readOnly"
+          v-if="edited && !codeReadOnly"
           color="neutral"
           variant="ghost"
           size="xs"

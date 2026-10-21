@@ -1,6 +1,11 @@
 import { uniq } from 'es-toolkit'
 
-import { EDITOR_TOOLS, type EditorToolDef, type Tool } from '@open-pencil/core/editor'
+import {
+  EDITOR_TOOLS,
+  READ_ONLY_TOOLS,
+  type EditorToolDef,
+  type Tool
+} from '@open-pencil/core/editor'
 
 /** Toolbar buttons that run a command instead of switching the tool. */
 export const TOOLBAR_ACTIONS = ['insert-icon'] as const
@@ -21,9 +26,9 @@ export const PINNED_TOOLBAR_ENTRY: ToolbarEntry = 'SELECT'
 
 /**
  * Tools the toolbar keeps hidden until shown from Customize toolbar, such as FigJam's sticky
- * note, which Figma's own toolbar does not offer.
+ * note, shape and connector, which Figma's own toolbar does not offer.
  */
-const HIDDEN_BY_DEFAULT: readonly ToolbarEntry[] = ['STICKY']
+const HIDDEN_BY_DEFAULT: readonly ToolbarEntry[] = ['STICKY', 'SHAPE_WITH_TEXT', 'CONNECTOR']
 
 export const DEFAULT_TOOLBAR_LAYOUT: Readonly<ToolbarLayout> = {
   groups: [
@@ -109,6 +114,18 @@ export type ToolbarItem =
   | { kind: 'action'; action: ToolbarAction }
 
 /** The toolbar's buttons and flyouts for a layout, without its hidden entries. */
+/** A read-only document's toolbar keeps only the tools that do not edit, as Figma shows Move and Hand. */
+export function readOnlyToolbarLayout(layout: ToolbarLayout): ToolbarLayout {
+  return {
+    groups: layout.groups
+      .map((group) =>
+        group.filter((entry) => !isToolbarAction(entry) && READ_ONLY_TOOLS.has(entry))
+      )
+      .filter((group) => group.length > 0),
+    hidden: layout.hidden
+  }
+}
+
 export function toolbarItems(
   layout: ToolbarLayout,
   labels: Readonly<Record<Tool, string>>,

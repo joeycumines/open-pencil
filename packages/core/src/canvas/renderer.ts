@@ -39,9 +39,11 @@ import { initializeRendererPaints, initializeSelectionPaintColors } from './rend
 import * as RenderPipeline from './renderer/pipeline'
 import type { SceneBacking, SceneBackingBuild } from './renderer/retained-backing/types'
 import * as RendererState from './renderer/state'
+import type { EffectPass } from './shadows'
 import * as RenderText from './text'
 import type { SavedDecorationCache } from './text/decorations'
 import { createDerivedGlyphPathCache, createGlyphSilhouetteCache } from './text/derived'
+import { createEmojiImageCache } from './text/emoji'
 import { TextPreparationCache } from './text/preparation/cache'
 export type {
   MeasurementMode,
@@ -149,6 +151,8 @@ export class SkiaRenderer {
   glyphSilhouetteCache = createGlyphSilhouetteCache()
   derivedGlyphPathCache = createDerivedGlyphPathCache()
   derivedDecorationCache: SavedDecorationCache = new WeakMap()
+  /** Images of the emoji saved text draws, by what drew them and the emoji. */
+  emojiImageCache = createEmojiImageCache()
   renderingSceneBacking = false
   scenePicture: SkPicture | null = null
   scenePictureVersion = -1
@@ -165,6 +169,8 @@ export class SkiaRenderer {
   sceneBackingLastViewportEventAt = 0
   navigationPhase: EditorState['navigation']['phase'] = 'idle'
   navigationGeneration = 0
+  /** The document is read-only: selections draw without handles to drag. */
+  readOnly = false
   tiledSceneEnabled = false
   /**
    * What an empty sticky note shows while it is edited on this canvas, in the interface language;
@@ -179,7 +185,6 @@ export class SkiaRenderer {
   lastSceneViewport: { panX: number; panY: number; zoom: number } | null = null
   nodePictureCache = new Map<string, SkPicture | null>()
   nodePictureCacheGenerations = new Map<string, number>()
-  nodePictureCacheDependencies = new Map<string, readonly string[]>()
   effectRasterCache = new EffectRasterCache()
   subtreePictureCache = new Map<string, SubtreePictureCacheEntry>()
   subtreePictureCachePageId: string | null = null
@@ -300,6 +305,7 @@ export class SkiaRenderer {
   declare getRotatedCorners: (node: SceneNode, abs: Vector) => Vector[]
   declare drawHandle: (canvas: Canvas, x: number, y: number) => void
   declare drawSnapGuides: (canvas: Canvas, guides?: SnapGuide[]) => void
+  declare drawSnapMarks: (canvas: Canvas, guides?: SnapGuide[]) => void
   declare drawMarquee: (canvas: Canvas, marquee?: Rect | null) => void
   declare drawFlashes: (canvas: Canvas, graph: SceneGraph) => void
   declare drawLayoutInsertIndicator: (
@@ -361,13 +367,14 @@ export class SkiaRenderer {
   declare renderComponentSet: (canvas: Canvas, node: SceneNode, graph: SceneGraph) => void
   declare renderShape: (canvas: Canvas, node: SceneNode, graph: SceneGraph) => void
   declare renderShapeUncached: (canvas: Canvas, node: SceneNode, graph: SceneGraph) => void
+  declare paintShapeContent: (canvas: Canvas, node: SceneNode, graph: SceneGraph) => void
   declare renderEffects: (
     canvas: Canvas,
     node: SceneNode,
+    graph: SceneGraph,
     rect: Float32Array,
     hasRadius: boolean,
-    pass: 'behind' | 'front',
-    shadowShapeChild?: SceneNode | null
+    pass: EffectPass
   ) => void
   declare renderText: (canvas: Canvas, node: SceneNode, fill?: Fill) => void
   declare drawNodeFill: (
@@ -400,11 +407,7 @@ export class SkiaRenderer {
     node: SceneNode,
     stroke: Stroke
   ) => void
-  declare drawIndividualSideStrokes: (
-    canvas: Canvas,
-    node: SceneNode,
-    align: 'INSIDE' | 'CENTER' | 'OUTSIDE'
-  ) => void
+  declare drawIndividualSideStrokes: (canvas: Canvas, node: SceneNode, stroke: Stroke) => void
   declare strokeNodeShape: (canvas: Canvas, node: SceneNode, paint: Paint) => void
   declare makeNodeShapePath: (node: SceneNode, rect: Float32Array, hasRadius: boolean) => Path
   declare makePolygonPath: (node: SceneNode) => Path

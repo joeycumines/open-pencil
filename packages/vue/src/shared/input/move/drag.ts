@@ -322,6 +322,21 @@ function placeAbsoluteDrop(d: DragMove, editor: Editor) {
     editor.reorderChildWithUndo(id, targetId, index + offset)
 }
 
+/**
+ * Ends a move without recording it: the layers go back where the drag found them, and a
+ * duplicate's copies go away with the selection before them coming back.
+ */
+export function cancelMove(d: DragMove, editor: Editor) {
+  if (d.duplicated) {
+    for (const id of [...d.originals.keys()].toReversed()) editor.graph.deleteNode(id)
+    editor.select([...(d.duplicatedPreviousSelection ?? [])])
+  } else {
+    restoreOriginalPositions(d, editor)
+  }
+  editor.setDropTarget(null)
+  editor.requestRender()
+}
+
 export function handleMoveUp(d: DragMove, editor: Editor) {
   if (!d.dragStarted) {
     editor.setLayoutInsertIndicator(null)

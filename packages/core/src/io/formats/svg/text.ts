@@ -10,7 +10,7 @@ import {
 import Matrix from '@open-pencil/scene-graph/matrix'
 
 import type { SVGElementLayer } from '#core/icons/types'
-import { estimateTextSize, getTextMeasurer } from '#core/layout/text-measurement'
+import { measureTextForLayout } from '#core/layout/text-measurement'
 import { weightToStyle } from '#core/text/font/style'
 import type {
   SVGVectorizeResult,
@@ -95,7 +95,7 @@ function createTextPiece(
     lineHeight: null,
     width: 0
   })
-  const size = getTextMeasurer()?.(node) ?? estimateTextSize(node)
+  const size = measureTextForLayout(node)
   const width = size.width / scale
   const left = width * ANCHOR_OFFSET[piece.anchor]
   const world = Matrix.multiply(

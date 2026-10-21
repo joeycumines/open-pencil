@@ -72,6 +72,11 @@ export function createEditorStoreModules(
     ...flash,
     ...pen,
     ...vectorEdit,
+    /** Going read-only keeps a vector edit in progress, as the editor keeps edited text. */
+    setReadOnly(readOnly: boolean) {
+      if (readOnly) vectorEdit.exitNodeEditMode(true)
+      editor.setReadOnly(readOnly)
+    },
     openFigFile: documentIO.openFigFile,
     openDOMFile: documentIO.openDOMFile,
     importDOMText: documentIO.importDOMText,

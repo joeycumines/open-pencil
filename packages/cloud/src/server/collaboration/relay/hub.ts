@@ -34,6 +34,11 @@ export type CollaborationRelayOptions = {
   maximumConnectionsPerRoom: number
   /** The participant limit policy sets for a document, or null for none. */
   maximumParticipants?: (documentId: string) => Promise<number | null>
+  /**
+   * The document's current collaboration epoch, which a restore advances; a ticket for an earlier
+   * room is turned away so nobody rejoins the document as it was.
+   */
+  currentRoomEpoch?: (documentId: string) => Promise<number | null>
   /** How long after a change the room's document is saved. */
   persistDelayMs?: number
   /** How long a room whose last save failed waits before saving again. */
@@ -202,6 +207,8 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
   ) {
     const readOnly = peer.authorization.permission === 'view'
     if (readOnly && !VIEWER_ACTIONS.has(namespace)) return
+    // Only the server says the history changed.
+    if (namespace === COLLAB_ACTIONS.versions) return
 
     let forwarded = payload
     if (namespace === COLLAB_ACTIONS.awareness) {
@@ -241,9 +248,19 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
     authorization: RelayAuthorization
   ): Promise<Peer | null> {
     const limit = await options.maximumParticipants?.(authorization.documentId)
-    let room = await openRoom(authorization)
-    // The room's last peer may have left while it opened; a closed room takes no newcomers.
-    while (rooms.get(room.id) !== room) room = await openRoom(authorization)
+    let room: Room
+    let epoch: number | null | undefined
+    // The room's last peer may have left while it opened, or a restore ended it; a closed room
+    // takes no newcomers. The epoch is read once the room is open, so a restore cannot slip between.
+    do {
+      room = await openRoom(authorization)
+      epoch = await options.currentRoomEpoch?.(authorization.documentId)
+    } while (rooms.get(room.id) !== room)
+    if (epoch != null && authorization.roomEpoch < epoch) {
+      socket.close(RELAY_CLOSE.restored, 'The document was restored')
+      if (room.peers.size === 0) await leaveRoom(room)
+      return null
+    }
     const capacity = Math.min(limit ?? Number.POSITIVE_INFINITY, options.maximumConnectionsPerRoom)
     if (room.peers.size >= capacity) {
       socket.close(RELAY_CLOSE.roomFull, 'Collaboration room is full')
@@ -415,6 +432,39 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
           clearTimeout(authTimer)
           if (peer) depart(peer)
         }
+      }
+    },
+
+    /**
+     * Ends a restored document's rooms: everyone in them is told the document was restored, and
+     * their edits to the replaced state are dropped rather than saved.
+     */
+    startOver(documentId: string) {
+      // A map's iteration carries on past entries deleted during it.
+      for (const room of rooms.values()) {
+        if (room.identity.documentId !== documentId) continue
+        rooms.delete(room.id)
+        if (room.persistTimer) clearTimeout(room.persistTimer)
+        for (const peer of room.peers.values()) {
+          clearTimeout(peer.expiry)
+          peer.socket.close(RELAY_CLOSE.restored, 'The document was restored')
+        }
+        room.peers.clear()
+        room.document.destroy()
+      }
+    },
+
+    /** Tells everyone in a document's rooms that its version history changed. */
+    announceVersions(documentId: string) {
+      const frame = encodeRelayServerFrame({
+        type: 'message',
+        namespace: COLLAB_ACTIONS.versions,
+        from: RELAY_SERVER_PEER,
+        payload: new Uint8Array()
+      })
+      for (const room of rooms.values()) {
+        if (room.identity.documentId !== documentId) continue
+        for (const peer of room.peers.values()) peer.socket.send(frame)
       }
     },
 

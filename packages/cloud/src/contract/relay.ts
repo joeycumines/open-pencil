@@ -15,7 +15,10 @@ export const COLLAB_ACTIONS = {
   syncStep1: 'sync-step1',
   syncReply: 'sync-reply',
   awareness: 'awareness',
-  agentPreview: 'agent-preview'
+  agentPreview: 'agent-preview',
+  upload: 'upload',
+  /** From the server only: the document's version history changed, so open lists load it again. */
+  versions: 'versions'
 } as const
 
 /**
@@ -80,7 +83,9 @@ export const RELAY_CLOSE = {
   expired: 4403,
   roomFull: 4409,
   messageTooLarge: 4413,
-  protocol: 4400
+  protocol: 4400,
+  /** The document was restored to a version, so its room started over under a new ID. */
+  restored: 4410
 } as const
 
 const CLIENT_AUTH = 0

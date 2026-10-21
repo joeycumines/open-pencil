@@ -149,7 +149,7 @@ Endpoints are available over both active transports:
 ## Workflow
 
 1. **Discover targets** — call `list_documents` first when more than one document or page may be open. It returns stable `document_id` and page IDs.
-2. **Open** — `open_file` to load an existing `.fig`, or `new_document` for a blank canvas. These return target metadata for the opened or created document.
+2. **Open** — `open_file` to load an existing `.fig`, or `new_document` for a blank canvas. `list_recent_files` lists recently opened files inside the MCP root to reopen. These return target metadata for the opened or created document.
 3. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
 4. **Create** — `create_shape`, `render` (JSX)
 5. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
@@ -186,6 +186,7 @@ OpenPencil currently registers 100+ shared design tools, plus MCP-only document 
 | `save_file` | Save the current document to a `.fig` file |
 | `new_document` | Create a new empty document |
 | `list_documents` | List open app documents/tabs and their pages |
+| `list_recent_files` | List recently opened files inside the MCP root, newest first, up to the app's recent files limit |
 | `activate_document` | Bring a document tab to the front, optionally on a given page |
 
 ### History
@@ -236,6 +237,7 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 | `create_shape` | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
 | `create_vector` | Create a vector node from a path string |
 | `create_slice` | Create an export slice |
+| `create_connector` | Join two layers, or a layer and a point, with a connector that follows them |
 | `create_page` | Create a new page |
 | `render` | Render JSX to design nodes — create entire component trees in one call |
 | `create_component` | Convert a frame/group into a component |

@@ -133,6 +133,8 @@ export interface Paint {
   imageThumbnail?: ImageSource
   animatedImage?: ImageSource
   imageScaleMode?: string
+  /** Degrees an image turns in Fill, Fit, and Tile; a crop's transform holds its own turn. */
+  rotation?: number
   sourceNodeId?: GUID
   scale?: number
   spacing?: number
@@ -178,6 +180,13 @@ export interface VariableAnyValue {
   symbolIdValue?: { guid?: GUID }
   // fig.kiwi PropRefValue: the component property a parameter entry points at.
   propRefValue?: { defId?: GUID }
+  mapValue?: { values?: { key?: string; guidKey?: GUID; value?: VariableDataEntry }[] }
+  colorArrayValue?: { colors?: VariableDataEntry[] }
+  fontStyleValue?: {
+    asString?: VariableDataEntry
+    asFloat?: VariableDataEntry
+    asVariations?: VariableDataEntry
+  }
   expressionValue?: {
     expressionFunction?: string
     expressionArguments?: VariableDataEntry[]
@@ -323,6 +332,10 @@ export interface NodeChange {
       advance: number
       /** Radians along the text path; kiwi omits the field for axis-aligned text. */
       rotation?: number
+      /** An emoji's code points; Figma draws its image in place of the glyph's placeholder. */
+      emojiCodePoints?: number[]
+      /** The image set the emoji is drawn from; left out for the default, APPLE. */
+      emojiImageSet?: 'APPLE' | 'NOTO'
     }>
     /** Underlines and strikethroughs, which Figma draws saved text's decorations from. */
     decorations?: Array<{

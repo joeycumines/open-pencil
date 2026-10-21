@@ -44,6 +44,14 @@ export function setTextMeasurer(measurer: TextMeasurer | null): void {
   globalTextMeasurer = measurer
 }
 
+/** The size of `node`'s text: measured when a measurer is installed and can, estimated otherwise. */
+export function measureTextForLayout(
+  node: SceneNode,
+  maxWidth?: number
+): { width: number; height: number } {
+  return globalTextMeasurer?.(node, maxWidth) ?? estimateTextSize(node, maxWidth)
+}
+
 const installedMeasurers: TextMeasurer[] = []
 
 /**

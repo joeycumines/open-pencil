@@ -51,6 +51,7 @@ export const DESIGN_JSX_TEXT_PARAGRAPH_PROPERTY_NAMES = [
 export const DESIGN_JSX_SUPPORTED_PROPERTY_NAMES = [
   'name',
   'key',
+  'ref',
   'flex',
   'flow',
   'dir',
@@ -274,5 +275,6 @@ export const DESIGN_JSX_HELPERS: DesignJSXHelperDefinition[] = [
   'backgroundBlur',
   'foregroundBlur',
   'designVar',
-  'defineVars'
+  'defineVars',
+  'ref'
 ].map((name) => ({ name, description: `OpenPencil ${name} helper.` }))

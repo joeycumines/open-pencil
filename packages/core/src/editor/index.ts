@@ -4,6 +4,7 @@ export {
   ReadOnlyLibraryDefinitionError
 } from './capabilities'
 export type { NodeEditCapability } from './capabilities'
+export { READ_ONLY_TOOLS, ReadOnlyDocumentError } from './read-only'
 export { DEFAULT_SNAPPING_PREFERENCES } from './preferences'
 export type { SnappingPreferences } from './preferences'
 export { createDefaultEditorSharedState } from './state/shared'
@@ -40,6 +41,7 @@ export type { TokenImportResult } from '#core/io/formats/design-tokens'
 export { reapplyInstanceComponentProperties } from './components/properties'
 export { createGuideActions } from './guides'
 export { createTextActions } from './text'
+export { resizedPathTextGlyphs } from './text/path-edit'
 export { opacityFromBuffer } from './nodes'
 export { layerTypeOptions, type LayerType } from './structure/layer-type'
 export type { NodePreview } from './node-preview'
@@ -61,6 +63,7 @@ export type {
   EditorSharedState,
   EditorViewState,
   FigmaClipboardImageResolver,
+  ResumedPath,
   ShapeHandleHover,
   GradientEdit,
   Tool

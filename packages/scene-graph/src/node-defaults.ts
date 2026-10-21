@@ -161,6 +161,11 @@ export function createDefaultNode(
     minHeight: null,
     maxHeight: null,
     targetAspectRatio: null,
+    connectorStart: null,
+    connectorEnd: null,
+    connectorLineType: 'ELBOWED',
+    connectorStartCap: 'ROUND',
+    connectorEndCap: 'ARROW_LINES',
     isMask: false,
     maskType: 'ALPHA',
     maskIsOutline: false,
@@ -177,6 +182,9 @@ export function createDefaultNode(
     autoRename: true,
     pointCount: 5,
     starInnerRadius: 0.38,
+    shapeWithTextType: 'SQUARE',
+    shapeUserHeight: 0,
+    shapeUserWidth: 0,
     componentId: null,
     instanceOverrides: createInstanceOverrideState(),
     componentPropertyDefinitions: [],
@@ -221,6 +229,15 @@ export function createDefaultNode(
 export const FITTED_CONTAINER_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
   'GROUP',
   'BOOLEAN_OPERATION'
+])
+
+/** Layers whose stroke can take a weight per side, as Figma's `strokeTopWeight` and its siblings. */
+export const SIDE_STROKE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
+  'RECTANGLE',
+  'FRAME',
+  'COMPONENT',
+  'COMPONENT_SET',
+  'INSTANCE'
 ])
 
 export const CONTAINER_TYPES = new Set<NodeType>([

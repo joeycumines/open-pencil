@@ -77,6 +77,7 @@ export function renderFromEditorState(
   r.pageId = state.currentPageId
   r.navigationPhase = state.navigation.phase
   r.navigationGeneration = state.navigation.generation
+  r.readOnly = state.readOnly
   // A previewing canvas shows the design as it runs: no selection, hover, or edit chrome.
   const previewing = state.play !== null
   render(
@@ -113,7 +114,8 @@ export function renderFromEditorState(
       designIssues: state.designIssues,
       codeFocusNodeId: state.codeFocusNodeId,
       autoLayoutHover: state.autoLayoutHover,
-      shapeHandleHover: state.shapeHandleHover
+      shapeHandleHover: state.shapeHandleHover,
+      connectorTarget: state.connectorTarget
     },
     // Recorded pictures follow what the canvas draws, not every document change.
     state.canvasVersion,

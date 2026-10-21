@@ -9,8 +9,12 @@ import type { DocumentPermission } from '@open-pencil/cloud/contract'
 import { exportFigFile, initCodec, parseFigFile } from '@open-pencil/core'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
+import { accountRoomIdentity } from '@/app/cloud/rooms/identity'
 import { openCloudDocumentRoom } from '@/app/cloud/rooms/live'
+import { versionListRevision } from '@/app/cloud/versions/history'
+import { useCollabIdentity } from '@/app/collab/identity'
 import { connectCollabRoom } from '@/app/collab/room/connection'
+import { openDocumentRoom, roomById, roomForStore } from '@/app/collab/rooms'
 import { createEditorStore } from '@/app/editor/session'
 
 import { startTestRelay } from '#tests/helpers/collab/relay-server'
@@ -125,6 +129,185 @@ describe('collaboration through the Cloud relay', () => {
   })
 })
 
+describe('Cloud document rooms, identity', () => {
+  test('a member is their account in the room, in every tab', async () => {
+    const relay = await startRelay()
+    const documentId = crypto.randomUUID()
+    const [grace, again] = await openedTwice()
+    // The account's name differs from this device's, so the assertions show which one a tab took.
+    useCollabIdentity().setName('This device')
+    cleanups.push(() => useCollabIdentity().setName(''))
+    const account = { id: crypto.randomUUID(), name: 'Grace Hopper' }
+    const open = (store: typeof grace) => {
+      const room = openCloudDocumentRoom(store, {
+        roomId: `cloud:${documentId}:0`,
+        transport: relay.join(documentId, 'Grace Hopper', 'edit', 'user'),
+        permission: 'edit',
+        identity: accountRoomIdentity(account)
+      })
+      cleanups.push(() => {
+        room.stop()
+        room.session.dispose()
+      })
+      return room
+    }
+    const first = open(grace)
+    const second = open(again)
+    await until(() => first.session.peers.value.length > 0 && second.session.peers.value.length > 0)
+    const own = (room: typeof first) => room.session.presence().get(room.session.clientId)?.user
+    expect(own(first)).toMatchObject({ name: 'Grace Hopper' })
+    expect(own(second)).toEqual(own(first))
+    // Each tab sees the other as it presents itself; the name comes from the ticket, which the
+    // server takes from the same account.
+    const seen = (room: typeof first) =>
+      room.session.peers.value.map((peer) => ({ name: peer.name, color: peer.color }))
+    expect([own(second)]).toEqual(seen(first))
+    expect([own(first)]).toEqual(seen(second))
+  })
+})
+
+describe('Cloud document rooms, reopening', () => {
+  test('a tab that opens the stored file shows the room’s layers, not the file’s copies', async () => {
+    const relay = await startRelay()
+    const documentId = crypto.randomUUID()
+    const roomId = `cloud:${documentId}:0`
+    const [grace] = await openedTwice()
+    const first = openCloudDocumentRoom(grace, {
+      roomId,
+      transport: relay.join(documentId, 'Grace', 'edit', 'user'),
+      permission: 'edit'
+    })
+    cleanups.push(() => {
+      first.stop()
+      first.session.dispose()
+    })
+    await until(() => first.session.roomHasDocument())
+    const page = grace.graph.getPages()[0]
+    if (!page) throw new Error('Expected a page')
+    const dot = grace.graph.createNode('ELLIPSE', page.id, { name: 'Dot' })
+
+    // The saver uploads the document; opening that file numbers its layers afresh.
+    const saved = await exportFigFile(grace.graph)
+    const reopened = createEditorStore(await parseFigFile(Uint8Array.from(saved).buffer))
+    cleanups.push(() => reopened.preparationController.dispose())
+    const second = openCloudDocumentRoom(reopened, {
+      roomId,
+      transport: relay.join(documentId, 'Ada', 'edit', 'user'),
+      permission: 'edit'
+    })
+    cleanups.push(() => {
+      second.stop()
+      second.session.dispose()
+    })
+    await until(() => reopened.graph.getNode(dot.id) !== undefined)
+    const layers = (store: typeof grace) =>
+      store.graph
+        .getPages()
+        .flatMap((candidate) => candidate.childIds)
+        .map((id) => store.graph.getNode(id)?.name)
+        .sort()
+    expect(layers(reopened)).toEqual(layers(grace))
+  })
+
+  test('a tab left on a page only its file had moves to one of the room’s pages', async () => {
+    const relay = await startRelay()
+    const documentId = crypto.randomUUID()
+    const roomId = `cloud:${documentId}:0`
+    const [grace, earlier] = await openedTwice()
+    const first = openCloudDocumentRoom(grace, {
+      roomId,
+      transport: relay.join(documentId, 'Grace', 'edit', 'user'),
+      permission: 'edit'
+    })
+    cleanups.push(() => {
+      first.stop()
+      first.session.dispose()
+    })
+    await until(() => first.session.roomHasDocument())
+    // An earlier visit leaves this device a saved copy of the room, which the next opens first.
+    const visit = openCloudDocumentRoom(earlier, {
+      roomId,
+      transport: relay.join(documentId, 'Ada', 'edit', 'user'),
+      permission: 'edit'
+    })
+    await until(() => visit.session.hasDocument.value && visit.session.peers.value.length > 0)
+    visit.stop()
+    visit.session.dispose()
+
+    const [reopened] = await openedTwice()
+    await until(() => reopened.state.preparation === null)
+    // A page the room never had, as the file's own copy of a page can be.
+    const stray = reopened.graph.addPage('Stray')
+    reopened.state.currentPageId = stray.id
+    const second = openCloudDocumentRoom(reopened, {
+      roomId,
+      transport: relay.join(documentId, 'Ada', 'edit', 'user'),
+      permission: 'edit'
+    })
+    cleanups.push(() => {
+      second.stop()
+      second.session.dispose()
+    })
+    await until(() => reopened.graph.getNode(stray.id) === undefined)
+    // One of the room's pages, which the tab that seeded the room has too.
+    await until(() =>
+      grace.graph.getPages().some((page) => page.id === reopened.state.currentPageId)
+    )
+    expect(reopened.graph.getNode(reopened.state.currentPageId)?.type).toBe('CANVAS')
+  })
+})
+
+describe('Cloud document rooms, version history', () => {
+  test('a tab reloads its history when the server says it changed', async () => {
+    const relay = await startRelay()
+    const documentId = crypto.randomUUID()
+    const [grace] = await openedTwice()
+    const room = openCloudDocumentRoom(grace, {
+      roomId: `cloud:${documentId}:0`,
+      transport: relay.join(documentId, 'Grace', 'view', 'user'),
+      permission: 'view'
+    })
+    cleanups.push(() => {
+      room.stop()
+      room.session.dispose()
+    })
+    let joined = false
+    room.session.onSynced(() => {
+      joined = true
+    })
+    await until(() => joined)
+    const before = versionListRevision.value
+    relay.announceVersions(documentId)
+    await until(() => versionListRevision.value > before)
+  })
+})
+
+describe('Cloud document rooms, another room first', () => {
+  test('a tab already in another room moves to its document’s own room', async () => {
+    const relay = await startRelay()
+    const documentId = crypto.randomUUID()
+    const [grace] = await openedTwice()
+    // Shared into a room by hand while the document's own was still being asked for.
+    const elsewhere = openDocumentRoom(
+      grace,
+      `cloud:${crypto.randomUUID()}:0`,
+      relay.join(documentId, 'Grace', 'edit', 'user')
+    )
+    const room = openCloudDocumentRoom(grace, {
+      roomId: `cloud:${documentId}:0`,
+      transport: relay.join(documentId, 'Grace', 'edit', 'user'),
+      permission: 'edit'
+    })
+    cleanups.push(() => {
+      room.stop()
+      room.session.dispose()
+    })
+    expect(room.session).not.toBe(elsewhere)
+    expect(roomForStore(grace)?.roomId).toBe(`cloud:${documentId}:0`)
+    expect(roomById(elsewhere.roomId)).toBeUndefined()
+  })
+})
+
 /** Tabs that each opened the same stored file, which gives each its own root. */
 async function openedTwice() {
   await initCodec()
@@ -173,6 +356,44 @@ describe('Cloud document rooms', () => {
     await until(() => grace.graph.getNode('from:ada') !== undefined)
     await until(() => first.session.peers.value.length > 0)
     expect(compact([grace.state.autosaveEnabled, ada.state.autosaveEnabled])).toHaveLength(1)
+    // The document lives in its room, so neither tab offers leaving it.
+    expect([first.session.leavable, second.session.leavable]).toEqual([false, false])
+  })
+
+  test('a tab that does not save has the saver upload its latest edit', async () => {
+    const relay = await startRelay()
+    const documentId = crypto.randomUUID()
+    const roomId = `cloud:${documentId}:0`
+    const [grace, ada] = await openedTwice()
+    const uploaded: boolean[] = []
+    const open = (store: typeof grace, name: string) => {
+      const room = openCloudDocumentRoom(store, {
+        roomId,
+        transport: relay.join(documentId, name, 'edit', 'user'),
+        permission: 'edit',
+        uploadNow: async () => {
+          uploaded.push(store.graph.getNode('late:edit') !== undefined)
+          return true
+        }
+      })
+      cleanups.push(() => {
+        room.stop()
+        room.session.dispose()
+      })
+      return room
+    }
+    const first = open(grace, 'Grace')
+    await until(() => first.session.roomHasDocument())
+    const second = open(ada, 'Ada')
+    await until(() => first.session.peers.value.length > 0 && second.session.peers.value.length > 0)
+    await until(() => grace.state.autosaveEnabled !== ada.state.autosaveEnabled)
+
+    const [other, room] = grace.state.autosaveEnabled ? [ada, second] : [grace, first]
+    const page = other.graph.getPages()[0]
+    if (!page) throw new Error('Expected a page')
+    other.graph.createNode('ELLIPSE', page.id, { id: 'late:edit', name: 'Dot' })
+    expect(await room.upload()).toBe(true)
+    expect(uploaded).toEqual([true])
   })
 })
 

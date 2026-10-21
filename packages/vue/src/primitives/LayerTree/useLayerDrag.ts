@@ -56,7 +56,8 @@ export function useLayerDrag(
       const cleanup = combine(
         draggable({
           element,
-          canDrag: () => acceptsSiblings,
+          // A read-only document's layers keep their order.
+          canDrag: () => acceptsSiblings && !editor.state.readOnly,
           getInitialData: () => ({ id: data.id }),
           onDragStart: () => {
             draggingId.value = data.id

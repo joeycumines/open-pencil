@@ -27,7 +27,7 @@ import { figArchiveRecordInfo, type FigArchiveRecordInfo } from '../record-patch
 import { applyDocumentLayoutBindings } from './bindings/layout'
 import { applyDocumentPaintBindings } from './bindings/paint'
 import type { BindingReferenceDiagnostic } from './bindings/references'
-import { applyDocumentTextBindings } from './bindings/text'
+import { applyDocumentValueBindings } from './bindings/values'
 import {
   checkpointComponent,
   restoreComponentCheckpoint,
@@ -38,7 +38,10 @@ import type { ComponentConstruction } from './components'
 import { loadPageTransaction } from './load-transaction'
 import { applyDocumentMetadata } from './metadata'
 import { createArchiveDocumentReader, createDocumentReader } from './read'
-import { materializeVariableResources } from './variables'
+import {
+  materializeVariableResources,
+  type UnsupportedVariableExpressionDiagnostic
+} from './variables'
 
 export interface DocumentAssemblyOptions extends InterpretInstanceOptions {
   /** Restrict scene population to these source pages plus required component ownership. */
@@ -46,6 +49,8 @@ export interface DocumentAssemblyOptions extends InterpretInstanceOptions {
   images?: ReadonlyMap<string, Uint8Array>
   /** A resource record the materializer does not convert; acknowledged rather than dropped. */
   onUnsupportedResource?: (resource: NodeChange) => void
+  /** Explicitly preserve expression-valued variables without evaluating them. */
+  onUnsupportedVariableExpression?: (diagnostic: UnsupportedVariableExpressionDiagnostic) => void
   onUnresolvedBinding?: (diagnostic: BindingReferenceDiagnostic) => void
 }
 
@@ -150,6 +155,7 @@ export function createFigDocumentSession(
   state.graph.figKiwiVersion = archive.figKiwiVersion
   state.graph.figSchemaDeflated = archive.figSchemaDeflated
   const loaded = new Set<string>(resume?.checkpoint.loadedPageIds)
+  const edits = watchGraphEdits(state.graph, resume !== undefined)
   let recordInfo: FigArchiveRecordInfo | undefined
   return {
     checkpoint(): FigSessionCheckpoint {
@@ -181,16 +187,42 @@ export function createFigDocumentSession(
       })
       return recordInfo
     },
-    loadPage(id: string): void {
+    /** `onProgress` is called as the load advances, so a caller can tell a slow load from a stuck one. */
+    loadPage(id: string, onProgress?: () => void): void {
       if (loaded.has(id)) return
       const reader = archive.reader.selectPages(new Set([id]))
       loadPageTransaction(state, reader.dependencyClosure, () => {
-        materializeReader(reader, archive.blobs, sessionOptions, state)
+        materializeReader(reader, archive.blobs, sessionOptions, state, {
+          edited: edits.edited,
+          onProgress
+        })
         loaded.add(id)
       })
     },
     get loadedPageIds(): ReadonlySet<string> {
       return new Set(loaded)
+    }
+  }
+}
+
+/**
+ * Whether the graph may hold edits made since the file loaded, which a page load has to
+ * reconcile its new instances with. A resumed session's graph may; a fresh one's does once a
+ * layer changes outside page loads and derived layout, the edits the archive tracker counts.
+ */
+function watchGraphEdits(graph: SceneGraph, resumed: boolean): { readonly edited: boolean } {
+  let edited = resumed
+  if (edited) return { edited }
+  const isEdit = () => !graph.isApplyingImportedState && !graph.isApplyingDerivedLayout
+  const markEdited = () => {
+    if (!isEdit()) return
+    edited = true
+    stop()
+  }
+  const stop = graph.observeNodeChanges({ before: markEdited, created: markEdited })
+  return {
+    get edited() {
+      return edited
     }
   }
 }
@@ -204,22 +236,38 @@ function seedDefinitionTypes(graph: SceneGraph): Map<string, string> {
   return types
 }
 
+/**
+ * A graph whose own root and first page take imported ids, and every later entity the production
+ * allocator's. The graph keeps its generator for life, and a closure keeps every variable its
+ * scope shares with other closures, so the generator lives here, away from the archive reader.
+ */
+function createImportedGraph(): { graph: SceneGraph; nextImportedId: number } {
+  let initializing = true
+  let nextImportedId = 1
+  const graph = new SceneGraph(() => (initializing ? `0:${nextImportedId++}` : generateId()))
+  initializing = false
+  return { graph, nextImportedId }
+}
+
 function createAssemblyState(
   reader: ReturnType<typeof createDocumentReader>,
   options: DocumentAssemblyOptions
 ): AssemblyState {
   // Imported runtime handles remain reproducible for CLI inspection and patches. Authored
   // entities use the production allocator even when created in a previously imported graph.
-  let initializing = true
-  let nextImportedId = 1
-  const graph: SceneGraph = new SceneGraph(() =>
-    initializing ? `0:${nextImportedId++}` : generateId()
-  )
-  initializing = false
+  const imported = createImportedGraph()
+  const { graph } = imported
+  let { nextImportedId } = imported
   applyDocumentMetadata(graph, reader.documentRecord)
   for (const [hash, bytes] of options.images ?? []) graph.images.set(hash, bytes.slice())
   graph.applyImportedStateDuring(
-    () => materializeVariableResources(graph, reader.resources, options.onUnsupportedResource),
+    () =>
+      materializeVariableResources(
+        graph,
+        reader.resources,
+        options.onUnsupportedResource,
+        options.onUnsupportedVariableExpression
+      ),
     () => `0:${nextImportedId++}`
   )
   for (const page of graph.getPages()) graph.deleteNode(page.id)
@@ -252,7 +300,7 @@ function inferNextImportedId(graph: SceneGraph): number {
 }
 
 /**
- * Syncing a resumed load's new instances copies their component's sizes over the sizes Figma
+ * Syncing an edited graph's new instances copies their component's sizes over the sizes Figma
  * derived for them, such as a field filling its resized instance. Puts the derived sizes back,
  * except along an axis whose component layer was edited live, which syncing rightly carried over:
  * the layer an owning instance maps it to, or its own component.
@@ -276,22 +324,32 @@ function restoreDerivedSizes(
   })
 }
 
+/** How a page load joins a graph that earlier loads built. */
+interface PageLoad {
+  /** The graph may hold edits made since the file loaded, which new instances must take. */
+  edited: boolean
+  onProgress?: () => void
+}
+
 function materializeReader(
   reader: ReturnType<typeof createDocumentReader>,
   blobs: Uint8Array[],
   options: DocumentAssemblyOptions,
-  previous?: AssemblyState
+  previous?: AssemblyState,
+  load: PageLoad = { edited: false }
 ): AssemblyState {
   for (const diagnostic of reader.bindingDiagnostics) {
     if (!options.onUnresolvedBinding)
       throw new Error(`Unresolved binding ${diagnostic.sourceId}: ${diagnostic.field}`)
     options.onUnresolvedBinding(diagnostic)
   }
-  const pages = reader.pages.map((page) => reader.readPage(page.id, options))
+  // Reading a large page and the components it places takes a while on its own.
+  const readOptions = load.onProgress ? { ...options, onProgress: load.onProgress } : options
+  const pages = reader.pages.map((page) => reader.readPage(page.id, readOptions))
   const state = previous ?? createAssemblyState(reader, options)
-  const plan = reader.planComponents(pages, options, (id) => state.components.has(id))
+  const plan = reader.planComponents(pages, readOptions, (id) => state.components.has(id))
   return state.graph.applyImportedStateDuring(
-    () => materializeReaderInto(pages, plan, blobs, state, previous !== undefined),
+    () => materializeReaderInto(pages, plan, blobs, state, load),
     () => `0:${state.nextImportedId++}`
   )
 }
@@ -301,7 +359,7 @@ function materializeReaderInto(
   plan: ComponentConstruction[],
   blobs: Uint8Array[],
   state: AssemblyState,
-  resumed: boolean
+  { edited, onProgress }: PageLoad
 ): AssemblyState {
   const { graph, sources, components, savedSizeNodes, componentIds } = state
   const existingNodeIds = new Set(graph.nodes.keys())
@@ -317,6 +375,8 @@ function materializeReaderInto(
       if (occurrence.layoutScale !== undefined) layoutScales.set(node.id, occurrence.layoutScale)
     }
   }
+  /** Generated frames whose records name other layers, linked once the pass has made them. */
+  const linked: Array<{ node: SceneNode; record: NodeChange }> = []
   const createShells = (occurrence: InstanceOccurrence, parentId: string): void => {
     if (occurrence.mainComponentId !== null) return
     const existingId = sources.get(occurrence.sourceId)
@@ -330,11 +390,14 @@ function materializeReaderInto(
     const node = graph.createNode(nodeType, parentId, props)
     sources.set(occurrence.sourceId, node.id)
     if (node.type === 'COMPONENT') componentIds.set(occurrence.sourceId, node.id)
-    generatedFrameCodec(node.type)?.read(graph, node, occurrence.properties, blobs)
+    const codec = generatedFrameCodec(node.type)
+    codec?.read(graph, node, occurrence.properties, blobs)
+    if (codec?.link) linked.push({ node, record: occurrence.properties })
     for (const child of occurrence.children) createShells(child, node.id)
   }
   for (const page of pages) createShells(page, graph.rootId)
   for (const item of plan) {
+    onProgress?.()
     if (components.has(item.sourceId)) continue
     const parentId = sources.get(item.parentSourceId)
     if (!parentId) throw new Error(`Unmaterialized component parent ${item.parentSourceId}`)
@@ -358,8 +421,8 @@ function materializeReaderInto(
     sources.set(item.sourceId, materialized.root.id)
   }
   /**
-   * Instances a resumed load must sync with their components, which may have changed live since
-   * the file loaded. Only this page's new instances: syncing a whole component would copy its
+   * Instances a load into an edited graph must sync with their components, which may have
+   * changed live since the file loaded. Only this page's new instances: syncing a whole component would copy its
    * sizes over the sizes Figma derived for instances earlier pages already placed.
    */
   const resync = new Set<string>()
@@ -369,15 +432,16 @@ function materializeReaderInto(
     if (!parentId) throw new Error(`Missing source container ${occurrence.sourceId}`)
     const ordered: string[] = []
     for (const child of occurrence.children) {
-      if (resumed) reconcileOccurrenceStructure(child, graph, components)
+      if (edited) reconcileOccurrenceStructure(child, graph, components)
       if (child.mainComponentId !== null && !sources.has(child.sourceId)) {
+        onProgress?.()
         const materialized = materializeInstance(graph, parentId, child, componentIds, {
           blobs,
           sourceChildren: mapInstanceSourceChildren(child, components)
         })
         rememberDerivedSizes(materialized.nodes)
         linkInstanceSourceChildren(child, materialized, components)
-        if (resumed) {
+        if (edited) {
           reconcileLiveComponentEdits(graph, materialized)
           if (materialized.root.componentId) resync.add(materialized.root.id)
         }
@@ -395,6 +459,12 @@ function materializeReaderInto(
   for (const page of pages) populateInstances(page)
   for (const instanceId of resync) graph.syncInstance(instanceId)
   if (resync.size > 0) restoreDerivedSizes(graph, derivedSizes)
+  // Records name other layers by GUID, so links wait until every layer of the pass exists,
+  // instances and the layers inside them included.
+  const layerOf = (sourceId: string) => sources.get(sourceId)
+  for (const { node, record } of linked) {
+    generatedFrameCodec(node.type)?.link?.(graph, node, record, layerOf)
+  }
   // Layers and ranges name their styles by the styles' own IDs, which the records' GUIDs are,
   // so only links to other layers are renamed to the layers this page added.
   for (const node of graph.getAllNodes()) {
@@ -413,7 +483,7 @@ function materializeReaderInto(
     resolveVariantPropertyValues(graph, materialized)
     applyDocumentLayoutBindings(graph, savedSizeNodes, materialized, layoutScales)
     applyDocumentPaintBindings(graph, materialized)
-    applyDocumentTextBindings(graph, materialized)
+    applyDocumentValueBindings(graph, materialized)
   })
   return state
 }

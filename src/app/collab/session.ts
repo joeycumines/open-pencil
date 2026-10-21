@@ -4,6 +4,8 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import * as awarenessProtocol from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
+import type { Color } from '@open-pencil/scene-graph/primitives'
+
 import { shareAgentPreviews } from '@/app/collab/agent-preview'
 import { buildRemotePeers } from '@/app/collab/awareness'
 import { useCollabIdentity } from '@/app/collab/identity'
@@ -18,6 +20,7 @@ import {
   type YNodes
 } from '@/app/collab/shared-tree/fields'
 import type { JoinCollabRoom } from '@/app/collab/transport'
+import type { CollabAction } from '@/app/collab/transport/types'
 import type { RemotePeer } from '@/app/collab/types'
 import { bindVariableSync, type YRecords } from '@/app/collab/variables'
 import { attachRoomVoice, type RoomVoice } from '@/app/collab/voice/room'
@@ -33,6 +36,9 @@ import { ROOM_STATUS_TICK_MS, ROOM_UNREACHABLE_MS } from '@/constants'
 /** How a tab came to be in a room: by sharing its own document, or by joining someone's. */
 export type RoomOrigin = 'shared' | 'joined'
 
+/** Who this tab is in a room: the name and color everyone sees, this tab included. */
+export type RoomIdentity = { name: Readonly<Ref<string>>; color: Color }
+
 /** One room, live in one tab: its document, presence, connection, and saved copy. */
 export interface RoomSession {
   readonly roomId: string
@@ -43,6 +49,10 @@ export interface RoomSession {
   /** Whether the room's document has reached this tab, from a peer or the saved copy. */
   readonly hasDocument: Readonly<Ref<boolean>>
   readonly voice: RoomVoice
+  /** Who this tab is in the room. */
+  readonly identity: RoomIdentity
+  /** Whether the person may leave; a stored document's room stays open while its tab does. */
+  readonly leavable: boolean
   updateCursor(x: number, y: number, pageId: string): void
   updateSelection(ids: string[]): void
   /** Writes the tab's whole document into the room and makes its root the room's. */
@@ -51,10 +61,16 @@ export interface RoomSession {
   roomHasDocument(): boolean
   /** Follow peers answering this tab's state with theirs; returns the unsubscribe. */
   onSynced(handler: (peerId: string) => void): () => void
+  /** Follow the server saying the document's version history changed; returns the unsubscribe. */
+  onVersionsChanged(handler: () => void): () => void
   /** The awareness states of everyone in the room, this tab included. */
   presence(): ReadonlyMap<number, Record<string, unknown>>
   /** This tab's awareness client. */
   readonly clientId: number
+  /** The peer whose presence carries a client, to address it alone. */
+  peerForClient(clientId: number): string | undefined
+  /** The room's channel for asking whoever saves its document to upload it now. */
+  readonly upload: CollabAction
   /** Leaves the room and releases its connection, presence, and saved-copy handle. */
   dispose(): void
 }
@@ -71,7 +87,7 @@ export interface RoomSessionOptions {
   origin: RoomOrigin
   joinRoom?: JoinCollabRoom
   /** Who this tab is in the room; the device's own identity unless a host stands in for one. */
-  identity?: Pick<ReturnType<typeof useCollabIdentity>, 'name' | 'color'>
+  identity?: RoomIdentity
   openSavedCopy?: (roomId: string, ydoc: Y.Doc) => RoomSavedCopy
   /** How long the tab tries to reach the service that introduces peers before saying it cannot. */
   unreachableMs?: number
@@ -82,6 +98,8 @@ export interface RoomSessionOptions {
    * it counts as having the document until the room says it holds another.
    */
   holdsDocument?: boolean
+  /** False for a room the tab's document lives in, which the person never leaves by hand. */
+  leavable?: boolean
 }
 
 function openIndexedDBCopy(roomId: string, ydoc: Y.Doc): RoomSavedCopy {
@@ -99,7 +117,8 @@ export function openRoomSession({
   openSavedCopy = openIndexedDBCopy,
   unreachableMs = ROOM_UNREACHABLE_MS,
   tickMs = ROOM_STATUS_TICK_MS,
-  holdsDocument = false
+  holdsDocument = false,
+  leavable = true
 }: RoomSessionOptions): RoomSession {
   const ydoc = new Y.Doc()
   const awareness = new awarenessProtocol.Awareness(ydoc)
@@ -119,6 +138,8 @@ export function openRoomSession({
   const connectedSince = ref<number | null>(null)
   let suppressYjsEvents = false
   let suppressGraphSync = false
+  /** Whether a tab that holds a stored document has given way to the room's copy of it. */
+  let followsRoom = false
   let disposed = false
 
   const status = computed(() =>
@@ -148,6 +169,16 @@ export function openRoomSession({
     if (disposed) return
     const rootId = readRoot(meta)
     hasDocument.value = rootId === undefined ? holdsDocument : store.graph.rootId === rootId
+    // The room's document is what a stored document's tab shows once the room holds it.
+    if (holdsDocument && hasDocument.value && rootId !== undefined && !followsRoom) {
+      followsRoom = true
+      suppressGraphSync = true
+      try {
+        sync.dropLayersOutsideRoom()
+      } finally {
+        suppressGraphSync = false
+      }
+    }
     // Newcomers wait for someone who has the file, so peers say whether they do.
     if (awareness.getLocalState()?.hasFile !== hasDocument.value) {
       awareness.setLocalStateField('hasFile', hasDocument.value)
@@ -237,6 +268,8 @@ export function openRoomSession({
     status,
     hasDocument,
     voice,
+    identity,
+    leavable,
     updateCursor(x, y, pageId) {
       awareness.setLocalStateField('cursor', { x, y, pageId, zoom: store.state.zoom })
     },
@@ -251,8 +284,11 @@ export function openRoomSession({
     },
     roomHasDocument: () => readRoot(meta) !== undefined,
     onSynced: (handler) => connection.onSynced(handler),
+    onVersionsChanged: (handler) => connection.onVersionsChanged(handler),
     presence: () => awareness.getStates() as Map<number, Record<string, unknown>>,
     clientId: awareness.clientID,
+    peerForClient: (clientId) => connection.peerForClient(clientId),
+    upload: connection.upload,
     dispose() {
       if (disposed) return
       // Unbinding writes an edit still waiting to be sent, so it runs while the room is open.

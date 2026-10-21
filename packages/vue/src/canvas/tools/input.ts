@@ -5,11 +5,12 @@ import type { Editor } from '@open-pencil/core/editor'
 import { startPenInput } from '#vue/canvas/pen/input'
 import { startPencilInput } from '#vue/canvas/pencil/input'
 import { HAND_GRAB_CURSOR } from '#vue/editor/tool-cursor'
+import { startConnectorDraw } from '#vue/shared/input/connector/draw'
 import { startShapeDraw, startTextDraw } from '#vue/shared/input/draw'
 import { startPanDrag } from '#vue/shared/input/pan/drag'
 import { handleSelectDown } from '#vue/shared/input/select'
 import type { HitTestFns } from '#vue/shared/input/select'
-import { startStickyPlace } from '#vue/shared/input/sticky/place'
+import { startStickyDraw } from '#vue/shared/input/sticky/draw'
 import type { DragState } from '#vue/shared/input/types'
 
 type ToolMouseDownOptions = {
@@ -83,8 +84,13 @@ export function handleToolMouseDown({
     return
   }
 
+  if (tool === 'CONNECTOR') {
+    startConnectorDraw(cx, cy, sx, sy, editor, setDrag)
+    return
+  }
+
   if (tool === 'STICKY') {
-    startStickyPlace(cx, cy, editor, setDrag)
+    startStickyDraw(cx, cy, editor, setDrag)
     return
   }
 

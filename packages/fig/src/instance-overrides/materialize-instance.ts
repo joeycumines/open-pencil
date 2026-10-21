@@ -56,6 +56,12 @@ function shareUnchanged(node: SceneNode, source: SceneNode): void {
     if (holdsCollections(value) || !isEqual(value, original)) continue
     Reflect.set(node, field, original)
   }
+  // The layer's source metadata is its own, but the layout Figma saved for it is replaced whole,
+  // never written into, and nearly always the component layer's.
+  const layout = node.source.fig.layout
+  const originalLayout = source.source.fig.layout
+  if (layout && layout !== originalLayout && isEqual(layout, originalLayout))
+    node.source.fig.layout = originalLayout
 }
 
 export interface MaterializedInstance {

@@ -12,6 +12,7 @@ function setup() {
   const figma = new FigmaAPI(graph)
   const editor = {
     graph,
+    state: { readOnly: false },
     runLayoutForNode: () => undefined,
     requestRender: () => undefined,
     pushUndoStep: undo.pushStep.bind(undo)

@@ -5,7 +5,9 @@ export { updateHoverCursor } from '#vue/shared/input/select/hover'
 import { editedGradient, type Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { tryStartConnectorEndDrag } from '#vue/shared/input/connector/end'
 import { tryStartGradientDrag } from '#vue/shared/input/gradient'
+import { tryStartLineEndDrag } from '#vue/shared/input/line/end'
 import { tryStartResize } from '#vue/shared/input/resize'
 import {
   createSelectionMoveDrag,
@@ -34,7 +36,8 @@ function startMarquee(cx: number, cy: number, editor: Editor, setDrag: (d: DragS
 
 /**
  * Starts dragging a gradient handle, or else the selection's corner radius, resize, or rotation
- * handles. A layer's label takes the press before rotation but after resizing, as in Figma.
+ * handles. A layer's label takes the press before rotation but after resizing, as in Figma; a
+ * read-only document has no handles.
  */
 function tryStartHandleDrag(
   cx: number,
@@ -47,10 +50,13 @@ function tryStartHandleDrag(
   tryStartRotation: (cx: number, cy: number) => boolean,
   setDrag: (d: DragState) => void
 ): boolean {
+  if (editor.state.readOnly) return false
   if (tryStartGradientDrag(editor, sx, sy, setDrag)) return true
   // An open gradient's handles replace the layer's selection handles, which then do not respond.
   if (editedGradient(editor.graph, editor.state.gradientEdit)) return false
   if (tryStartShapeHandleDrag(editor, sx, sy, altKey, setDrag)) return true
+  if (tryStartConnectorEndDrag(editor, sx, sy, setDrag)) return true
+  if (tryStartLineEndDrag(editor, cx, cy, setDrag)) return true
   const scaleDrag = tryStartStickyScale(cx, cy, editor)
   if (scaleDrag) {
     setDrag(scaleDrag)
@@ -62,6 +68,18 @@ function tryStartHandleDrag(
     return true
   }
   return !hitTestLabel(cx, cy, fns) && tryStartRotation(cx, cy)
+}
+
+/** Shift adds to the selection; a plain press selects the layer unless it keeps the selection. */
+function selectOnPress(hit: SceneNode, shiftKey: boolean, keepsSelection: boolean, editor: Editor) {
+  if (shiftKey) editor.select([hit.id], true)
+  else if (!editor.state.selectedIds.has(hit.id) && !keepsSelection) editor.select([hit.id])
+}
+
+/** A read-only document moves nothing, so a press selects a layer inside a selected frame at once. */
+function selectInsideOnPress(hit: SceneNode, keepsSelection: boolean, editor: Editor) {
+  if (keepsSelection && !editor.state.selectedIds.has(hit.id) && clickSelectsInside(hit, editor))
+    editor.select([hit.id])
 }
 
 export function handleSelectDown(
@@ -96,12 +114,12 @@ export function handleSelectDown(
   }
 
   const keepsSelection = !e.shiftKey && pressesSelection(hit, cx, cy, editor)
-  if (!editor.state.selectedIds.has(hit.id) && !e.shiftKey && !keepsSelection) {
-    editor.select([hit.id])
-  } else if (e.shiftKey) {
-    editor.select([hit.id], true)
-  }
+  selectOnPress(hit, e.shiftKey, keepsSelection, editor)
 
+  if (editor.state.readOnly) {
+    selectInsideOnPress(hit, keepsSelection, editor)
+    return
+  }
   if (selectionIsLocked(editor)) return
 
   const drag = createSelectionMoveDrag(cx, cy, sx, sy, editor, e.altKey)
