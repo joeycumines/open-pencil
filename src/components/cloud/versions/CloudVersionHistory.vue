@@ -15,7 +15,7 @@ import {
 import { computed, onMounted, useTemplateRef } from 'vue'
 
 import type { DocumentVersion } from '@open-pencil/cloud/contract'
-import { useCloudMessages, useI18n } from '@open-pencil/vue'
+import { useCloudMessages } from '@open-pencil/vue'
 
 import { canLinkToVersions, cloudVersionLinkURL } from '@/app/cloud/documents/link'
 import { duplicateVersion, editVersion, restoreVersion } from '@/app/cloud/versions/actions'
@@ -25,10 +25,11 @@ import {
   previewVersion,
   showCurrentVersion,
   versionHistoryOf,
-  versionListRevision
+  versionsChanged
 } from '@/app/cloud/versions/history'
 import { useVersionList } from '@/app/cloud/versions/list'
 import { useEditorStore } from '@/app/editor/active-store'
+import { useDateFormat } from '@/app/i18n/date'
 import { toast } from '@/app/shell/ui'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
@@ -45,7 +46,6 @@ import CloudVersionListItem from './CloudVersionListItem.vue'
  */
 const shown = useEditorStore()
 const t = useCloudMessages()
-const { locale } = useI18n()
 const ui = cloudVersions()
 const menuCls = useMenuUI({ content: 'min-w-52', item: 'justify-start gap-2' })
 const filterItem = menuItem({ justify: 'start', class: 'relative pl-7' })
@@ -62,19 +62,9 @@ function rememberScroll() {
 const history = computed(() => versionHistoryOf(shown))
 const selectedId = computed(() => history.value?.preview?.version.id ?? null)
 
+const dates = useDateFormat()
 /** An autosave goes by when it was made, as Figma titles it: the time today, else with the date. */
-const TODAY_FORMAT: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
-const EARLIER_FORMAT: Intl.DateTimeFormatOptions = {
-  ...TODAY_FORMAT,
-  month: 'short',
-  day: 'numeric'
-}
-
-function autosaveTitle(at: string) {
-  const time = new Date(at)
-  const today = new Date().toDateString() === time.toDateString()
-  return new Intl.DateTimeFormat(locale.value, today ? TODAY_FORMAT : EARLIER_FORMAT).format(time)
-}
+const autosaveTitle = (at: string) => dates.timeOrDay(at)
 
 function titleOf(version: DocumentVersion) {
   if (version.name) return version.name
@@ -99,9 +89,11 @@ async function select(version: DocumentVersion) {
 }
 
 async function run(action: () => Promise<unknown>) {
+  // A restore closes the preview, after which `shown` no longer leads to its document.
+  const document = versionHistoryOf(shown)?.store ?? shown
   try {
     await action()
-    versionListRevision.value++
+    versionsChanged(document)
   } catch (error) {
     console.warn('[Cloud] Changing the version history failed:', error)
     toast.error(t.value.versionChangeFailed)

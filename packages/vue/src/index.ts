@@ -253,8 +253,8 @@ export type {
   LayerRow,
   LayerSelectionMode,
   LayerTreeContext,
-  LayerTreeVirtualizer,
-  LayerVectorIcon
+  LayerOutline,
+  LayerTreeVirtualizer
 } from '#vue/primitives/LayerTree'
 export { LayoutControlsRoot, useLayoutControlsContext } from '#vue/primitives/LayoutControls'
 export type {
@@ -407,7 +407,8 @@ export {
   useBindingProvider,
   useOpenPencilBindingProvider,
   useNumberBindingProvider,
-  useColorBindingProvider
+  useColorBindingProvider,
+  useVisibilityBindingProvider
 } from '#vue/controls/binding-provider'
 export type {
   BindingMutationSource,
