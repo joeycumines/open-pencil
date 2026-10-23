@@ -1,8 +1,8 @@
+import type { Editor } from '@open-pencil/core'
 import { DEFAULT_TEXT_HEIGHT, DEFAULT_TEXT_WIDTH } from '@open-pencil/core/constants'
-import type { Editor } from '@open-pencil/core/editor'
-import { generatedFrameText, SHAPE_WITH_TEXT_SIZE } from '@open-pencil/scene-graph'
 import type { NodeType, SceneNode } from '@open-pencil/scene-graph'
 import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
+import { generatedFrameText, SHAPE_WITH_TEXT_SIZE } from '@open-pencil/scene-graph/generated'
 import Matrix from '@open-pencil/scene-graph/matrix'
 
 import { findDrawParent } from '#vue/shared/input/drop-target'
@@ -107,8 +107,12 @@ function settleDrawnSize(preview: ReturnType<Editor['beginNodePreview']>, node: 
   } else if (node.type === 'LINE' && node.width < 2) {
     preview.update(node.id, { width: 100, height: 0, rotation: 0 })
     return true
-  } else if (clicked && node.type === 'SHAPE_WITH_TEXT') {
-    preview.update(node.id, { width: SHAPE_WITH_TEXT_SIZE, height: SHAPE_WITH_TEXT_SIZE })
+  } else if (node.type === 'SHAPE_WITH_TEXT') {
+    // Drawing sizes a new shape rather than resizing it, so it grows to fit its label.
+    preview.update(node.id, {
+      ...(clicked && { width: SHAPE_WITH_TEXT_SIZE, height: SHAPE_WITH_TEXT_SIZE }),
+      shapeTruncates: false
+    })
   } else if (clicked) {
     preview.update(node.id, { width: 100, height: 100 })
   }

@@ -1,13 +1,17 @@
+import type { VariableModeFallback } from '.'
 import { copyFills, copyStrokes } from '../copy'
-import type { SceneGraph } from '../index'
+import type { SceneGraph } from '../graph'
 import { hasInstanceOverride } from '../instances'
 import type { Color } from '../primitives'
 import type { Fill, SceneNode, Stroke, StyleRun } from '../types'
-import type { VariableModeFallback } from '../variables'
 import { NUMERIC_FIELDS, isNumericVariableBindingField } from './fields'
 import { variableText, variableTruthy } from './text'
 import { variableValueReferences } from './value'
-export { isNumericVariableBindingField, VISIBILITY_VARIABLE_TYPES } from './fields'
+export {
+  isNumericVariableBindingField,
+  TEXT_CONTENT_VARIABLE_TYPES,
+  VISIBILITY_VARIABLE_TYPES
+} from './fields'
 
 /** New declarations belong to the outermost occurrence, bounded by a component definition. */
 export function variableBindingOwner(graph: SceneGraph, node: SceneNode): SceneNode {

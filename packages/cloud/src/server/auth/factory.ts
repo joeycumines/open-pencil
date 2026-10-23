@@ -124,6 +124,11 @@ async function verifySecondFactor(
 export type CloudAuthRuntimeOptions = {
   email?: AuthenticationEmailService
   runInBackground?: (promise: Promise<unknown>) => void
+  /**
+   * Whether Better Auth checks the database schema when it starts. Runtimes that start it for
+   * every request turn this off; `migrateCloudDatabase` has already checked the recorded version.
+   */
+  validateSchema?: boolean
 }
 
 export function createBetterAuthAdapter(
@@ -157,7 +162,7 @@ export function createBetterAuthAdapter(
     },
     session: { freshAge: ACCOUNT_SECURITY_FRESH_AGE_SECONDS },
     advanced: {
-      database: { generateId: 'uuid' },
+      database: { generateId: 'uuid', validateSchema: runtime.validateSchema },
       ipAddress: {
         ipAddressHeaders: config.authTrustedIPHeaders,
         trustedProxies: config.authTrustedProxies
@@ -277,15 +282,11 @@ export function createBetterAuthAdapter(
         }
       }),
       passkey({
-        rpID: config.passkeyRPID ?? new URL(config.publicURL).hostname,
+        rpID: new URL(config.publicURL).hostname,
         rpName: config.passkeyRPName,
-        origin: config.passkeyOrigin ?? new URL(config.publicURL).origin
+        origin: new URL(config.publicURL).origin
       }),
-      admin(
-        config.deploymentAdminUserIds.length > 0
-          ? { adminUserIds: config.deploymentAdminUserIds }
-          : {}
-      ),
+      admin(),
       // Device authorization returns opaque database session tokens, not signed cookies.
       bearer(),
       deviceAuthorization({
@@ -301,11 +302,9 @@ export function createBetterAuthAdapter(
     ]
   })
 
-  // Better Auth's admin plugin treats `adminUserIds` as administrators too, so Cloud does the same.
+  // Administrators are granted only through the `admin` command or by another administrator.
   const deploymentRole = (user: { id: string; role?: string | null }) =>
-    user.role === 'admin' || config.deploymentAdminUserIds.includes(user.id)
-      ? ('admin' as const)
-      : ('user' as const)
+    user.role === 'admin' ? ('admin' as const) : ('user' as const)
 
   const resolveIdentity = async (headers: Headers) => {
     const session = await auth.api.getSession({ headers })

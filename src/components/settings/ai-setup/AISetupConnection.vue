@@ -3,9 +3,9 @@ import { tv } from 'tailwind-variants'
 import { computed } from 'vue'
 
 import { ACP_AGENTS, AI_PROVIDERS } from '@open-pencil/core/constants'
-import { useI18n } from '@open-pencil/vue'
+import { useI18n } from '@open-pencil/vue/i18n'
 
-import type { AgentSetupState, PiSetupState } from '@/app/ai/agents/setup'
+import type { AgentSetupState, PiSetupState } from '@/app/ai/agents/setup/view'
 import { modelProviderName } from '@/app/ai/models/provider-name'
 import {
   serverPresetFor,
@@ -66,6 +66,9 @@ const emit = defineEmits<{
   checkAgent: []
   installAgent: []
   installBridge: []
+  signInAgent: []
+  cancelAgentSignIn: []
+  submitAgentSignInCode: [code: string]
 }>()
 const { ai, credentials } = useI18n()
 const styles = tv(theme)()
@@ -105,6 +108,9 @@ const keyHint = computed(() => {
       @check="emit('checkAgent')"
       @install-agent="emit('installAgent')"
       @install-bridge="emit('installBridge')"
+      @sign-in="emit('signInAgent')"
+      @cancel-sign-in="emit('cancelAgentSignIn')"
+      @submit-sign-in-code="emit('submitAgentSignInCode', $event)"
     />
     <PiSetup
       v-else-if="piSetup"

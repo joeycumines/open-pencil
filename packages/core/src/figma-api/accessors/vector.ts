@@ -1,11 +1,4 @@
-import {
-  mergeVectorNetworks,
-  normalizeVectorNetwork,
-  transformVectorNetwork,
-  validateVectorNetwork
-} from '@open-pencil/scene-graph'
 import type {
-  Fill,
   GeometryPath,
   HandleMirroring,
   VectorNetwork as SceneVectorNetwork,
@@ -15,6 +8,12 @@ import type {
 } from '@open-pencil/scene-graph'
 import { copyFills } from '@open-pencil/scene-graph/copy'
 import { parsePluginVectorPath } from '@open-pencil/scene-graph/parse-path'
+import {
+  mergeVectorNetworks,
+  normalizeVectorNetwork,
+  transformVectorNetwork,
+  validateVectorNetwork
+} from '@open-pencil/scene-graph/vector-network'
 
 import {
   graph,
@@ -24,6 +23,8 @@ import {
   type NodeProxyInternals,
   type ProxyThis
 } from '#core/figma-api/accessor-utils'
+import { figmaPaintToFill, type FigmaPaint } from '#core/figma-api/accessors/visual'
+import { toFigmaPaint } from '#core/figma-api/paints'
 import { geometryBlobToSVGPath, vectorNetworkToSVGPaths } from '#core/io/formats/svg/paths'
 import { computeAccurateBounds } from '#core/vector/curve-math'
 import { regenerateFillGeometry } from '#core/vector/fill-geometry'
@@ -36,7 +37,7 @@ export interface FigmaVectorPath {
 interface FigmaVectorRegion {
   readonly windingRule: WindingRule
   readonly loops: ReadonlyArray<ReadonlyArray<number>>
-  readonly fills?: readonly Fill[]
+  readonly fills?: readonly FigmaPaint[]
   readonly fillStyleId?: string
 }
 
@@ -115,7 +116,9 @@ function geometryForRegions(regions: readonly FigmaVectorRegion[]): GeometryPath
   return regions.map((region) => ({
     windingRule: region.windingRule,
     commandsBlob: new Uint8Array(),
-    fills: region.fills ? copyFills([...region.fills]) : [],
+    fills: (region.fills ?? []).map((paint, index) =>
+      figmaPaintToFill(paint, index, 'set_vectorNetwork', 'vectorNetwork')
+    ),
     fillStyleId: region.fillStyleId ?? ''
   }))
 }
@@ -245,7 +248,7 @@ function readVectorNetwork(target: ProxyThis, internals: NodeProxyInternals): Fi
       windingRule: region.windingRule,
       loops: Object.freeze(region.loops.map((loop) => Object.freeze([...loop]))),
       fillStyleId: geometry?.fillStyleId ?? '',
-      fills: Object.freeze(copyFills(geometry?.fills ?? []))
+      fills: Object.freeze(copyFills(geometry?.fills ?? []).map(toFigmaPaint))
     })
   })
   return Object.freeze({

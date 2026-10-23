@@ -146,6 +146,7 @@ export const cloudMessageDefaults = {
   shareRestricted: 'Only people with access',
   shareAnyoneWithLink: 'Anyone with the link',
   shareLinkDetail: 'Anyone who has the link can open this file without signing in.',
+  shareLinkSignInDetail: 'Anyone who has the link can open this file after signing in here.',
   shareRestrictedDetail: 'Only the people and workspace above can open this file.',
   shareRestrictedNoLinksDetail:
     'Only the people and workspace above can open this file. Links are turned off for this workspace.',
@@ -182,6 +183,10 @@ export const cloudMessageDefaults = {
 
   // Status
   statusViewOnlyDetail: 'You can look around and follow others; your changes won’t reach anyone.',
+  statusNotLive: 'Not editing live',
+  statusNotLiveDetail:
+    'The server ended this tab’s live session, so edits no longer pass between it and others. Rejoin to see the latest version.',
+  statusRejoin: 'Rejoin',
   statusSavedTo: params('Saved to {workspace}'),
   statusSavedAgo: params('Saved {time}'),
   statusUpToDate: 'Up to date',

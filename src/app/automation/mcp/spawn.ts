@@ -40,6 +40,8 @@ export interface AutomationHealth {
   authRequired?: boolean
   discoveryPath?: string
   tools?: ToolDescriptor[]
+  /** The server tells the app when an agent opens a session, so a chat can wait for its agent. */
+  agentSessionEvents?: boolean
 }
 
 export interface AutomationServerHandle {
@@ -125,7 +127,7 @@ function rememberStartupError(error: unknown): null {
 }
 
 /** The one discovery-file field the app reads; the MCP package validates the whole file. */
-const DiscoveryTokenJSON = v.pipe(
+const discoveryTokenSchema = v.pipe(
   v.string(),
   v.parseJson(),
   v.looseObject({ authToken: v.optional(v.nullable(v.string())) })
@@ -140,7 +142,7 @@ const DiscoveryTokenJSON = v.pipe(
 async function readDiscoveryToken(discoveryPath: string): Promise<string | null> {
   try {
     const { readTextFile } = await import('@tauri-apps/plugin-fs')
-    const info = v.safeParse(DiscoveryTokenJSON, await readTextFile(discoveryPath))
+    const info = v.safeParse(discoveryTokenSchema, await readTextFile(discoveryPath))
     return info.success ? (info.output.authToken ?? null) : null
   } catch {
     return null
@@ -237,6 +239,7 @@ interface AutomationHealthRecord {
   authRequired?: unknown
   discoveryPath?: unknown
   tools?: unknown
+  agentSessionEvents?: unknown
 }
 
 function isAutomationHealthRecord(value: unknown): value is AutomationHealthRecord {
@@ -272,7 +275,14 @@ function parseAutomationHealth(value: unknown): AutomationHealth | null {
   const authRequired = optionalBoolean(value.authRequired)
   const discoveryPath = optionalString(value.discoveryPath)
   const tools = parseToolDescriptors(value.tools)
-  if (version === null || authRequired === null || discoveryPath === null || tools === null) {
+  const agentSessionEvents = optionalBoolean(value.agentSessionEvents)
+  if (
+    version === null ||
+    authRequired === null ||
+    discoveryPath === null ||
+    tools === null ||
+    agentSessionEvents === null
+  ) {
     return null
   }
   const health: AutomationHealth = { status: value.status }
@@ -280,6 +290,7 @@ function parseAutomationHealth(value: unknown): AutomationHealth | null {
   if (authRequired !== undefined) health.authRequired = authRequired
   if (discoveryPath !== undefined) health.discoveryPath = discoveryPath
   if (tools !== undefined) health.tools = tools
+  if (agentSessionEvents !== undefined) health.agentSessionEvents = agentSessionEvents
   return health
 }
 

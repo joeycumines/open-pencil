@@ -2,6 +2,7 @@ import type { Paragraph } from 'canvaskit-wasm'
 import { uniq } from 'es-toolkit/array'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { weightToStyle } from '@open-pencil/scene-graph/font-style'
 
 import { loadedFace, resolveParagraphFontFamilies } from '#core/canvas/text/font-families'
 import { laidOutText } from '#core/canvas/text/keycap'
@@ -9,7 +10,8 @@ import type { TextLayout, TextLayoutMarker } from '#core/canvas/text/layout'
 import { textFontVariations } from '#core/canvas/text/paragraph'
 import { utf16IndicesByUtf8 } from '#core/canvas/text/utf8'
 import { DEFAULT_FONT_FAMILY } from '#core/constants'
-import { fontManager, weightToStyle } from '#core/text/fonts'
+import { ELLIPSIS } from '#core/text/ellipsis'
+import { fontManager } from '#core/text/fonts'
 import { glyphOutlineSourceSync, type GlyphOutlineSource } from '#core/text/opentype'
 
 type GlyphRun = ReturnType<Paragraph['getShapedLines']>[number]['runs'][number]
@@ -163,9 +165,6 @@ function runOutlineSource(
   }
   return null
 }
-
-/** What truncated text ends in, as the paragraph builds it. */
-const ELLIPSIS = '…'
 
 /**
  * The font of the ellipsis that ends truncated text, when the run is that ellipsis: the

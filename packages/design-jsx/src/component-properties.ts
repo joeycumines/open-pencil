@@ -1,20 +1,20 @@
 import { compact } from 'es-toolkit/array'
 import * as v from 'valibot'
 
-import {
-  applyComponentPropertyValue,
-  componentPropertyDefinitions,
-  createComponentPropertyId
-} from '@open-pencil/scene-graph'
 import type {
   ComponentPropertyDefinition,
   ComponentPropertyReference,
   SceneGraph,
   SceneNode
 } from '@open-pencil/scene-graph'
+import {
+  applyComponentPropertyValue,
+  componentPropertyDefinitions,
+  createComponentPropertyId
+} from '@open-pencil/scene-graph/components'
 
-import { DESIGN_JSX_SUPPORTED_PROPERTIES } from './schema'
-import { parseScriptInput } from './validation'
+import { DESIGN_JSX_SUPPORTED_PROPERTIES } from './definitions'
+import { parseScriptInput } from './schema'
 
 const definitionSchema = v.object({
   id: v.string(),

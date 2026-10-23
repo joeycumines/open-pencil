@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { getNodeEditCapability } from '@open-pencil/core/editor'
-import { layerResizes, layerStrokesAndEffects, readIcon } from '@open-pencil/scene-graph'
-import { useI18n, useSceneComputed, useSelectionState, useEditorCommands } from '@open-pencil/vue'
+import { getNodeEditCapability } from '@open-pencil/core'
+import { layerResizes, layerStrokesAndEffects } from '@open-pencil/scene-graph/generated'
+import { readIcon } from '@open-pencil/scene-graph/icons'
+import { useEditorCommands } from '@open-pencil/vue/editor/commands'
+import { useSelectionState } from '@open-pencil/vue/editor/selection-state'
+import { useI18n } from '@open-pencil/vue/i18n'
+import { useSceneComputed } from '@open-pencil/vue/internal/scene-computed'
 
 import { useEditorStore } from '@/app/editor/active-store'
 import { openVariablesDialog } from '@/app/editor/tokens/dialog'
@@ -47,6 +51,8 @@ import StatusesSection from './properties/status/StatusesSection.vue'
 import StatusSection from './properties/status/StatusSection.vue'
 import StickySection from './properties/sticky/StickySection.vue'
 import StrokeSection from './properties/stroke/StrokeSection.vue'
+import TextContentControl from './properties/text-content/TextContentControl.vue'
+import TextContentSection from './properties/text-content/TextContentSection.vue'
 import TypographySection from './properties/TypographySection.vue'
 import VariablesSection from './properties/VariablesSection.vue'
 
@@ -174,6 +180,7 @@ const { panels } = useI18n()
             <icon-lucide-diamond-plus class="size-3.5" />
           </IconButton>
           <PropertyBindButton v-if="node.type === 'INSTANCE'" field="INSTANCE_SWAP" />
+          <TextContentControl v-if="node.type === 'TEXT'" :node-id="node.id" :text="node.text" />
           <InstanceUpdateAction
             v-if="node.type === 'INSTANCE'"
             :node="node"
@@ -201,6 +208,7 @@ const { panels } = useI18n()
         </template>
       </PanelHeader>
 
+      <TextContentSection v-if="node.type === 'TEXT'" :node-id="node.id" />
       <StatusSection />
       <ComponentPropertiesSection v-if="node.type === 'INSTANCE'" />
       <VariantAuthoringSection
@@ -233,7 +241,8 @@ const { panels } = useI18n()
       <AppearanceSection />
       <template v-if="node.type !== 'CONNECTOR'">
         <MaskSection />
-        <TypographySection v-if="node.type === 'TEXT'" />
+        <!-- A shape with text's typography is its label's, as in Figma. -->
+        <TypographySection v-if="node.type === 'TEXT' || node.type === 'SHAPE_WITH_TEXT'" />
         <FillSection />
         <template v-if="strokesAndEffects">
           <StrokeSection />

@@ -1,5 +1,5 @@
-import { styleToWeight } from '@open-pencil/scene-graph'
 import type { FontVariation } from '@open-pencil/scene-graph'
+import { styleToWeight } from '@open-pencil/scene-graph/font-style'
 
 interface TableRange {
   offset: number
@@ -32,6 +32,14 @@ function sfntTable(view: DataView, tag: string): TableRange | null {
 
 export function isVariableFont(data: ArrayBuffer): boolean {
   return sfntTable(new DataView(data), 'fvar') !== null
+}
+
+/** The sfnt versions of a font with TrueType outlines: 1.0, and Apple's `true`. */
+const TRUETYPE_VERSIONS = new Set([0x00010000, 0x74727565])
+
+/** Whether the file is a single font with TrueType outlines, not CFF (`OTTO`), WOFF, or a collection. */
+export function hasTrueTypeOutlines(data: ArrayBuffer): boolean {
+  return data.byteLength >= 12 && TRUETYPE_VERSIONS.has(new DataView(data).getUint32(0))
 }
 
 function fixed(view: DataView, offset: number): number {

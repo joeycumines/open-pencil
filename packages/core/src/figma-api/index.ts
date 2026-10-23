@@ -1,19 +1,9 @@
 import { fromUint8Array, isValid, toUint8Array } from 'js-base64'
 
-import {
-  createConnector,
-  freeEndpoint,
-  updateTokenExpression,
-  type GroupFitOptions,
-  type SceneGraph,
-  type SceneNode as CoreSceneNode,
-  type NodeType,
-  type Variable,
-  type VariableCollection,
-  type VariableType,
-  type VariableValue
-} from '@open-pencil/scene-graph'
+import type { SceneGraph, SceneNode as CoreSceneNode, NodeType } from '@open-pencil/scene-graph'
+import { createConnector, freeEndpoint } from '@open-pencil/scene-graph/connectors'
 import { computeBounds } from '@open-pencil/scene-graph/geometry'
+import type { GroupFitOptions } from '@open-pencil/scene-graph/group-bounds'
 import { computeImageHash } from '@open-pencil/scene-graph/images'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
@@ -29,11 +19,9 @@ import { iconify, type IconProvider } from '#core/icons'
 import type { RasterCodec } from '#core/io/formats/raster'
 import { createSVGNodes } from '#core/io/formats/svg'
 import { textAutoResizeChanges } from '#core/layout/text-auto-resize'
-import { reconcileVariableLayouts } from '#core/layout/variables'
-import { documentFontStatus, type DocumentFontStatus } from '#core/text/font/status'
 import { fontManager } from '#core/text/fonts'
 
-import { combineComponentsAsVariants, componentFromNode, exposeInstanceSwap } from './components'
+import { componentFromNode } from './components'
 import { flattenSceneNodes } from './flatten'
 import type {
   FigmaBooleanOperationNode,
@@ -63,6 +51,8 @@ import {
 } from './proxy'
 import { newShapeWithText } from './shape-with-text'
 import type { ExportImageOptions } from './types'
+import { FigmaVariablesAPI } from './variables'
+import { combineComponentsAsVariants } from './variants'
 
 const noop = () => undefined
 
@@ -71,6 +61,14 @@ export { getPageBackgrounds, setPageBackgrounds } from './page-backgrounds'
 export { flushPendingLayout } from './pending-layout'
 export type { FigmaEffect } from './effects'
 export type { ExportImageOptions } from './types'
+export {
+  FigmaVariable,
+  FigmaVariableCollection,
+  FigmaVariablesAPI,
+  type FigmaComposedColor,
+  type FigmaVariableAlias,
+  type FigmaVariableValue
+} from './variables'
 export type {
   FigmaBooleanOperationNode,
   FigmaComponentNode,
@@ -92,8 +90,6 @@ export type {
 } from './node-types'
 export type { FigmaFont, FigmaFontName } from './proxy'
 
-export { computeImageHash }
-
 // TODO(figma-api): Implement the full official PluginAPI interface once our compatibility
 // layer covers all required node-specific return types and unsupported APIs are modeled explicitly.
 export class FigmaAPI implements NodeProxyHost {
@@ -107,9 +103,12 @@ export class FigmaAPI implements NodeProxyHost {
   theme: InterfaceTheme = 'light'
 
   readonly mixed = MIXED
+  /** The document's variables and collections, as Figma's `figma.variables`. */
+  readonly variables: FigmaVariablesAPI
 
   constructor(graph: SceneGraph) {
     this.graph = graph
+    this.variables = new FigmaVariablesAPI(graph)
     startPendingLayout(graph)
     const pages = graph.getPages()
     this._currentPageId = pages[0]?.id ?? graph.rootId
@@ -333,74 +332,6 @@ export class FigmaAPI implements NodeProxyHost {
     return this.wrapNode(componentSet.id) as FigmaComponentSetNode
   }
 
-  exposeInstanceSwap(
-    slots: ReadonlyArray<FigmaNodeProxy>,
-    candidates: ReadonlyArray<FigmaNodeProxy>,
-    propertyName = 'Instance'
-  ): FigmaNodeProxy {
-    const host = exposeInstanceSwap(this.graph, slots, candidates, propertyName)
-    return this.wrapNode(host.id)
-  }
-
-  getVariableById(id: string): Variable | null {
-    return this.graph.variables.get(id) ?? null
-  }
-
-  getLocalVariables(type?: string): Variable[] {
-    const vars = [...this.graph.variables.values()]
-    if (type) return vars.filter((v) => v.type === type)
-    return vars
-  }
-
-  getLocalVariableCollections(): VariableCollection[] {
-    return [...this.graph.variableCollections.values()]
-  }
-
-  getVariableCollectionById(id: string): VariableCollection | null {
-    return this.graph.variableCollections.get(id) ?? null
-  }
-
-  // --- Variable/Collection CRUD ---
-
-  createVariable(
-    name: string,
-    type: VariableType,
-    collectionId: string,
-    value?: VariableValue
-  ): Variable {
-    return this.graph.createVariable(name, type, collectionId, value)
-  }
-
-  setVariableValue(variableId: string, modeId: string, value: VariableValue): void {
-    const variable = this.graph.variables.get(variableId)
-    if (!variable) throw new Error(`Variable "${variableId}" not found`)
-    variable.valuesByMode[modeId] = structuredClone(value)
-    updateTokenExpression(variable, modeId, value)
-    reconcileVariableLayouts(this.graph, { variables: [variableId] })
-  }
-
-  deleteVariable(id: string): void {
-    this.graph.removeVariable(id)
-  }
-
-  createVariableCollection(name: string): VariableCollection {
-    return this.graph.createCollection(name)
-  }
-
-  deleteVariableCollection(id: string): void {
-    this.graph.removeCollection(id)
-  }
-
-  bindVariable(nodeId: string, field: string, variableId: string): void {
-    this.graph.bindVariable(nodeId, field, variableId)
-    reconcileVariableLayouts(this.graph, { subtrees: [nodeId] })
-  }
-
-  unbindVariable(nodeId: string, field: string): void {
-    this.graph.unbindVariable(nodeId, field)
-    reconcileVariableLayouts(this.graph, { subtrees: [nodeId] })
-  }
-
   // --- Boolean Operations ---
 
   private _booleanOperation(
@@ -424,52 +355,75 @@ export class FigmaAPI implements NodeProxyHost {
     return this.wrapNode(group.id) as FigmaBooleanOperationNode
   }
 
-  private _nodesById(nodeIds: string[]) {
-    return nodeIds.map((id) => {
-      const node = this.getNodeById(id)
-      if (!node) throw new Error(`Node ${id} not found`)
-      return node
-    })
-  }
-
-  booleanOperation(
-    operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE',
-    nodeIds: string[]
-  ): FigmaBooleanOperationNode {
-    const first = this.graph.getNode(nodeIds[0])
-    const parent = this.wrapNode(first?.parentId ?? this._currentPageId)
-    return this._booleanOperation(operation, this._nodesById(nodeIds), parent)
-  }
-
+  union(
+    nodes: ReadonlyArray<FigmaNodeProxy>,
+    parent: FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode
   union(
     nodes: ReadonlyArray<BaseNode>,
     parent: BaseNode & ChildrenMixin,
     index?: number
-  ): BooleanOperationNode {
+  ): BooleanOperationNode
+  union(
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode {
     return this._booleanOperation('UNION', nodes, parent, index)
   }
 
   subtract(
+    nodes: ReadonlyArray<FigmaNodeProxy>,
+    parent: FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode
+  subtract(
     nodes: ReadonlyArray<BaseNode>,
     parent: BaseNode & ChildrenMixin,
     index?: number
-  ): BooleanOperationNode {
+  ): BooleanOperationNode
+  subtract(
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode {
     return this._booleanOperation('SUBTRACT', nodes, parent, index)
   }
 
   intersect(
+    nodes: ReadonlyArray<FigmaNodeProxy>,
+    parent: FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode
+  intersect(
     nodes: ReadonlyArray<BaseNode>,
     parent: BaseNode & ChildrenMixin,
     index?: number
-  ): BooleanOperationNode {
+  ): BooleanOperationNode
+  intersect(
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode {
     return this._booleanOperation('INTERSECT', nodes, parent, index)
   }
 
   exclude(
+    nodes: ReadonlyArray<FigmaNodeProxy>,
+    parent: FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode
+  exclude(
     nodes: ReadonlyArray<BaseNode>,
     parent: BaseNode & ChildrenMixin,
     index?: number
-  ): BooleanOperationNode {
+  ): BooleanOperationNode
+  exclude(
+    nodes: ReadonlyArray<BaseNode | FigmaNodeProxy>,
+    parent: (BaseNode & ChildrenMixin) | FigmaNodeProxy,
+    index?: number
+  ): FigmaBooleanOperationNode {
     return this._booleanOperation('EXCLUDE', nodes, parent, index)
   }
 
@@ -499,17 +453,11 @@ export class FigmaAPI implements NodeProxyHost {
       sourceNodes.push(raw)
     }
     const vector = flattenSceneNodes(this.graph, this._renderer, sourceNodes, parentId)
-    if (index != null) this.graph.reorderChild(vector.id, parentId, index)
+    if (index != null) this.graph.insertChildAt(vector.id, parentId, index)
     for (const node of nodes) {
       this.graph.deleteNode(this._nodeId(node))
     }
     return this.wrapNode(vector.id) as FigmaVectorNode
-  }
-
-  flattenNode(nodeIds: string[]): FigmaVectorNode {
-    const first = this.graph.getNode(nodeIds[0])
-    const parent = this.wrapNode(first?.parentId ?? this._currentPageId)
-    return this.flatten(this._nodesById(nodeIds), parent)
   }
 
   // --- Viewport ---
@@ -563,10 +511,6 @@ export class FigmaAPI implements NodeProxyHost {
     // Default: pure browser / test contexts have no enumeration surface.
     // Desktop hosts override this to return system + bundled fonts.
     return []
-  }
-
-  getFontStatus(): DocumentFontStatus {
-    return documentFontStatus(this.graph, this.currentPageId)
   }
 
   base64Encode(data: Uint8Array): string {

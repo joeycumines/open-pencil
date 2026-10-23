@@ -1,6 +1,7 @@
 import type { Canvas } from 'canvaskit-wasm'
 
 import type { Fill, NodeType, SceneGraph, SceneNode, Stroke } from '@open-pencil/scene-graph'
+import { strokeOverflow as strokeReach } from '@open-pencil/scene-graph/geometry'
 import Matrix from '@open-pencil/scene-graph/matrix'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
@@ -142,12 +143,7 @@ function drawChildSilhouettes(
   canvas.save()
   try {
     if (clipsChildren(node)) {
-      r.clipNodeShape(
-        canvas,
-        node,
-        r.ck.LTRBRect(0, 0, node.width, node.height),
-        nodeHasRadius(node)
-      )
+      r.clipNodeShape(canvas, node)
     }
     renderMaskedChildIds(
       r,
@@ -174,7 +170,13 @@ export function strokeOutset(stroke: Stroke): number {
 function strokeOverflow(node: SceneNode): number {
   let overflow = 0
   for (const stroke of node.strokes) {
-    if (paintCastsShadow(stroke)) overflow = Math.max(overflow, strokeOutset(stroke))
+    if (!paintCastsShadow(stroke)) continue
+    // A line's stroke lies wholly to one side of it, whatever its alignment, with its heads.
+    const reach =
+      node.type === 'LINE'
+        ? strokeReach([stroke], node.strokeCap, null, node)
+        : strokeOutset(stroke)
+    overflow = Math.max(overflow, reach)
   }
   return overflow
 }

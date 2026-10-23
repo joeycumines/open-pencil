@@ -4,12 +4,12 @@ import { guidToString, isUnsetGuid } from '@open-pencil/kiwi/fig/guid'
 import {
   DEFAULT_FONT_FAMILY,
   DEFAULT_STROKE_MITER_LIMIT,
-  DEFAULT_STROKE_WEIGHT,
-  getNodeLocalMatrix,
-  OPEN_PENCIL_PLUGIN_DATA,
-  styleToWeight
-} from '@open-pencil/scene-graph'
+  DEFAULT_STROKE_WEIGHT
+} from '@open-pencil/scene-graph/constants'
+import { getNodeLocalMatrix } from '@open-pencil/scene-graph/coordinate'
+import { styleToWeight } from '@open-pencil/scene-graph/font-style'
 import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defaults'
+import { OPEN_PENCIL_PLUGIN_DATA } from '@open-pencil/scene-graph/plugin-data'
 import { POINT_COUNT_RANGE } from '@open-pencil/scene-graph/polygon'
 import { isShapeWithTextType } from '@open-pencil/scene-graph/shape-with-text'
 import { parseVariantName } from '@open-pencil/scene-graph/variant-name'
@@ -79,12 +79,10 @@ import type {
   ComponentPropertyType,
   SymbolLink,
   VariantPropSpec,
-  VariableModeMap,
-  Vector
+  VariableModeMap
 } from '@open-pencil/scene-graph'
-import type { GUID } from '@open-pencil/scene-graph/primitives'
+import type { Vector, GUID } from '@open-pencil/scene-graph/primitives'
 
-export { guidToString, stringToGuid } from '@open-pencil/kiwi/fig/guid'
 import { numericVariableAssignmentScales, sourceVariableBindingScales } from './variable/bindings'
 export { VARIABLE_BINDING_FIELDS, VARIABLE_BINDING_FIELDS_INVERSE } from './variable/bindings'
 
@@ -416,18 +414,18 @@ function givenSize(value: unknown): number {
 }
 
 /**
- * A FigJam shape with text's kind and the size it was given; its label is read as a sublayer.
- * FigJam keeps the given height; OpenPencil keeps the given width too, in its plugin data.
+ * A FigJam shape with text's kind, the height it was given and whether it keeps that height; its
+ * label is read as a sublayer.
  */
 function convertShapeWithTextProps(
   nc: NodeChange
-): Partial<Pick<SceneNode, 'shapeWithTextType' | 'shapeUserHeight' | 'shapeUserWidth'>> {
+): Partial<Pick<SceneNode, 'shapeWithTextType' | 'shapeUserHeight' | 'shapeTruncates'>> {
   if (nc.type !== 'SHAPE_WITH_TEXT') return {}
   const kind = isShapeWithTextType(nc.shapeWithTextType) ? nc.shapeWithTextType : 'SQUARE'
   return {
     shapeWithTextType: kind,
     shapeUserHeight: givenSize(nc.shapeUserHeight),
-    shapeUserWidth: givenSize(readNodeChangePluginData(nc, OPEN_PENCIL_PLUGIN_DATA.shapeUserWidth))
+    shapeTruncates: nc.shapeTruncates === true
   }
 }
 

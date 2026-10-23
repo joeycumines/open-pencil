@@ -1,10 +1,15 @@
 import * as v from 'valibot'
 
-import type { SceneNode } from '@open-pencil/scene-graph'
 import { parseColor } from '@open-pencil/scene-graph/color'
 
-import { toolNumber, nodeIdInput } from '#core/tools/input'
-import { defineTool, nodeNotFound, toolFailure } from '#core/tools/schema'
+import { OpenPencilAPI } from '#core/openpencil-api'
+import {
+  toolNumber,
+  nodeIdInputSchema,
+  defineTool,
+  nodeNotFound,
+  toolFailure
+} from '#core/tools/schema'
 
 export const setText = defineTool({
   name: 'set_text',
@@ -12,7 +17,7 @@ export const setText = defineTool({
   description: 'Set text content of a text node.',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     text: v.pipe(v.string(), v.description('Text content'))
   }),
   execute: (figma, { id, text }) => {
@@ -29,7 +34,7 @@ export const setFont = defineTool({
   description: 'Set font properties of a text node.',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     family: v.optional(v.pipe(v.string(), v.description('Font family name'))),
     size: v.optional(toolNumber(v.pipe(v.number(), v.minValue(1), v.description('Font size')))),
     style: v.optional(
@@ -63,7 +68,7 @@ export const setFontRange = defineTool({
   description: 'Set font properties for a text range.',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     start: toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Start character index'))),
     end: toolNumber(v.pipe(v.number(), v.minValue(0), v.description('End character index'))),
     family: v.optional(v.pipe(v.string(), v.description('Font family name'))),
@@ -107,7 +112,7 @@ export const setTextResize = defineTool({
   description: 'Set text auto-resize mode.',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     mode: v.pipe(
       v.picklist(['NONE', 'WIDTH_AND_HEIGHT', 'HEIGHT', 'TRUNCATE']),
       v.description('Resize mode')
@@ -169,7 +174,7 @@ export const setTextProperties = defineTool({
       updated.push('textAutoResize')
     }
     if (args.direction !== undefined) {
-      node.textDirection = args.direction as SceneNode['textDirection']
+      new OpenPencilAPI(figma).setTextDirection(node, args.direction)
       updated.push('textDirection')
     }
     if (args.text_decoration !== undefined) {

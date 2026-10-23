@@ -41,6 +41,7 @@ export {
 export {
   type TreeNode,
   type BaseProps,
+  type EllipseProps,
   type ComponentProps,
   type InstanceProps,
   type TextProps,
@@ -109,7 +110,7 @@ export {
   designJSXPropertyNames,
   type DesignJSXHelperDefinition,
   type DesignJSXPropertyDefinition
-} from './schema'
+} from './definitions'
 export {
   transformDesignJSXExpression,
   transformDesignJSXProgram,

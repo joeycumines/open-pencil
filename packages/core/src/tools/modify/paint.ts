@@ -6,8 +6,8 @@ import { linearGradientTransform } from '@open-pencil/scene-graph/gradient'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import { BLACK } from '#core/constants'
-import { toolNumber, nodeIdInput } from '#core/tools/input'
-import { defineTool } from '#core/tools/schema'
+import { toFigmaTransform } from '#core/figma-api/paints'
+import { defineTool, nodeIdInputSchema, toolNumber } from '#core/tools/schema'
 
 export const setFill = defineTool({
   name: 'set_fill',
@@ -16,7 +16,7 @@ export const setFill = defineTool({
     'Set fill on a node. Solid: color="#ff0000". Linear gradient: gradient="top-bottom" or "left-right" with color (start) and color_end (end).',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     color: v.pipe(v.string(), v.description('Color (hex). For gradient: start color.')),
     color_end: v.optional(
       v.pipe(v.string(), v.description('End color for gradient (if omitted, solid fill)'))
@@ -66,7 +66,7 @@ export const setFill = defineTool({
             { position: 0, color: c },
             { position: 1, color: cEnd }
           ],
-          gradientTransform: linearGradientTransform(start, end)
+          gradientTransform: toFigmaTransform(linearGradientTransform(start, end))
         }
       ]
       return { id, gradient, start: c, end: cEnd }
@@ -83,7 +83,7 @@ export const setStroke = defineTool({
   description: 'Set the stroke (border) of a node.',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     color: v.pipe(v.string(), v.description('Stroke color (hex)')),
     weight: v.optional(
       toolNumber(v.pipe(v.number(), v.minValue(0.1), v.description('Stroke weight'))),
@@ -119,7 +119,7 @@ export const setImageFill = defineTool({
   description: 'Set an image fill on a node from base64-encoded image data.',
   execution: { kind: 'sync', mutation: 'document' },
   input: v.strictObject({
-    id: nodeIdInput,
+    id: nodeIdInputSchema,
     image_data: v.pipe(
       v.string(),
       v.description('Base64-encoded image bytes (PNG, JPEG, or WEBP)')

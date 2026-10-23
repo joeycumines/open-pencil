@@ -5,7 +5,8 @@ import Matrix from '@open-pencil/scene-graph/matrix'
 
 import { nodeOrientationMatrix } from '#core/geometry'
 
-import { figmaBlendModeToSkia } from './blend'
+import { figmaBlendModeToSkia, needsIsolatedBlendLayer } from './blend'
+import { makeBooleanOperationPath } from './boolean'
 import { blurSigma, renderNoiseEffects } from './effects'
 import type { SkiaRenderer } from './renderer'
 import {
@@ -29,7 +30,6 @@ import {
   silhouetteBounds,
   separateShadowChildren
 } from './shadows/silhouette'
-import { nodeHasRadius } from './shapes'
 function resetEffectLayerPaint(r: SkiaRenderer): void {
   r.effectLayerPaint.setImageFilter(null)
   r.effectLayerPaint.setColorFilter(null)
@@ -39,11 +39,28 @@ function resetEffectLayerPaint(r: SkiaRenderer): void {
 /** `behind` draws drop shadows and background blur, `inner` inner shadows over fills, `front` noise. */
 export type EffectPass = 'behind' | 'inner' | 'front'
 
+/**
+ * Layers whose shadows Figma 126 never spreads: only boxes and ellipses, arcs among them, take a
+ * spread, for drop and inner shadows alike.
+ */
+const UNSPREAD_TYPES: ReadonlySet<SceneNode['type']> = new Set<SceneNode['type']>([
+  'TEXT',
+  'BOOLEAN_OPERATION',
+  'STAR',
+  'POLYGON',
+  'VECTOR'
+])
+
 /** Figma spreads a shadow only where it follows the layer's own outline: shapes and filled frames that clip. */
 function shadowSpread(node: SceneNode, effect: Effect): number {
-  if (node.type === 'TEXT' || node.type === 'BOOLEAN_OPERATION') return 0
+  if (UNSPREAD_TYPES.has(node.type)) return 0
   if (!isLayerContainer(node)) return effect.spread
   return node.clipsContent && fillsCastShadow(node) ? effect.spread : 0
+}
+
+/** The spread an inner shadow takes, inside any layer whose type Figma spreads. */
+function innerShadowSpread(node: SceneNode, effect: Effect): number {
+  return UNSPREAD_TYPES.has(node.type) ? 0 : effect.spread
 }
 
 function shadowLayerBounds(
@@ -144,15 +161,14 @@ function drawOwnShapeDropShadow(
 ): boolean {
   const outline = regularStrokeOutline(node, spread)
   if (!outline && !castsFromOwnShape(node)) return false
-  const hasRadius = nodeHasRadius(node)
   const castsFill = fillsCastShadow(node)
   canvas.save()
   try {
-    if (knockout) clipOutShapeKnockout(r, canvas, node, hasRadius, outline)
+    if (knockout) clipOutShapeKnockout(r, canvas, node, outline)
     if (castsFill && outline && strokeGrowsOutline(outline)) {
       drawOutlineDropShadow(r, canvas, node, effect, outline, spread, blendMode)
     } else if (castsFill) {
-      drawShapeDropShadow(r, canvas, node, effect, hasRadius, spread, blendMode)
+      drawShapeDropShadow(r, canvas, node, effect, spread, blendMode)
     } else if (outline) {
       drawRingDropShadow(r, canvas, node, effect, outline, spread, blendMode)
     }
@@ -328,9 +344,7 @@ function renderInnerShadow(
   canvas: Canvas,
   graph: SceneGraph,
   node: SceneNode,
-  rect: Float32Array,
   effect: Effect,
-  hasRadius: boolean,
   includeChildren: boolean
 ): void {
   if (!includeChildren && !paintsCastShadow(node)) return
@@ -340,25 +354,37 @@ function renderInnerShadow(
   if (children?.every(castsFromOwnShape)) {
     for (const child of children) {
       withChildCoordinates(canvas, child, effect, (local) =>
-        drawShapeInnerShadow(
-          r,
-          canvas,
-          child,
-          r.ck.LTRBRect(0, 0, child.width, child.height),
-          local,
-          nodeHasRadius(child)
-        )
+        drawShapeInnerShadow(r, canvas, child, local, innerShadowSpread(child, local))
       )
     }
     return
   }
   if (!includeChildren && castsFromOwnShape(node)) {
-    drawShapeInnerShadow(r, canvas, node, rect, effect, hasRadius)
+    const spread = innerShadowSpread(node, effect)
+    drawShapeInnerShadow(r, canvas, node, effect, spread, isolatesInnerShadows(node))
     return
   }
   const bounds = shadowLayerBounds(r, graph, node, effect, 0, includeChildren)
   drawSilhouetteInnerShadow(r, canvas, effect, bounds, () =>
     drawSilhouette(r, canvas, graph, node, 'cast', includeChildren)
+  )
+}
+
+/**
+ * Whether a shape draws its fills and inner shadows in a layer of their own. There each shadow
+ * replaces the fill under it before taking the shape's outline, so the antialiased edge applies
+ * once, as in Figma, rather than letting the fill show through. Blended fills and shadows mix with
+ * what lies under the shape, so they keep drawing in place.
+ */
+export function isolatesInnerShadows(node: SceneNode): boolean {
+  if (isLayerContainer(node) || !castsFromOwnShape(node)) return false
+  const shadows = node.effects.filter((effect) => effect.visible && effect.type === 'INNER_SHADOW')
+  return (
+    shadows.length > 0 &&
+    shadows.every((effect) => !needsIsolatedBlendLayer(effect.blendMode)) &&
+    [...node.fills, ...node.fillGeometry.flatMap((geometry) => geometry.fills ?? [])].every(
+      (fill) => !fill.visible || !needsIsolatedBlendLayer(fill.blendMode)
+    )
   )
 }
 
@@ -371,11 +397,9 @@ export function renderEffects(
   canvas: Canvas,
   node: SceneNode,
   graph: SceneGraph,
-  rect: Float32Array,
-  hasRadius: boolean,
   pass: EffectPass
 ): void {
-  if (pass === 'front') renderNoiseEffects(r, canvas, node, rect, hasRadius)
+  if (pass === 'front') renderNoiseEffects(r, canvas, node)
 
   const ownShadows = !isLayerContainer(node)
   for (const effect of node.effects) {
@@ -386,11 +410,14 @@ export function renderEffects(
     }
 
     if (pass === 'behind' && effect.type === 'BACKGROUND_BLUR') {
-      r.applyClippedBlur(canvas, node, rect, hasRadius, blurSigma(effect.radius))
+      const shape =
+        node.type === 'BOOLEAN_OPERATION' ? makeBooleanOperationPath(r, node, graph) : null
+      r.applyClippedBlur(canvas, node, blurSigma(effect.radius), shape)
+      shape?.delete()
     }
 
     if (pass === 'inner' && effect.type === 'INNER_SHADOW' && ownShadows) {
-      renderInnerShadow(r, canvas, graph, node, rect, effect, hasRadius, false)
+      renderInnerShadow(r, canvas, graph, node, effect, false)
     }
   }
 }
@@ -411,10 +438,8 @@ export function renderLayerShadows(
   const effects = node.effects.filter((effect) => effect.visible && effect.type === type)
   if (effects.length === 0) return
   const includeChildren = shadowIncludesChildren(graph, node)
-  const hasRadius = nodeHasRadius(node)
-  const rect = r.ck.LTRBRect(0, 0, node.width, node.height)
   for (const effect of effects) {
     if (pass === 'behind') renderDropShadow(r, canvas, graph, node, effect, includeChildren)
-    else renderInnerShadow(r, canvas, graph, node, rect, effect, hasRadius, includeChildren)
+    else renderInnerShadow(r, canvas, graph, node, effect, includeChildren)
   }
 }

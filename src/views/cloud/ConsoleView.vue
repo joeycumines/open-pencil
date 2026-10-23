@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { useCloudPortalMessages } from '@open-pencil/vue'
+import { useCloudPortalMessages } from '@open-pencil/vue/i18n'
 
 import { usePortal } from '@/app/cloud-portal/context'
 import PortalConsoleLayout from '@/components/cloud-portal/layout/PortalConsoleLayout.vue'
@@ -84,7 +84,7 @@ function select(id: string) {
 async function signOut() {
   await portal.auth.signOut()
   await portal.refreshAccount()
-  await router.replace({ name: 'sign-in' })
+  await router.replace({ name: 'welcome' })
 }
 
 onMounted(() => void refreshWaiting())

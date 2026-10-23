@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { resolvedValueBindings, SceneGraph } from '@open-pencil/scene-graph'
+import { resolvedValueBindings } from '@open-pencil/scene-graph/variables'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 describe('Variables', () => {
   function pageId(graph: SceneGraph): string {
@@ -273,6 +274,29 @@ describe('Variables', () => {
     expect(node.boundVariables.visible).toBe(flag.id)
     expect(() => graph.bindVariable(node.id, 'visible', size.id)).toThrow(
       'Cannot bind FLOAT variable to boolean field "visible"'
+    )
+  })
+
+  test('text content binds a text or number variable and shows a number as text', () => {
+    const graph = new SceneGraph()
+    const collection = graph.createCollection('Copy')
+    const mode = collection.defaultModeId
+    const label = graph.createVariable('label', 'STRING', collection.id, 'Buy')
+    const count = graph.createVariable('count', 'FLOAT', collection.id, 42.5)
+    const flag = graph.createVariable('flag', 'BOOLEAN', collection.id, true)
+    const node = graph.createNode('TEXT', graph.getPages()[0].id, { text: 'Hello' })
+
+    graph.bindVariable(node.id, 'text', count.id)
+    expect(resolvedValueBindings(graph, node)).toMatchObject({ text: '42.50' })
+    count.valuesByMode[mode] = 3
+    expect(resolvedValueBindings(graph, node)).toMatchObject({ text: '3' })
+    graph.bindVariable(node.id, 'text', label.id)
+    expect(resolvedValueBindings(graph, node)).toMatchObject({ text: 'Buy' })
+    expect(() => graph.bindVariable(node.id, 'text', flag.id)).toThrow(
+      'Cannot bind BOOLEAN variable to string field "text"'
+    )
+    expect(() => graph.bindVariable(node.id, 'fontFamily', count.id)).toThrow(
+      'Cannot bind FLOAT variable to string field "fontFamily"'
     )
   })
 

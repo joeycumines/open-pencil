@@ -2,7 +2,7 @@
 
 import type { ExportFormatId } from './export-format'
 import type { CanvasGuide } from './guides'
-import type { InstanceOverrideState } from './instance-overrides'
+import type { InstanceOverrideState } from './instances/overrides'
 import type { Color, Matrix, Rect, Vector } from './primitives'
 import type { ShapeWithTextType } from './shape-with-text/kinds'
 
@@ -741,8 +741,11 @@ export interface SceneNode {
   shapeWithTextType: ShapeWithTextType
   /** The height a shape with text was given; it grows past it to fit its label. 0 is unset. */
   shapeUserHeight: number
-  /** The width a shape with text was given; it widens past it only for a word too wide. 0 is unset. */
-  shapeUserWidth: number
+  /**
+   * Whether a shape with text keeps its height and cuts its label off with "…" instead of growing,
+   * as FigJam does once the shape's height was set.
+   */
+  shapeTruncates: boolean
 
   componentId: string | null
   instanceOverrides: InstanceOverrideState

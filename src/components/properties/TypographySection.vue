@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { MIXED, TypographyControlsRoot, useI18n, type MixedValue } from '@open-pencil/vue'
+import { MIXED, type MixedValue } from '@open-pencil/vue/controls/node-props'
+import { useI18n } from '@open-pencil/vue/i18n'
+import { TypographyControlsRoot } from '@open-pencil/vue/primitives/TypographyControls'
 
 import { loadFont } from '@/app/editor/fonts'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
@@ -19,9 +21,6 @@ import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
-
-import PropertyBindButton from './component-properties/PropertyBindButton.vue'
-import PropertyBoundField from './component-properties/PropertyBoundField.vue'
 
 const { panels, menu } = useI18n()
 const fontLoader = { load: loadFont }
@@ -78,14 +77,6 @@ function picked<T>(value: MixedValue<T>): T | '' {
 <template>
   <TypographyControlsRoot v-slot="ctx" :font-loader="fontLoader">
     <PanelSection v-if="ctx.node.value" :label="panels.typography" data-test-id="typography">
-      <template v-if="ctx.nodes.value.length === 1" #actions>
-        <PropertyBindButton field="TEXT" />
-      </template>
-      <PropertyBoundField
-        v-if="ctx.nodes.value.length === 1"
-        field="TEXT"
-        :label="panels.content"
-      />
       <SharedStyleField kind="text" :label="panels.textStyle" />
 
       <div class="mb-1.5 flex min-w-0 items-center gap-1.5">

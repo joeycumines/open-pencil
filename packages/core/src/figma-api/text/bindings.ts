@@ -1,8 +1,6 @@
 import { mapValues, omit, pick } from 'es-toolkit/object'
 
 import {
-  getSharedStyles,
-  SHARED_TEXT_STYLE_FIELDS,
   TEXT_BINDABLE_FIELDS,
   type CharacterStyleOverride,
   type SceneGraph,
@@ -12,11 +10,13 @@ import {
   type Variable
 } from '@open-pencil/scene-graph'
 import { copyFills } from '@open-pencil/scene-graph/copy'
+import { getSharedStyles, SHARED_TEXT_STYLE_FIELDS } from '@open-pencil/scene-graph/shared-styles'
 
 import { styleNameToWeight } from '#core/figma-api/fonts'
+import { variableAlias, type FigmaVariableAlias } from '#core/figma-api/variables/values'
 import { styleRunsWithPatch } from '#core/text/character-style'
 
-import { getStyledTextSegments, variableAlias, type FigmaVariableAlias } from './style'
+import { getStyledTextSegments } from './style'
 
 /** Fields a string variable binds; the rest take numbers. */
 const STRING_FIELDS: ReadonlySet<TextBindableField> = new Set(['fontFamily', 'fontStyle'])

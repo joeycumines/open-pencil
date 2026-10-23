@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { FontManager, SceneGraph, documentFontStatus } from '@open-pencil/core'
-import { UnsupportedFontFormatError } from '@open-pencil/core/text'
+import { FontManager, documentFontStatus, UnsupportedFontFormatError } from '@open-pencil/core/text'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 function pageId(graph: SceneGraph): string {
   return graph.getPages()[0].id
@@ -35,6 +35,22 @@ describe('documentFontStatus', () => {
       ],
       issues: []
     })
+  })
+
+  test('counts a root that is itself a text node', () => {
+    const graph = new SceneGraph()
+    const manager = new FontManager()
+    manager.markLoaded('Inter', 'Regular', new ArrayBuffer(8), 'bundled')
+    const node = graph.createNode('TEXT', pageId(graph), {
+      text: 'Hello',
+      fontFamily: 'Inter',
+      fontWeight: 400
+    })
+
+    const status = documentFontStatus(graph, [node.id], manager)
+    expect(status.faces.map((face) => [face.family, face.style, face.status])).toEqual([
+      ['Inter', 'Regular', 'available']
+    ])
   })
 
   test('reports the active default-family substitution for missing faces', () => {

@@ -1,4 +1,4 @@
-import type { SceneGraph } from '../index'
+import type { SceneGraph } from '../graph'
 import type { SceneNode } from '../types'
 
 /**
@@ -19,8 +19,8 @@ export interface GeneratedFrameKind {
   /** Whether it takes its name from its text until the user names it, as a sticky note does. */
   namedByText: boolean
   /**
-   * What a width or height set from outside layout also sets on the frame, such as the size a
-   * shape with text was given, which layout grows it from.
+   * What a width or height set on `frame` from outside layout also sets on it, such as the height
+   * a shape with text was given, which layout grows it from.
    */
-  sized?(changes: Partial<SceneNode>): Partial<SceneNode>
+  sized?(changes: Partial<SceneNode>, frame: SceneNode): Partial<SceneNode>
 }

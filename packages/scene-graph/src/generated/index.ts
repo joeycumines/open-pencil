@@ -1,5 +1,5 @@
 import { CONNECTOR_KIND } from '../connectors/sublayers'
-import type { SceneGraph } from '../index'
+import type { SceneGraph } from '../graph'
 import type { NodeType, SceneNode } from '../types'
 import type { GeneratedFrameKind } from './kind'
 import { SHAPE_WITH_TEXT_KIND } from './shape-with-text'
@@ -53,12 +53,12 @@ export function generatedFrameText(graph: SceneGraph, node: SceneNode): SceneNod
  * (`GeneratedFrameKind.sized`); fields `changes` sets itself, such as an undo restoring them, win.
  */
 export function withGeneratedFrameSize(
-  node: Pick<SceneNode, 'type'>,
+  node: SceneNode,
   changes: Partial<SceneNode>
 ): Partial<SceneNode> {
   const kind = generatedFrameKind(node)
   if (!kind?.sized || (changes.width === undefined && changes.height === undefined)) return changes
-  return { ...kind.sized(changes), ...changes }
+  return { ...kind.sized(changes, node), ...changes }
 }
 
 /** Whether a layer turns: any layer but a generated frame that stays upright. */

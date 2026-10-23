@@ -2,9 +2,9 @@
 import { tv } from 'tailwind-variants'
 import { computed } from 'vue'
 
-import { useI18n } from '@open-pencil/vue'
+import { useI18n } from '@open-pencil/vue/i18n'
 
-import type { ProviderConnectionTestFailureReason } from '@/app/ai/chat/connection-test'
+import type { ProviderConnectionTestFailureReason } from '@/app/ai/models/connection-test'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import statusTheme from '@/theme/feedback/status'
 

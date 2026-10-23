@@ -1,6 +1,6 @@
-import { FigmaAPI, SceneGraph } from '@open-pencil/core'
-import type { FigmaNodeProxy } from '@open-pencil/core'
-import type { Color, Fill, Stroke } from '@open-pencil/scene-graph'
+import { FigmaAPI, type FigmaNodeProxy } from '@open-pencil/core/figma-api'
+import { SceneGraph, type Fill, type Stroke } from '@open-pencil/scene-graph'
+import type { Color } from '@open-pencil/scene-graph/primitives'
 
 export function createAPI(): FigmaAPI {
   return new FigmaAPI(new SceneGraph())
@@ -33,10 +33,13 @@ export function asPageNode(
  * A solid paint that satisfies both the OpenPencil `Fill` and the Figma `SolidPaint` shape, as the
  * node proxies expose the intersection of the two.
  */
+/** A solid paint both the scene graph and the plugin API take: it carries no transform. */
+type SolidFill = Omit<Fill, 'gradientTransform' | 'imageTransform'> & SolidPaint
+
 export function solidFill(
   color: Color,
   overrides: { opacity?: number; visible?: boolean } = {}
-): Fill & SolidPaint {
+): SolidFill {
   return {
     type: 'SOLID',
     color,
@@ -49,7 +52,7 @@ export function solidFill(
 export function solidStroke(
   color: Color,
   stroke: { weight: number; align: Stroke['align']; opacity?: number; visible?: boolean }
-): Stroke & SolidPaint {
+): SolidFill & Pick<Stroke, 'weight' | 'align'> {
   return {
     ...solidFill(color, stroke),
     weight: stroke.weight,

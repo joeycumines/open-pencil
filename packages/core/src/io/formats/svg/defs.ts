@@ -1,12 +1,6 @@
 import { fromUint8Array } from 'js-base64'
 
-import {
-  imageMimeType,
-  type Effect,
-  type Fill,
-  type SceneGraph,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import type { Effect, Fill, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import {
   colorToHex,
   colorToDisplayCSS,
@@ -18,10 +12,15 @@ import {
   invertGradientTransform,
   isIdentityGradientTransform
 } from '@open-pencil/scene-graph/gradient'
+import { imageMimeType } from '@open-pencil/scene-graph/images'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { svg, type SVGNode } from './node'
 import { round } from './paths'
+import type { SVGTextLayout } from './text/lines'
+
+/** The family to name a font face by instead of its own, or null to keep the face. */
+export type SVGFontAlias = (family: string, style: string) => string | null
 
 export interface SVGExportContext {
   defs: SVGNode[]
@@ -32,6 +31,9 @@ export interface SVGExportContext {
   idPrefix?: string
   /** Paints drawn in `currentColor`, such as an icon's tinted paths, so CSS `color` sets them. */
   tint?: (node: SceneNode) => readonly ('fill' | 'stroke')[]
+  /** Line breaks of text nodes; without them each text node is drawn on one line. */
+  textLayout?: SVGTextLayout
+  fontAlias?: SVGFontAlias
 }
 
 export function nextDefId(ctx: SVGExportContext, prefix: string): string {

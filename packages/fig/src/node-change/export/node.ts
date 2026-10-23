@@ -12,13 +12,12 @@ import type {
 } from '@open-pencil/scene-graph'
 import {
   DEFAULT_STROKE_MITER_LIMIT,
-  DEFAULT_STROKE_WEIGHT,
-  isGeneratedFrame,
-  OPEN_PENCIL_PLUGIN_DATA,
-  withPluginData
-} from '@open-pencil/scene-graph'
+  DEFAULT_STROKE_WEIGHT
+} from '@open-pencil/scene-graph/constants'
+import { isGeneratedFrame } from '@open-pencil/scene-graph/generated'
 import { layoutGridCount } from '@open-pencil/scene-graph/layout'
 import { siblingOrderKeys } from '@open-pencil/scene-graph/order-keys'
+import { OPEN_PENCIL_PLUGIN_DATA, withPluginData } from '@open-pencil/scene-graph/plugin-data'
 import type { GUID, Matrix, Vector } from '@open-pencil/scene-graph/primitives'
 
 /* eslint-disable max-lines */
@@ -917,13 +916,6 @@ function applyNodeVisualProps(
   if (!node.autoRename) nc.autoRename = false
 }
 
-/** The width a shape with text was given, which FigJam's record has no field for. */
-function applyShapeUserWidthPluginData(node: SceneNode): void {
-  const width =
-    node.type === 'SHAPE_WITH_TEXT' && node.shapeUserWidth > 0 ? node.shapeUserWidth : undefined
-  node.pluginData = withPluginData(node.pluginData, OPEN_PENCIL_PLUGIN_DATA.shapeUserWidth, width)
-}
-
 /**
  * Import maps TEXT_PATH → TEXT. Re-emit Kiwi type 41 only while path fidelity
  * remains (materialized path data + baked glyphs). After an edit that cannot
@@ -1064,7 +1056,6 @@ export function sceneNodeToKiwiWithContext(
   applyExportSettingsPluginData(node)
   applyLibrarySourcePluginData(node)
   serializeNodeStatus(node, nc)
-  applyShapeUserWidthPluginData(node)
   applyTextPathBoxPluginData(node, savedInFigmaBox(node))
   const pluginData = mergePluginData(node.pluginData)
   if (pluginData.length > 0) nc.pluginData = pluginData

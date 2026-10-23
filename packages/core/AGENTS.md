@@ -2,7 +2,7 @@
 
 Renderer, layout, editor, Figma API, tools, clipboard, vector conversion, and document I/O. Depends on scene-graph, pen, kiwi, and fig. Framework-neutral: no Vue, no app imports, no browser DOM; guard browser globals explicitly.
 
-- Public surface is the compatibility barrel plus the subpaths listed in `packages/core/package.json` `exports`; add a subpath there rather than deep-importing.
+- The root entry is the editor (`createEditor` and its types); every other domain is a subpath listed in `packages/core/package.json` `exports`. Add a subpath there rather than deep-importing, and never re-export another package's names.
 - CanvasKit runtime loading is centralized in `@open-pencil/core/canvaskit`. Headless raster export may dynamically load `canvaskit-wasm/full`; elsewhere `import type` and pass CanvasKit in.
 - Drawing and input share preview-aware geometry through `@open-pencil/core/geometry`, built on Scene Graph matrices. Use it for world/screen transforms, inverses, bounds, and handle placement.
 - Content an author wrote (design JSX, HTML, `.pen`) gets its sizes and positions from `layoutAuthoredNodes` in `packages/core/src/layout.ts`, which measures text that resizes to its content wherever it sits and then lays out the pages involved; renderers and readers of authored formats call it, while `.fig` keeps the geometry it stores (`packages/core/tests/layout/authored.test.ts`).
@@ -54,7 +54,7 @@ Renderer, layout, editor, Figma API, tools, clipboard, vector conversion, and do
 
 `OpenPencilAPI` (`packages/core/src/openpencil-api/`) is what OpenPencil adds to the Plugin API, exposed to scripts as the `openpencil` global next to `figma`.
 
-- Keep `figma` Figma-shaped and put OpenPencil-only features on `openpencil`, in the same style: methods and node-like handles with getters and setters, not parallel helper functions. Never add non-Figma members to `FigmaAPI` (`compatibility.ts`).
+- Put OpenPencil-only features on `openpencil`, in the same style as `figma`: methods and node-like handles with getters and setters, not parallel helper functions. `figma` stays Figma's (Figma API, Shape follows Figma).
 - Script runners get both globals only through `compileScript` (`packages/core/src/tools/analyze/eval/wrap.ts`); the `eval` tool, `openpencil eval`, and app automation must not build their own `AsyncFunction`.
 - Members take names, not internal ids, and write through the same scene-graph functions the editor's actions use, such as `behaviourFromSpec`; errors name what exists. Tools for the same feature wrap the `openpencil` API rather than reimplementing it (`packages/core/src/tools/create/behaviours.ts`).
 - A new member updates `packages/docs/programmable/cli/scripting.md` and the agent skill in the same change; tests drive it as scripts do, through `compileScript` (`packages/core/tests/openpencil-api/`).
@@ -73,7 +73,7 @@ Canvas is CanvasKit (Skia WASM) on a WebGL surface, not DOM.
 
 ### Paints
 
-- A gradient or image paint builds a Skia shader through `applyGradientFill` and `applyImageFill` (`packages/core/src/canvas/fills.ts`), which take the target `Paint`, so a stroke reuses them instead of a second shader path.
+- A gradient or image paint builds a Skia shader through `applyGradientFill` and `applyImageFill` (`packages/core/src/canvas/fills.ts`), which take the target `Paint`, so a stroke reuses them instead of a second shader path. Both say whether they set one; a caller skips the paint when they did not, since CanvasKit builds no gradient from a transform it cannot invert and an image may not be decoded yet (`packages/core/tests/canvas/paints.test.ts`).
 - `forVisibleStrokes` (`packages/core/src/canvas/scene.ts`) is where a stroke's shader is set and cleared; stroke draw helpers take an already-configured `strokePaint` and must not reset its shader.
 - Shadows are cast from what a layer draws, children included, through `drawSilhouette` (`packages/core/src/canvas/shadows/silhouette.ts`); a container's shadows are drawn by `renderLayerShadows` around its children, not by `renderShape`. A faster path for a shape must give the same pixels as its silhouette (`packages/core/tests/canvas/shadows.test.ts`).
 
@@ -108,7 +108,7 @@ Pixel-affecting features need committed visual coverage, not only mock or geomet
 
 `FigmaAPI` mimics Figma's Plugin API over the SceneGraph. `openpencil eval`, the AI and MCP tools, and the app bind to it. Tests live under `tests/engine/figma/api/` and mirror the API surface.
 
-- **Shape follows Figma.** Match `@figma/plugin-typings` at the version pinned in the root `package.json`. `packages/core/src/figma-api/compatibility.ts` type-checks the supported surface against `PluginAPI`; add every new member to `SupportedPluginAPI` there. Model unsupported members explicitly rather than approximating them.
+- **Shape follows Figma.** Match `@figma/plugin-typings` at the version pinned in the root `package.json`, and add every new member to `SupportedPluginAPI`. `compatibility.ts` fails the typecheck on a member Figma's types lack or type differently, and `packages/core/tests/figma-api/surface.test.ts` on one a script can reach; the lists in `packages/core/src/figma-api/surface.ts` only shrink.
 - **Behavior follows Figma.** Read the Plugin API documentation for the member, and for anything observable (geometry, ordering, defaults, errors) run the same script in live Figma and record the observed result in the test. `figma-use` and `tests/figma/` are the live oracle; `tests/fixtures/figma-oracles/` holds recorded values.
 - **User actions are shared code.** When an editor command does the same thing (group, ungroup, boolean, flatten, instance creation, component sync), call the implementation under `packages/core/src/editor/` or its shared helper. Do not reimplement geometry, placement, or propagation here; new geometry helpers belong in Scene Graph.
 - Geometry getters lay out what the graph's edits touched since the last read, as Figma does, through `flushPendingLayout` in `packages/core/src/figma-api/pending-layout.ts`; a new geometry getter calls it first (`packages/core/tests/figma-api/pending-layout.test.ts`).

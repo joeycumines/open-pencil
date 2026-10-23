@@ -4,7 +4,7 @@ import {
   DEFAULT_STROKE_MITER_LIMIT,
   DEFAULT_STROKE_WEIGHT
 } from './constants'
-import { createInstanceOverrideState } from './instance-overrides'
+import { createInstanceOverrideState } from './instances/overrides'
 import type { NodeType, SceneNode, SourceMetadata } from './types'
 
 export function createDefaultSourceMetadata(): SourceMetadata {
@@ -184,7 +184,7 @@ export function createDefaultNode(
     starInnerRadius: 0.38,
     shapeWithTextType: 'SQUARE',
     shapeUserHeight: 0,
-    shapeUserWidth: 0,
+    shapeTruncates: false,
     componentId: null,
     instanceOverrides: createInstanceOverrideState(),
     componentPropertyDefinitions: [],

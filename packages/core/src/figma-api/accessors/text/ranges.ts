@@ -9,8 +9,7 @@ import type {
   TextBindableField,
   TextCase,
   TextDecoration,
-  TextDecorationStyle,
-  Variable
+  TextDecorationStyle
 } from '@open-pencil/scene-graph'
 
 import {
@@ -39,10 +38,10 @@ import {
   rangeHasUnderline,
   type FigmaDecorationColor,
   type FigmaTextLength,
-  type FigmaVariableAlias,
   type StyledTextSegment,
   type TextSegmentField
 } from '#core/figma-api/text/style'
+import type { FigmaVariableAlias } from '#core/figma-api/variables/values'
 import { styleRunsWithPatch, type TextStylePatch } from '#core/text/character-style'
 
 import { hyperlinkTarget } from './hyperlink'
@@ -183,7 +182,9 @@ function fillsFromPaints(method: string, value: unknown): CharacterStyleOverride
     const problem = paintProblem(paint, index)
     if (problem) throw invalid(method, problem)
   }
-  return (value as FigmaPaint[]).map(figmaPaintToFill)
+  return (value as FigmaPaint[]).map((paint, index) =>
+    figmaPaintToFill(paint, index, method, 'value')
+  )
 }
 
 /**
@@ -404,7 +405,7 @@ export interface TextRangeMethods {
     start: number,
     end: number,
     field: TextBindableField,
-    variable: Variable | null
+    variable: { readonly id: string } | null
   ) => void
   getRangeListOptions: RangeGetter<TextListOptions>
   setRangeListOptions: RangeSetterMethod<TextListOptions>

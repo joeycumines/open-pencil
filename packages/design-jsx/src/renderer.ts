@@ -1,13 +1,9 @@
 import { omitBy } from 'es-toolkit/object'
 
-import {
-  setInstanceOverride,
-  type Color,
-  type NodeType,
-  type SceneGraph,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import type { NodeType, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { parseColor } from '@open-pencil/scene-graph/color'
+import { setInstanceOverride } from '@open-pencil/scene-graph/instances/overrides'
+import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import type { RekaScope } from './behaviours'
 import { renderRekaNode } from './behaviours/render'
@@ -20,15 +16,15 @@ import {
 } from './component-properties'
 import { CONNECTOR_ELEMENT, resolveConnectorEnds } from './connectors'
 import { elementNodeType, elementOwnLayer, type OwnLayerRenderer } from './elements'
-import { applySizeOverrides, propsToOverrides } from './props-overrides'
+import { applySizeOverrides, propsToOverrides, shapeOverrides } from './props-overrides'
 import { LayerRefs } from './refs'
 import { prepareScalarBindings } from './scalar-bindings'
+import { readElementProps } from './schema'
 import type { DesignJSXServices } from './services'
 import { isTextContent, TEXT_CONTENT_NAMES, textContentFields } from './text-content'
 import { FRAGMENT, isTreeNode } from './tree'
 import type { TreeNode } from './tree'
 import type { RenderOptions } from './types'
-import { readElementProps } from './validation'
 import { isVariable, resolveVariableId, type DesignVariable } from './vars'
 
 export interface RenderResult {
@@ -484,6 +480,7 @@ export function elementOverrides(
   const { props, bindings } = preparePropsForRender(graph, tree.props, isText, parentId)
   const overrides = {
     ...propsToOverrides(props, isText, parentLayout),
+    ...shapeOverrides(nodeType, props),
     ...componentMetadata(props, nodeType, componentPropertyScope(graph, parentId))
   }
 

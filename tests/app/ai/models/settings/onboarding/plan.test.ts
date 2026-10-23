@@ -135,6 +135,16 @@ describe('planOnboarding with configured models', () => {
     expect(plan.connections).toEqual([])
   })
 
+  test('connects a selected agent beside a configured design model it does not replace', () => {
+    const plan = planOnboarding(answers({ access: ['anthropic', 'acp:claude-code'] }), {
+      ...desktop,
+      current: { configured: true, design: opus, vision: null, review: null, fast: null }
+    })
+    expect(plan.design).toBe(opus)
+    expect(plan.connections).toEqual(['acp:claude-code'])
+    expect(roleOptions('design', plan, [opus]).map(roleChoiceKey)).toContain('acp:claude-code::')
+  })
+
   test('replaces a configured design model whose access was deselected', () => {
     const plan = planOnboarding(answers({ access: ['openai'] }), {
       ...desktop,
@@ -181,7 +191,7 @@ describe('planOnboarding for review and fast work', () => {
   })
 
   test('follows the design model when its provider has no separate fast model', () => {
-    expect(planOnboarding(answers({ access: ['anthropic'] }), desktop).fast).toBe('design')
+    expect(planOnboarding(answers({ access: ['google'] }), desktop).fast).toBe('design')
   })
 
   test('uses the API vision model for review and fast work behind an agent', () => {

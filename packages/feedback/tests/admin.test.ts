@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createTestService, type TestService } from '#feedback-tests/harness'
-import { MetricsSnapshotSchema, type MetricsSnapshot } from '#feedback/contract'
+import { metricsSnapshotSchema, type MetricsSnapshot } from '#feedback/contract'
 import { createFeedbackDatabase } from '#feedback/db'
 import { exportJWK, generateKeyPair, SignJWT, type CryptoKey } from 'jose'
 import * as v from 'valibot'
@@ -23,7 +23,8 @@ const TABLES = [
   'repoReferrers',
   'siteVisits',
   'sitePages',
-  'siteCountries'
+  'siteCountries',
+  'repoItems'
 ] as const
 
 /** An Access token as Cloudflare would issue it, signed with `key`; `expiresIn` null leaves `exp` out. */
@@ -343,6 +344,101 @@ describe('metrics snapshot API', () => {
     })
   })
 
+  test('issues and pull requests count open ones per finished day, team apart from community', async () => {
+    expect((await snapshot()).github.activity).toEqual({ issues: [], pulls: [] })
+    const opened = (createdAt: string) => ({ createdAt, updatedAt: createdAt })
+    await database()
+      .insertInto('repoItems')
+      .values([
+        // Open before the range, closed inside it.
+        {
+          number: 1,
+          kind: 'issue',
+          authorAssociation: 'NONE',
+          ...opened('2026-10-10T09:00:00.000Z'),
+          closedAt: '2026-10-15T05:00:00.000Z',
+          mergedAt: null
+        },
+        {
+          number: 2,
+          kind: 'issue',
+          authorAssociation: 'MEMBER',
+          ...opened('2026-10-15T23:59:59.000Z'),
+          closedAt: null,
+          mergedAt: null
+        },
+        // Closed before the range: counts nowhere.
+        {
+          number: 3,
+          kind: 'issue',
+          authorAssociation: 'CONTRIBUTOR',
+          ...opened('2026-10-01T09:00:00.000Z'),
+          closedAt: '2026-10-05T09:00:00.000Z',
+          mergedAt: null
+        },
+        // Opened today, which is not counted yet.
+        {
+          number: 4,
+          kind: 'issue',
+          authorAssociation: 'CONTRIBUTOR',
+          ...opened('2026-10-20T09:00:00.000Z'),
+          closedAt: null,
+          mergedAt: null
+        },
+        {
+          number: 5,
+          kind: 'pull',
+          authorAssociation: 'OWNER',
+          ...opened('2026-10-14T09:00:00.000Z'),
+          closedAt: '2026-10-16T09:00:00.000Z',
+          mergedAt: '2026-10-16T09:00:00.000Z'
+        },
+        // Closed without merging.
+        {
+          number: 6,
+          kind: 'pull',
+          authorAssociation: 'FIRST_TIME_CONTRIBUTOR',
+          ...opened('2026-10-16T09:00:00.000Z'),
+          closedAt: '2026-10-17T09:00:00.000Z',
+          mergedAt: null
+        }
+      ])
+      .execute()
+    const { activity } = (await snapshot('2026-10-14', '2026-10-20')).github
+    const zero = { openedTeam: 0, openedCommunity: 0, closedTeam: 0, closedCommunity: 0 }
+    expect(activity.issues).toEqual([
+      { day: '2026-10-14', openTeam: 0, openCommunity: 1, ...zero },
+      {
+        day: '2026-10-15',
+        openTeam: 1,
+        openCommunity: 0,
+        ...zero,
+        openedTeam: 1,
+        closedCommunity: 1
+      },
+      { day: '2026-10-16', openTeam: 1, openCommunity: 0, ...zero },
+      { day: '2026-10-17', openTeam: 1, openCommunity: 0, ...zero },
+      { day: '2026-10-18', openTeam: 1, openCommunity: 0, ...zero },
+      { day: '2026-10-19', openTeam: 1, openCommunity: 0, ...zero }
+    ])
+    const unmerged = { mergedTeam: 0, mergedCommunity: 0 }
+    expect(activity.pulls.slice(0, 4)).toEqual([
+      { day: '2026-10-14', openTeam: 1, openCommunity: 0, ...zero, ...unmerged, openedTeam: 1 },
+      { day: '2026-10-15', openTeam: 1, openCommunity: 0, ...zero, ...unmerged },
+      {
+        day: '2026-10-16',
+        openTeam: 0,
+        openCommunity: 1,
+        ...zero,
+        openedCommunity: 1,
+        closedTeam: 1,
+        mergedTeam: 1,
+        mergedCommunity: 0
+      },
+      { day: '2026-10-17', openTeam: 0, openCommunity: 0, ...zero, ...unmerged, closedCommunity: 1 }
+    ])
+  })
+
   test('the waitlist shows email domains only', async () => {
     await database()
       .insertInto('waitlist')
@@ -414,7 +510,7 @@ describe('metrics snapshot API', () => {
       await accessToken(signingKey)
     )
     const parsed = v.safeParse(
-      v.pipe(v.string(), v.parseJson(), MetricsSnapshotSchema),
+      v.pipe(v.string(), v.parseJson(), metricsSnapshotSchema),
       await response.text()
     )
     expect(parsed.issues).toBeUndefined()

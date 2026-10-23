@@ -2,21 +2,19 @@ import { useLocalStorage } from '@vueuse/core'
 import { uniq } from 'es-toolkit'
 import * as v from 'valibot'
 
-import { DEFAULT_SNAPPING_PREFERENCES, type SnappingPreferences } from '@open-pencil/core/editor'
-import { COMMENT_SORTS, type CommentSort } from '@open-pencil/scene-graph'
+import { DEFAULT_SNAPPING_PREFERENCES, type SnappingPreferences } from '@open-pencil/core'
+import { COMMENT_SORTS, type CommentSort } from '@open-pencil/scene-graph/comments'
 
-import { DEFAULT_AGENT_STEPS, resolveAgentStepLimit } from '@/app/ai/chat/step-limit'
+import { DEFAULT_AGENT_STEPS, resolveAgentStepLimit } from '@/app/ai/reply/step-limit'
 import {
   DEFAULT_TOOLBAR_LAYOUT,
   normalizeToolbarLayout,
   type ToolbarLayout
 } from '@/app/editor/toolbar/layout'
-import { DEFAULT_RECENT_FILES_LIMIT, recentFilesLimitSchema } from '@/app/recent-files/limit'
-import {
-  accentPreferenceSchema,
-  DEFAULT_ACCENT,
-  type AccentPreference
-} from '@/app/shell/accent/palette'
+import { DEFAULT_RECENT_FILES_LIMIT } from '@/app/recent-files/limit'
+import { recentFilesLimitSchema } from '@/app/recent-files/schema'
+import { DEFAULT_ACCENT } from '@/app/shell/accent/palette'
+import { accentPreferenceSchema, type AccentPreference } from '@/app/shell/accent/schema'
 
 export const ANIMATION_PREFERENCES = ['system', 'off'] as const
 export type AnimationPreference = (typeof ANIMATION_PREFERENCES)[number]
