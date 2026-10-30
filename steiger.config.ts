@@ -11,6 +11,7 @@ export default defineConfig([
   openPencilArchitecturePlugin,
   {
     ignores: [
+      '.agents/**',
       '.claude/**',
       'node_modules/**',
       'dist/**',
