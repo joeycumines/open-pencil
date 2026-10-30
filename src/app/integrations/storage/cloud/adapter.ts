@@ -1,13 +1,10 @@
 import { CloudAPIError, type CloudAPIClient } from '@open-pencil/cloud/client'
+import { CLOUD_DOCUMENT_NAME_MAX_LENGTH } from '@open-pencil/cloud/contract'
 import { extractFigThumbnailFromReader } from '@open-pencil/fig'
 
 import { cloudServerHost } from '@/app/cloud/servers/address'
 import { findCloudServer } from '@/app/cloud/servers/store'
-import {
-  cloudAPIClient,
-  cloudConnection,
-  refreshCloudConnection
-} from '@/app/cloud/sessions/connection'
+import { cloudAPIClient, recheckedCloudConnection } from '@/app/cloud/sessions/connection'
 
 import { StorageRevisionConflictError, StorageUnavailableError } from '../errors'
 import { storageFetch } from '../s3/fetch'
@@ -25,6 +22,22 @@ function invalidUpload(error: unknown): boolean {
   return error instanceof CloudAPIError && error.code === 'invalid_upload'
 }
 
+/**
+ * The name as Cloud accepts it: trimmed and cut to its limit, so a long name never fails every save.
+ * The cut never splits a character in two.
+ */
+function cloudDocumentName(name: string): string {
+  const trimmed = name.trim()
+  const cut =
+    trimmed.length > CLOUD_DOCUMENT_NAME_MAX_LENGTH
+      ? trimmed
+          .slice(0, CLOUD_DOCUMENT_NAME_MAX_LENGTH)
+          .replace(/[\uD800-\uDBFF]$/, '')
+          .trimEnd()
+      : trimmed
+  return cut || 'Untitled'
+}
+
 export type CloudStorageDependencies = {
   /** The signed-in API client for a server, or a `StorageUnavailableError`. */
   client(serverId: string): Promise<CloudAPIClient>
@@ -32,12 +45,11 @@ export type CloudStorageDependencies = {
   objectFetch(input: string, init: RequestInit): Promise<Response>
 }
 
-/** The API client of a signed-in server, checking once more before giving up. */
+/** The API client of a signed-in server, asking it once more before giving up. */
 async function signedInClient(serverId: string): Promise<CloudAPIClient> {
   const server = findCloudServer(serverId)
   if (!server) throw new StorageUnavailableError('This Cloud server was removed from the app')
-  let connection = cloudConnection(server.id)
-  if (connection.state !== 'signed-in') connection = await refreshCloudConnection(server)
+  const connection = await recheckedCloudConnection(server)
   if (connection.state !== 'signed-in' || !connection.discovery) {
     throw new StorageUnavailableError(`Sign in to ${cloudServerHost(server.url)} to sync`)
   }
@@ -108,9 +120,10 @@ export function createCloudStorageAdapter(
     async putDocument(id, bytes, metadata, onProgress, options) {
       const cloud = await client()
       const baseRevision = options?.baseRevision ?? null
+      const name = cloudDocumentName(metadata.name)
       // Without a revision this is the first save; the document may not exist on the server yet.
       if (!baseRevision && !(await listed(id))) {
-        await cloud.createDocument(workspaceId(), { id, name: metadata.name })
+        await cloud.createDocument(workspaceId(), { id, name })
       }
       // The workspace keeps images once; the stored file names them and uploads only those it lacks.
       const { lean, images } = splitCloudDocument(bytes)
@@ -133,6 +146,7 @@ export function createCloudStorageAdapter(
         })
         const committed = await cloud.commitUpload(upload.uploadId, {
           checksum,
+          name,
           multipart: upload.multipart,
           images: named.map((image) => ({ name: image.name, checksum: image.checksum }))
         })

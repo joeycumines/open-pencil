@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
+import type * as Y from 'yjs'
+
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { openRoomSession, type RoomSession, type RoomSessionOptions } from '@/app/collab/session'
+import { claimRoot } from '@/app/collab/shared-tree/fields'
 import { createEditorStore, type EditorStore } from '@/app/editor/session'
 import { presenceOf } from '@/app/presence/registry'
 
@@ -51,6 +54,32 @@ function firstPageId(store: EditorStore) {
 }
 
 describe('room sessions', () => {
+  test('renames reach the saver and count as edits without echoing back', async () => {
+    await withRooms(async (open, settle) => {
+      const host = newStore('Checkout')
+      const shared = open({ roomId: ROOM_A, store: host, origin: 'shared' })
+      shared.shareDocument()
+      const guest = newStore()
+      const joined = open({ roomId: ROOM_A, store: guest, origin: 'joined' })
+      await settle()
+      shared.saves.markSaved(shared.saves.counts())
+      await settle()
+      expect(joined.saves.unsaved()).toBe(false)
+
+      guest.renameDocument('Payment')
+      await settle()
+      expect(host.state.documentName).toBe('Payment')
+      expect(shared.saves.unsaved()).toBe(true)
+      const counts = shared.saves.counts()
+      await settle()
+      expect(shared.saves.counts()).toEqual(counts)
+
+      host.renameDocument('Receipt')
+      await settle()
+      expect(guest.state.documentName).toBe('Receipt')
+    })
+  })
+
   test("a joined tab shows the sharer's document, with its name, once it arrives", async () => {
     await withRooms(async (open, settle) => {
       const host = newStore('Checkout flow')
@@ -159,6 +188,26 @@ describe('room sessions', () => {
       expect(session.hasDocument.value).toBe(true)
       expect(session.status.value).toBe('alone')
       loaded()
+    })
+  })
+
+  test('a tab that holds the room’s document keeps showing it when the room’s root comes first', async () => {
+    await withRooms(async (open) => {
+      const room: { doc?: Y.Doc } = {}
+      const session = open({
+        roomId: ROOM_A,
+        store: newStore('Poster'),
+        origin: 'shared',
+        holdsDocument: true,
+        openSavedCopy: (_roomId, ydoc) => {
+          room.doc = ydoc
+          return noSavedCopy()
+        }
+      })
+      // The root another editor claimed, before any of its layers.
+      claimRoot(expectDefined(room.doc, 'room document').getMap('meta'), 'room:root')
+      expect(session.hasDocument.value).toBe(false)
+      expect(session.status.value).toBe('alone')
     })
   })
 

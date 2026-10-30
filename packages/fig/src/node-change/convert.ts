@@ -12,6 +12,7 @@ import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defau
 import { OPEN_PENCIL_PLUGIN_DATA } from '@open-pencil/scene-graph/plugin-data'
 import { POINT_COUNT_RANGE } from '@open-pencil/scene-graph/polygon'
 import { isShapeWithTextType } from '@open-pencil/scene-graph/shape-with-text'
+import { pixelLength } from '@open-pencil/scene-graph/text'
 import { parseVariantName } from '@open-pencil/scene-graph/variant-name'
 /* eslint-disable max-lines -- kiwi↔scene conversion helpers are tightly coupled */
 
@@ -50,12 +51,19 @@ import { decodeVectorNetworkBlob, textPathStartSegment, type StyleOverride } fro
 
 export { convertEffects, convertFills, convertStrokes, setVariableColorResolver } from './paint'
 export { importStyleRuns } from './style/runs'
-export { convertLetterSpacing, convertLineHeight, mapTextDecoration } from './text/values'
+export {
+  convertLetterSpacing,
+  convertLineHeight,
+  figmaLetterSpacing,
+  figmaLineHeight,
+  mapTextDecoration
+} from './text/values'
 export { resolveGeometryPaths } from './vector/geometry'
 
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import type {
   SceneNode,
+  TextLength,
   NodeType,
   Fill,
   StrokeCap,
@@ -324,19 +332,33 @@ function convertPolygonProps(
  * A text's line height. Figma writes auto as 100 percent, and OpenPencil once wrote none for
  * it; a text in auto lines up each line at its own font's height. Figma saves each line at the
  * larger of its line height and its tallest font's height, so a first line shorter than the
- * text's height in pixels was laid out at another one, which a style the text uses set.
+ * text's height in pixels was laid out at another one, which a style the text uses set. A first
+ * line with a range of its own line height was laid out at the range's, not the text's.
  */
-function importedTextLineHeight(nc: NodeChange): number | null {
+function importedTextLineHeight(nc: NodeChange): TextLength | null {
   if (!nc.lineHeight || isFigmaAutoLineHeight(nc.lineHeight)) return null
-  const derivedLineHeight = nc.derivedTextData?.baselines?.[0]?.lineHeight
+  const firstLine = nc.derivedTextData?.baselines?.[0]
   if (
     nc.lineHeight.units === 'PIXELS' &&
-    derivedLineHeight !== undefined &&
-    Number.isFinite(derivedLineHeight) &&
-    derivedLineHeight < nc.lineHeight.value
+    firstLine !== undefined &&
+    Number.isFinite(firstLine.lineHeight) &&
+    firstLine.lineHeight < nc.lineHeight.value &&
+    !rangeSetsLineHeight(nc, firstLine.firstCharacter, firstLine.endCharacter)
   )
-    return derivedLineHeight
-  return convertLineHeight(nc.lineHeight, nc.fontSize)
+    return pixelLength(firstLine.lineHeight)
+  return convertLineHeight(nc.lineHeight)
+}
+
+/** Whether a character from `start` up to `end` has a line height from its range's style. */
+function rangeSetsLineHeight(nc: NodeChange, start: number, end: number): boolean {
+  const ids = new Set(
+    (nc.textData?.styleOverrideTable ?? [])
+      .filter((style) => style.lineHeight)
+      .map((style) => style.styleID as number | undefined)
+  )
+  return (nc.textData?.characterStyleIDs ?? [])
+    .slice(start, end)
+    .some((id) => id !== 0 && ids.has(id))
 }
 
 type TextProps = Pick<
@@ -365,6 +387,7 @@ type TextProps = Pick<
   | 'hangingList'
   | 'styleRuns'
   | 'fontVariations'
+  | 'opticalSizeFromFontSize'
   | 'fontFeatures'
   | 'textTruncation'
   | 'textDirection'
@@ -384,7 +407,7 @@ function convertTextDecorationProps(
   | 'textUnderlineOffset'
 > {
   return {
-    textDecoration: mapTextDecoration(nc.textDecoration as string),
+    textDecoration: mapTextDecoration(nc.textDecoration),
     textDecorationStyle: (nc.textDecorationStyle ?? 'SOLID') as SceneNode['textDecorationStyle'],
     textDecorationThickness: nc.textDecorationThickness?.value ?? null,
     textDecorationFills: convertFills(nc.textDecorationFillPaints),
@@ -447,11 +470,12 @@ function convertTextProps(nc: NodeChange, blobs: Uint8Array[]): TextProps {
     ...convertTextDecorationProps(nc),
     leadingTrim: (nc.leadingTrim ?? 'NONE') as SceneNode['leadingTrim'],
     lineHeight: importedTextLineHeight(nc),
-    letterSpacing: convertLetterSpacing(nc.letterSpacing, nc.fontSize),
+    letterSpacing: convertLetterSpacing(nc.letterSpacing),
     maxLines: (nc.maxLines ?? null) as number | null,
     ...convertParagraphProps(nc),
     styleRuns: importStyleRuns(nc),
     fontVariations: convertFontVariations(nc),
+    opticalSizeFromFontSize: nc.detachOpticalSizeFromFontSize !== true,
     fontFeatures: convertFontFeatures(nc),
     textTruncation: (nc.textTruncation as string) === 'ENDING' ? 'ENDING' : 'DISABLED',
     textDirection: readNodeChangePluginData(nc, OPEN_PENCIL_PLUGIN_DATA.textDirection) ?? 'AUTO',
@@ -462,16 +486,28 @@ function convertTextProps(nc: NodeChange, blobs: Uint8Array[]): TextProps {
 function convertDerivedText(
   nc: NodeChange,
   blobs: Uint8Array[]
-): Pick<SceneNode, 'derivedLayout' | 'derivedTextGlyphs'> {
+): Pick<SceneNode, 'derivedLayout' | 'derivedTextGlyphs' | 'derivedTextHeight'> {
   const layoutSize = nc.derivedTextData?.layoutSize
   return {
     derivedLayout: layoutSize ? { width: layoutSize.x, height: layoutSize.y } : null,
+    derivedTextHeight: savedLinesHeight(nc),
     derivedTextGlyphs: convertFigmaDerivedTextGlyphs(
       nc.derivedTextData,
       blobs,
       nc.textData?.characters ?? ''
     )
   }
+}
+
+/**
+ * How far the lines Figma saved reach: the bottom of the last one. Figma's layout size is the box
+ * of a fixed-size text even when its lines draw past it, so the lines themselves tell.
+ */
+function savedLinesHeight(nc: NodeChange): number | null {
+  const bottoms = (nc.derivedTextData?.baselines ?? []).map(
+    (line) => (line.lineY ?? line.position.y - line.lineAscent) + line.lineHeight
+  )
+  return bottoms.length > 0 ? Math.max(...bottoms) : null
 }
 
 function convertLayoutPadding(
@@ -729,8 +765,8 @@ export function nodeChangeToProps(
     ...convertPolygonProps(nc),
     ...convertTextProps(nc, blobs),
     ...convertShapeWithTextProps(nc),
-    horizontalConstraint: mapConstraint(nc.horizontalConstraint as string),
-    verticalConstraint: mapConstraint(nc.verticalConstraint as string),
+    horizontalConstraint: mapConstraint(nc.horizontalConstraint),
+    verticalConstraint: mapConstraint(nc.verticalConstraint),
     ...convertLayoutProps(nc),
     ...vectorAndStrokeProps,
     minWidth: minimumSizeDimension(nc.minSize, 'x'),
@@ -739,7 +775,11 @@ export function nodeChangeToProps(
     maxHeight: maximumSizeDimension(nc.maxSize, 'y'),
     targetAspectRatio: targetAspectRatio(nc),
     isMask: nc.mask ?? false,
-    maskType: (nc.maskType ?? 'ALPHA') as 'ALPHA' | 'VECTOR' | 'LUMINANCE',
+    // A .fig file stores a vector mask as OUTLINE.
+    maskType: (nc.maskType === 'OUTLINE' ? 'VECTOR' : (nc.maskType ?? 'ALPHA')) as
+      | 'ALPHA'
+      | 'VECTOR'
+      | 'LUMINANCE',
     maskIsOutline: nc.maskIsOutline ?? false,
     expanded: true,
     autoRename: (nc.autoRename ?? true) as boolean,
@@ -1203,6 +1243,7 @@ export const FIGMA_RAW_NODE_FIELD_KEYS = [
   'textUserLayoutVersion',
   'textExplicitLayoutVersion',
   'fontVariations',
+  'detachOpticalSizeFromFontSize',
   'fontVariantCommonLigatures',
   'fontVariantContextualLigatures',
   'toggledOnOTFeatures',

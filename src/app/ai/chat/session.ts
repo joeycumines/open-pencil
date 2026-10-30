@@ -8,10 +8,13 @@ import type { ACPAgentID, AIProviderID } from '@open-pencil/core/constants'
 
 import { AgentSetupError, assertAgentReady } from '@/app/ai/agents/setup/readiness'
 import { classifyAIChatError, type AIChatFailure } from '@/app/ai/chat/failure'
+import { hasSteeringMessage } from '@/app/ai/chat/queue'
 import SYSTEM_PROMPT from '@/app/ai/chat/system-prompt'
 import { chatThinkingLevel } from '@/app/ai/chat/thinking'
 import { createAIModelRuntime, resolveModelConnectionAPIKey } from '@/app/ai/models'
 import { resolveLanguageModelID } from '@/app/ai/models/language-model'
+import { cloudCreditRefusal } from '@/app/ai/providers/openpencil/failure'
+import { OPENPENCIL_AI_PROVIDER } from '@/app/ai/providers/openpencil/provider'
 import { settleMessage } from '@/app/ai/reply/settle'
 import { currentRun } from '@/app/ai/tools'
 import type { AgentTurnUsage } from '@/app/ai/transports/acp'
@@ -157,11 +160,13 @@ export function createChatSessionManager({
     const runtime = await createAIModelRuntime('design')
     if (runtime?.kind !== 'harness') throw new Error('The Design agent is not configured for Pi')
     await assertAgentReady('pi')
-    const [{ HarnessChatTransport }, { buildPiMCPServers }, { readPiAccount }] = await Promise.all([
-      import('@/app/ai/transports/pi'),
-      import('@/app/integrations/mcp'),
-      import('@/app/ai/agents/pi/settings')
-    ])
+    const [{ HarnessChatTransport }, { buildPiMCPServers }, { readPiAccount }, { harnessSkills }] =
+      await Promise.all([
+        import('@/app/ai/transports/pi'),
+        import('@/app/integrations/mcp'),
+        import('@/app/ai/agents/pi/settings'),
+        import('@/app/ai/skills/harness')
+      ])
     // A saved key is an AI Gateway key; without one, Pi uses the CLI's own sign-in.
     const apiKey = await resolveModelConnectionAPIKey(runtime.role.connection.id)
     const account = apiKey ? null : await readPiAccount()
@@ -185,7 +190,8 @@ export function createChatSessionManager({
           permissionMode: runtime.role.profile.harnessPermissionMode ?? 'allow-edits'
         },
         instructions: SYSTEM_PROMPT,
-        mcpServers: await buildPiMCPServers()
+        mcpServers: await buildPiMCPServers(),
+        skills: await harnessSkills()
       },
       apiKey
         ? { OPENPENCIL_HARNESS_API_KEY: apiKey }
@@ -220,7 +226,8 @@ export function createChatSessionManager({
       thinkingLevel: () => chatThinkingLevel.value,
       onError: captureProviderError,
       diagnosticContext,
-      recorder: runRecorder
+      recorder: runRecorder,
+      yieldWhen: hasSteeringMessage
     })
   }
 
@@ -239,6 +246,8 @@ export function createChatSessionManager({
     if (!chat || transportDirty || currentChatStore !== store) {
       const messages = initialMessages ?? currentChatMessages.get(store)
       const diagnosticContext: AIDiagnosticContext = { sessionId, runId: crypto.randomUUID() }
+      // Failures belong to the provider this chat was created for, even if the profile changes.
+      const chatProviderID = providerID.value
       let transport: ChatTransport<UIMessage>
       // An ACP or Pi chat's tool calls show as an agent of that kind (`src/app/automation/agents.ts`).
       let agentKind: 'acp' | 'harness' | null = null
@@ -264,9 +273,18 @@ export function createChatSessionManager({
           const reportedError = activeProviderError ?? error
           activeProviderError = null
           const signInOnly = AI_PROVIDERS.some(
-            (provider) => provider.id === providerID.value && provider.signInOnly
+            (provider) => provider.id === chatProviderID && provider.signInOnly
           )
-          failure.value = classifyAIChatError(reportedError, { signInOnly })
+          const classified = classifyAIChatError(reportedError, { signInOnly })
+          const refusal =
+            chatProviderID === OPENPENCIL_AI_PROVIDER ? cloudCreditRefusal(reportedError) : null
+          failure.value = refusal
+            ? {
+                ...classified,
+                reason: 'cloud-credits-exhausted',
+                resetsAt: refusal.resetsAt ?? undefined
+              }
+            : classified
           const { errorName, errorCode, message, stack } = diagnosticErrorDetails(reportedError)
           recordChatFailed({ errorName, errorCode, message, stack }, diagnosticContext)
         },

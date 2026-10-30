@@ -2,6 +2,7 @@ mod agents;
 mod credentials;
 mod files;
 mod fonts;
+mod icons;
 mod launch;
 mod menu;
 mod network;
@@ -76,6 +77,9 @@ pub fn run() {
             credential_store_availability,
             credential_write,
             agents::mcp::mcp_lookup,
+            agents::skills::skill_folders,
+            agents::skills::project_skill_folders,
+            agents::skills::skill_folder_file,
             #[cfg(feature = "native-test")]
             launch::native_test_open_deep_link,
             system::opener::open_external_url,
@@ -84,6 +88,8 @@ pub fn run() {
             launch::paths::path_matches_suffix,
             list_system_fonts,
             load_system_font,
+            icons::sf_symbols_catalogue,
+            icons::sf_symbols_render,
             proxy_http_request,
             cancel_http_request,
             files::recent::set_recent_files,

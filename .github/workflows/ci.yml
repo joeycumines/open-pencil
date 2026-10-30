@@ -119,6 +119,9 @@ jobs:
       - name: Typecheck test suites
         run: bun run check:test-types
 
+      - name: Typecheck repository tools
+        run: bun run check:tools
+
       - name: Enforce architecture and type-shape boundaries
         run: bun run check:arch && bun run check:test-homes && bun run test:type-shapes
 
@@ -343,7 +346,7 @@ jobs:
       # The editor's demo document draws its shader fills at build time in a headless Chromium.
       - name: Install Chromium for the demo document
         if: matrix.worker
-        run: bunx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
 
       # The Worker serves the editor and the portal as static assets, and every official
       # deployment bundles them.

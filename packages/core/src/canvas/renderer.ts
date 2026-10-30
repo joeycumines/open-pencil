@@ -173,6 +173,8 @@ export class SkiaRenderer {
    * null for a canvas that draws only the document, such as an export.
    */
   stickyPlaceholder: string | null = null
+  /** What an empty connector label shows while it is typed into; null draws nothing. */
+  connectorLabelPlaceholder: string | null = null
   tracksSceneSettlement = true
   /** Colour space this renderer's surface presents; colours convert into it when painting. */
   presentationColorSpace: RenderColorSpace = 'srgb'
@@ -712,7 +714,7 @@ export class SkiaRenderer {
     height: number,
     format: 'JPG' | 'WEBP',
     quality: number
-  ): Uint8Array | null {
+  ): Uint8Array<ArrayBuffer> | null {
     if (!IS_BROWSER) return null
     try {
       const canvas = document.createElement('canvas')
@@ -730,7 +732,8 @@ export class SkiaRenderer {
       if (!dataURL.startsWith(`data:${mime}`)) return null
       const base64 = dataURL.split(',')[1]
       if (!base64) return null
-      return toUint8Array(base64)
+      // js-base64 types its bytes as any buffer; a copy has the plain one a `Blob` takes.
+      return new Uint8Array(toUint8Array(base64))
     } catch (err) {
       console.warn('Raster encode fallback failed:', err)
       return null

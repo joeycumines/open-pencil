@@ -2,7 +2,11 @@ import { useSessionStorage } from '@vueuse/core'
 import * as v from 'valibot'
 import { ref, watch } from 'vue'
 
-import { cloudDesktopLinkURL, type CloudLinkKind } from '@open-pencil/cloud/contract'
+import {
+  cloudDesktopLinkURL,
+  parseCloudLinkPath,
+  type CloudLinkKind
+} from '@open-pencil/cloud/contract'
 import { useViewportKind } from '@open-pencil/vue/editor/viewport-kind'
 import { cloudMessages } from '@open-pencil/vue/i18n'
 
@@ -11,20 +15,18 @@ import { isTauri } from '@/app/tauri/env'
 import { bindDesktopLinkQueue } from '@/app/tauri/link-queue'
 import { IS_BROWSER } from '@/constants'
 
-import { cloudSignedIn, openCloudConnect } from './connect/flow'
+import { cloudSignedIn, signInToOpen } from './connect/flow'
 import { beginCloudInvitation } from './invitations/flow'
 import { cloudServerHost, normalizeCloudServerURL } from './servers/address'
 import { cloudServerForLink, findCloudServer } from './servers/store'
 import { openCloudShareLink } from './sharing/link'
 
 /**
- * An invitation, `/cloud/invitations/:id?server=…#token`, or a document shared by link,
- * `/cloud/share/:id?server=…#secret`. The desktop app gets the same link as
- * `openpencil://cloud/<kind>/<id>?server=…#secret`.
+ * An invitation, `/invitations/:id#token`, or a document shared by link, `/share/:id#secret`, on
+ * the server they belong to. The desktop app gets the same link as
+ * `openpencil://cloud?url=<link>#secret`.
  */
 export type CloudLink = { kind: CloudLinkKind; id: string; server: string; secret: string }
-
-const CLOUD_LINK_PATH = /^\/cloud\/(invitations|share)\/([^/]+)$/
 
 /** Desktop events and commands for `openpencil://cloud` links (`desktop/src/launch/mod.rs`). */
 const CLOUD_LINKS_EVENT = 'open-cloud-links'
@@ -37,18 +39,12 @@ const cloudLinkSchema = v.object({
   secret: v.string()
 })
 
-/** The Cloud link a web address carries, if it is one. */
+/** The Cloud link a web address carries, if it is one; its server is the address's own. */
 export function readCloudLink(url: URL): CloudLink | null {
-  const [, kind, id] = url.pathname.match(CLOUD_LINK_PATH) ?? []
-  const server = url.searchParams.get('server')
+  const path = parseCloudLinkPath(url.pathname)
   const secret = url.hash.slice(1)
-  if ((kind !== 'invitations' && kind !== 'share') || !id || !server || !secret) return null
-  try {
-    return { kind, id: decodeURIComponent(id), server, secret }
-  } catch {
-    // A broken escape such as `%E0` is no link; it must not stop the app from starting.
-    return null
-  }
+  if (!path || path.kind === 'documents' || !secret) return null
+  return { kind: path.kind, id: path.id, server: url.origin, secret }
 }
 
 /** Hands a Cloud link to the desktop app; the browser asks before it opens the app. */
@@ -84,7 +80,7 @@ async function signInForLink(link: CloudLink): Promise<void> {
     return
   }
   signingIn.value = JSON.stringify(link satisfies CloudLink)
-  openCloudConnect({ serverId: server.id })
+  await signInToOpen(server.id)
 }
 
 /** Opens an invitation's dialog, or a shared document. */
@@ -118,17 +114,22 @@ export async function openCloudLink(link: CloudLink): Promise<void> {
   }
 }
 
+/** Opens the shared link kept while signing in to `serverId`, if one was. */
+export async function reopenCloudLink(serverId: string): Promise<void> {
+  const parsed = v.safeParse(
+    v.pipe(v.string(), v.parseJson(), cloudLinkSchema),
+    signingIn.value ?? ''
+  )
+  if (!parsed.success) return
+  const url = normalizeCloudServerURL(parsed.output.server)
+  if (url !== findCloudServer(serverId)?.url) return
+  await openCloudLink(parsed.output)
+}
+
 /** Opens a shared link again once signing in for it finished. */
 export function resumeCloudLink(): () => void {
   return watch(cloudSignedIn, (signedIn) => {
-    const parsed = v.safeParse(
-      v.pipe(v.string(), v.parseJson(), cloudLinkSchema),
-      signingIn.value ?? ''
-    )
-    if (!signedIn || !parsed.success) return
-    const url = normalizeCloudServerURL(parsed.output.server)
-    if (url !== findCloudServer(signedIn.serverId)?.url) return
-    void openCloudLink(parsed.output)
+    if (signedIn) void reopenCloudLink(signedIn.serverId)
   })
 }
 

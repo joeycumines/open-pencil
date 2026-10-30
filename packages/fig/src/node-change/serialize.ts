@@ -27,7 +27,7 @@ import { applyFontFeaturesToKiwi } from './font/features'
 import { weightToFigmaStyle } from './font/style'
 import { fillToKiwiPaint, safeColor } from './paint'
 import { exportTextData, fontVariationToKiwi } from './text/data-export'
-import { FIGMA_AUTO_LINE_HEIGHT } from './text/values'
+import { figmaLetterSpacing, figmaLineHeight } from './text/values'
 import {
   exportedVariableConsumptionEntries,
   mergeVariableConsumptionMaps
@@ -101,6 +101,7 @@ function serializeTextProps(
   if (node.fontVariations.length > 0) {
     nc.fontVariations = node.fontVariations.map(fontVariationToKiwi)
   }
+  if (!node.opticalSizeFromFontSize) nc.detachOpticalSizeFromFontSize = true
   const autoResize = node.textAutoResize
   const rawNodeFields = effectiveFigmaRawNodeFields(node)
   if (!node.source.id || autoResize !== 'NONE' || 'textAutoResize' in rawNodeFields) {
@@ -132,11 +133,8 @@ function serializeTextProps(
     })
   }
   if (node.leadingTrim !== 'NONE') nc.leadingTrim = node.leadingTrim
-  nc.lineHeight =
-    node.lineHeight === null
-      ? { ...FIGMA_AUTO_LINE_HEIGHT }
-      : { value: node.lineHeight, units: 'PIXELS' }
-  nc.letterSpacing = { value: node.letterSpacing, units: 'PIXELS' }
+  nc.lineHeight = figmaLineHeight(node.lineHeight)
+  nc.letterSpacing = figmaLetterSpacing(node.letterSpacing)
   if (node.textDecoration !== 'NONE') {
     nc.textDecoration = node.textDecoration === 'UNDERLINE' ? 'UNDERLINE' : 'STRIKETHROUGH'
   }
@@ -360,37 +358,43 @@ function serializeLayoutProps(node: SceneNode, nc: KiwiNodeChange, graph: SceneG
 function serializeGeometry(node: SceneNode, nc: KiwiNodeChange, blobs: Uint8Array[]): void {
   if (node.isMask) {
     nc.mask = true
-    nc.maskType = node.maskType
+    // Figma's MaskType names a vector mask OUTLINE. ALPHA and LUMINANCE already match.
+    nc.maskType = node.maskType === 'VECTOR' ? 'OUTLINE' : node.maskType
     if (node.maskIsOutline) nc.maskIsOutline = true
   }
 
-  let styleOverrides: StyleOverride[] = []
+  const network = node.type === 'VECTOR' ? node.vectorNetwork : null
+  const { table: styleOverrides, styleToId } = network
+    ? buildStyleOverrideTable(network)
+    : { table: [] as StyleOverride[], styleToId: undefined }
+  // A fill geometry entry with its own paints gets a style override of its own.
+  const fillStyleIds = node.fillGeometry.map((geometry) => {
+    if (!geometry.fills || geometry.fills.length === 0) return 0
+    const styleID = styleOverrides.length + 1
+    styleOverrides.push({ styleID, fillPaints: geometry.fills.map(fillToKiwiPaint) })
+    return styleID
+  })
+
   const vectorData: Record<string, unknown> = {}
-  if (node.vectorNetwork && node.type === 'VECTOR') {
-    const { table, styleToId } = buildStyleOverrideTable(node.vectorNetwork)
-    styleOverrides = table
+  if (network) {
+    // fillGeometry[i] is region i's fill when the counts match (see regenerateFillGeometry), and
+    // Figma gives both the same style ID: its edit mode refills regions from the network alone.
+    const regionStyleIds = network.regions.length === fillStyleIds.length ? fillStyleIds : undefined
     const blobIdx = blobs.length
-    blobs.push(encodeVectorNetworkBlob(node.vectorNetwork, styleToId))
+    blobs.push(encodeVectorNetworkBlob(network, styleToId, regionStyleIds))
     vectorData.vectorNetworkBlob = blobIdx
     vectorData.normalizedSize = { x: node.width, y: node.height }
   }
 
   if (node.fillGeometry.length > 0) {
-    nc.fillGeometry = node.fillGeometry.map((geometry) => {
+    nc.fillGeometry = node.fillGeometry.map((geometry, index) => {
       const blobIdx = blobs.length
       blobs.push(geometry.commandsBlob)
-      if (!geometry.fills || geometry.fills.length === 0) {
-        return {
-          windingRule: toKiwiWindingRule(geometry.windingRule),
-          commandsBlob: blobIdx
-        }
-      }
-      const styleID = styleOverrides.length + 1
-      styleOverrides.push({ styleID, fillPaints: geometry.fills.map(fillToKiwiPaint) })
+      const styleID = fillStyleIds[index]
       return {
         windingRule: toKiwiWindingRule(geometry.windingRule),
         commandsBlob: blobIdx,
-        styleID
+        ...(styleID ? { styleID } : {})
       }
     })
   }
