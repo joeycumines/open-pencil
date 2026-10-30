@@ -2,7 +2,8 @@ import { describe, test, expect, setDefaultTimeout } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { parseFigFile, exportFigFile, initCodec } from '@open-pencil/core'
+import { exportFigFile, parseFigFile } from '@open-pencil/core/io/formats/fig'
+import { initCodec } from '@open-pencil/kiwi/fig/codec'
 
 import { testPath } from '#tests/helpers/paths'
 
