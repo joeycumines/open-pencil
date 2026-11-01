@@ -6,12 +6,12 @@ import {
   shapeWithTextLabel
 } from '@open-pencil/scene-graph/generated'
 
-import { SHAPE_KIND } from './enums'
-import { collectFillProps, collectStrokeProps } from './export/paint'
-import type { JSXProp } from './export/value'
-import { figJamTextFields, figJamTextProps } from './figjam-text'
-import { readElementProps, shapePropsSchema } from './schema'
-import { plainTextOf, type TreeNode } from './tree'
+import { SHAPE_KIND } from '../enums'
+import { collectFillProps, collectStrokeProps } from '../export/paints'
+import type { JSXProp } from '../export/value'
+import { readElementProps, shapePropsSchema } from '../schema'
+import { plainTextOf, type TreeNode } from '../tree'
+import { figJamTextFields, figJamTextProps } from './text'
 
 /**
  * `<Shape kind="diamond" bg="#FFC943">Decide</Shape>`: a FigJam shape with text, made from the

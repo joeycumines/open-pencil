@@ -1,10 +1,10 @@
-import { DESIGN_JSX_SUPPORTED_PROPERTY_NAMES } from './definitions'
-import { DESIGN_JSX_ELEMENTS } from './elements'
-import { DESIGN_JSX_HELPERS } from './helpers'
-import authoring from './reference/authoring.md?raw'
-import { AUTHORING_EXAMPLES } from './reference/examples'
+import { DESIGN_JSX_SUPPORTED_PROPERTY_NAMES } from '../definitions'
+import { DESIGN_JSX_ELEMENTS } from '../elements'
+import { DESIGN_JSX_HELPERS } from '../helpers'
+import authoring from './authoring.md?raw'
+import { AUTHORING_EXAMPLES } from './examples'
 
-export { AUTHORING_EXAMPLES, type AuthoringExample } from './reference/examples'
+export { AUTHORING_EXAMPLES, type AuthoringExample } from './examples'
 
 /** Canonical scene-authoring guidance shared by runtime prompts and generated skill references. */
 export const JSX_REFERENCE = [

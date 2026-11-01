@@ -1,8 +1,9 @@
-import { difference } from 'es-toolkit/array'
-import { isPlainObject } from 'es-toolkit/predicate'
+import { difference, isPlainObject } from 'es-toolkit'
 
-import { property } from './component-properties'
-import type { DesignJSXHelperDefinition } from './definitions'
+import { property } from '../components/properties'
+import type { DesignJSXHelperDefinition } from '../definitions'
+import { ref } from '../refs'
+import { defineMode, defineVars, designMode, designVar } from '../variables'
 import {
   backgroundBlur,
   dropShadow,
@@ -23,8 +24,6 @@ import {
   type GradientPaintOptions,
   type SolidPaintOptions
 } from './paints'
-import { ref } from './refs'
-import { defineMode, defineVars, designMode, designVar } from './variables'
 
 /** Every option a helper reads; `satisfies` keeps the list equal to the options type. */
 type OptionKeys<Options> = Record<keyof Options, true>

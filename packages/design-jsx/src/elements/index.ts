@@ -1,15 +1,17 @@
-import { difference } from 'es-toolkit/array'
+import { difference } from 'es-toolkit'
 
 import type { NodeType, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
-import { REKA_ELEMENTS, rekaRole } from './behaviours'
-import { connectorBindingTarget, renderConnectorNode } from './connectors'
+import { REKA_ELEMENTS, rekaRole } from '../behaviours'
 import {
   DESIGN_JSX_PARAGRAPH_PROPERTY_NAMES,
   DESIGN_JSX_SPAN_PROPERTY_NAMES,
   DESIGN_JSX_SUPPORTED_PROPERTY_NAMES,
   DESIGN_JSX_TEXT_PARAGRAPH_PROPERTY_NAMES
-} from './definitions'
+} from '../definitions'
+import { connectorBindingTarget, renderConnectorNode } from '../figjam/connectors'
+import { renderShapeNode } from '../figjam/shapes-with-text'
+import { renderStickyNode } from '../figjam/stickies'
 import {
   connectorPropsSchema,
   ownLayerPropsSchema,
@@ -18,10 +20,8 @@ import {
   shapePropsSchema,
   stickyPropsSchema,
   type ElementPropsSchema
-} from './schema'
-import { renderShapeNode } from './shapes-with-text'
-import { renderStickyNode } from './stickies'
-import type { TreeNode } from './tree'
+} from '../schema'
+import type { TreeNode } from '../tree'
 
 /** How an element that draws a layer of its own, such as a sticky note, renders it. */
 export interface OwnLayerRenderer {
@@ -78,8 +78,7 @@ export const DESIGN_JSX_ELEMENTS: DesignJSXElementDefinition[] = [
     runtimeType: 'frame',
     description: 'A frame or auto-layout container.',
     nodeType: 'FRAME',
-    // A set and an instance read back as frames: JSX cannot name what they come from.
-    writes: ['FRAME', 'COMPONENT_SET', 'INSTANCE']
+    writes: ['FRAME']
   },
   {
     name: 'Text',
@@ -167,9 +166,15 @@ export const DESIGN_JSX_ELEMENTS: DesignJSXElementDefinition[] = [
     name: 'ComponentSet',
     runtimeType: 'component-set',
     description: 'A component variant set.',
-    nodeType: 'COMPONENT_SET'
+    nodeType: 'COMPONENT_SET',
+    writes: ['COMPONENT_SET']
   },
-  { name: 'Instance', runtimeType: 'instance', description: 'An instance of a component.' },
+  {
+    name: 'Instance',
+    runtimeType: 'instance',
+    description: 'An instance of a component.',
+    writes: ['INSTANCE']
+  },
   { name: 'View', runtimeType: 'frame', description: 'An alias for Frame.', nodeType: 'FRAME' },
   {
     name: 'Rect',

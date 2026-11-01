@@ -11,7 +11,7 @@ import {
 import type { Color, JSONObject } from '@open-pencil/scene-graph/primitives'
 import { withShaderPaints, type ShaderPaint } from '@open-pencil/scene-graph/shaders'
 
-import { DESIGN_JSX_STYLE_KEYS, designJSXProp } from './definitions'
+import { DESIGN_JSX_STYLE_KEYS, designJSXProp } from '../definitions'
 import {
   BLEND_MODE,
   TEXT_ALIGN,
@@ -20,13 +20,13 @@ import {
   TEXT_CASE,
   TEXT_DECORATION,
   TEXT_DIRECTION
-} from './enums'
-import { applyEffectOverrides } from './overrides/effects'
-import { fillFromValue, isColor, isFillValue } from './overrides/fills'
-import { applyStateOverrides } from './overrides/state'
-import { applyStrokeOverrides } from './overrides/strokes'
-import { applyTextDetailOverrides, AUTO, textLengthProp } from './overrides/text'
-import { isShaderFill } from './paints'
+} from '../enums'
+import { isShaderFill } from '../helpers/paints'
+import { applyEffectOverrides } from './effects'
+import { fillFromValue, isColor, isFillValue } from './fills'
+import { applyStateOverrides } from './state'
+import { applyStrokeOverrides } from './strokes'
+import { applyTextDetailOverrides, AUTO, textLengthProp } from './text'
 
 const WEIGHT_MAP: Record<string, number> = {
   normal: 400,

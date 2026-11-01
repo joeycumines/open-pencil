@@ -8,7 +8,7 @@ import {
   type FigJamTypeface
 } from '@open-pencil/scene-graph/figjam'
 
-import { FIGJAM_TEXT_SIZE, FIGJAM_TYPEFACE } from './enums'
+import { FIGJAM_TEXT_SIZE, FIGJAM_TYPEFACE } from '../enums'
 
 /**
  * The fields a sticky note's body or a shape's label takes from `textSize` and `typeface`, as

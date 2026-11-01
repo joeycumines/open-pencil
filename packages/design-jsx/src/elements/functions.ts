@@ -9,7 +9,7 @@ import {
   type SpanProps,
   type TextProps,
   type TreeNode
-} from './tree'
+} from '../tree'
 
 type Child = TreeNode | string
 

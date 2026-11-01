@@ -9,9 +9,9 @@ import {
 } from '@open-pencil/scene-graph/generated'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
-import { figJamTextFields, figJamTextProps } from './figjam-text'
-import { readElementProps, stickyPropsSchema } from './schema'
-import { plainTextOf, type TreeNode } from './tree'
+import { readElementProps, stickyPropsSchema } from '../schema'
+import { plainTextOf, type TreeNode } from '../tree'
+import { figJamTextFields, figJamTextProps } from './text'
 
 /**
  * `<Sticky color="yellow" author="Ada">Body</Sticky>`: a FigJam sticky note, made from the same

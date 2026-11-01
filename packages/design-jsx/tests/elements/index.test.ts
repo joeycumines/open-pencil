@@ -5,7 +5,7 @@ import {
   elementPropsByName,
   elementSchema,
   elementTag
-} from '#design-jsx/elements'
+} from '#design-jsx/elements/index'
 import { createDesignJSXRenderer } from '#design-jsx/index'
 import { elementPropWarnings } from '#design-jsx/schema'
 

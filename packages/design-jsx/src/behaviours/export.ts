@@ -1,3 +1,5 @@
+import { findKey } from 'es-toolkit'
+
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import {
   behaviourToSpec,
@@ -8,8 +10,10 @@ import {
 import { instanceMainComponent } from '@open-pencil/scene-graph/instances'
 import { slotPropertyId } from '@open-pencil/scene-graph/slots'
 
-import { REKA_ELEMENTS, rekaRole } from '../behaviours'
-import type { JSXProp, JSXValue } from './value'
+import { REKA_ELEMENTS, rekaRole } from '.'
+import { itemProps } from '../export/components/instances'
+import type { ComponentReference } from '../export/components/references'
+import type { JSXProp, JSXValue } from '../export/value'
 
 /** The Reka namespace and element a kind's component is written as. */
 const ROOTS: Record<BehaviourKind, [namespace: string, element: string]> = {
@@ -78,7 +82,8 @@ function exportPart(
   namespace: string,
   layer: SceneNode,
   partId: string,
-  result: RekaExport
+  result: RekaExport,
+  componentRef: ComponentReference
 ): void {
   const tag = elementFor(namespace, (role) => role?.role === 'part' && role.part === partId)
   const repeated = elementFor(
@@ -91,10 +96,12 @@ function exportPart(
     if (repeated) result.tags.set(child.id, repeated)
     const item = child.type === 'INSTANCE' ? instanceMainComponent(graph, child) : undefined
     if (partId !== 'items' || !item) continue
-    // A group's items are written as the group's Item, naming their component.
-    const set = item.parentId ? graph.getNode(item.parentId) : undefined
+    // A group's items are written as the group's Item, naming their component and variant, and
+    // what the item changes in it; an item whose changes cannot be written is written as a layer.
+    const props = itemProps(graph, child, item, componentRef)
+    if (!props) continue
     result.tags.set(child.id, `${namespace}.Item`)
-    result.props.set(child.id, [['of', (set?.type === 'COMPONENT_SET' ? set : item).id]])
+    result.props.set(child.id, props)
   }
 }
 
@@ -108,7 +115,11 @@ function descendants(graph: SceneGraph, node: SceneNode): SceneNode[] {
  * `Switch.Thumb`, `TextField.Input`, tab triggers and panels, and a group's items as
  * `RadioGroup.Item of="…"`. Null for other layers.
  */
-export function rekaExport(graph: SceneGraph, owner: SceneNode): RekaExport | null {
+export function rekaExport(
+  graph: SceneGraph,
+  owner: SceneNode,
+  componentRef: ComponentReference
+): RekaExport | null {
   const behaviour = readBehaviour(owner)
   if (!behaviour || (owner.type !== 'COMPONENT' && owner.type !== 'COMPONENT_SET')) return null
   const [namespace, element] = ROOTS[behaviour.kind]
@@ -122,11 +133,9 @@ export function rekaExport(graph: SceneGraph, owner: SceneNode): RekaExport | nu
   )
   for (const layer of descendants(graph, owner)) {
     if (layer.type === 'INSTANCE') continue
-    const partId = Object.entries(behaviour.parts).find(
-      ([, id]) => id === slotPropertyId(layer)
-    )?.[0]
+    const partId = findKey(behaviour.parts, (id) => id === slotPropertyId(layer))
     if (partId) {
-      exportPart(graph, namespace, layer, partId, result)
+      exportPart(graph, namespace, layer, partId, result, componentRef)
       continue
     }
     const reference = layer.componentPropertyReferences.find((item) => item.field === 'TEXT')

@@ -1,8 +1,8 @@
 import type { SceneGraph, VariableLiteral } from '@open-pencil/scene-graph'
 
-import { isVariable } from './variables'
-import { requireVariableId } from './variables/graph'
-import { scalarProps } from './variables/props'
+import { isVariable } from '../variables'
+import { requireVariableId } from '../variables/graph'
+import { scalarProps } from '../variables/props'
 
 /** Resolve numeric props before sizing inference; retain real graph bindings afterward. */
 export function prepareScalarBindings(

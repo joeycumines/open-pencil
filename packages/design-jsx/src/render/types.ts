@@ -1,6 +1,6 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../tree'
 
 export interface RenderOptions {
   x?: number

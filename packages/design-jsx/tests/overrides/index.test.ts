@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { designJSXProp } from '#design-jsx/index'
-import { propsToOverrides } from '#design-jsx/props-overrides'
+import { propsToOverrides } from '#design-jsx/overrides/index'
 
 import { DEFAULT_GRADIENT_TRANSFORM } from '@open-pencil/scene-graph/gradient'
 

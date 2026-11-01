@@ -22,7 +22,7 @@ import {
   type ShaderPreset
 } from '@open-pencil/scene-graph/shaders'
 
-import { parseScriptInput } from './schema'
+import { parseScriptInput } from '../schema'
 
 export type PaintColor = string | Color
 export type PaintStop = readonly [PaintColor, number] | { color: PaintColor; position: number }
