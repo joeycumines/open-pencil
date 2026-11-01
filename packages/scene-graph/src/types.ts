@@ -44,6 +44,9 @@ export interface NodeChangeObserver {
 
 export type DocumentColorSpace = 'srgb' | 'display-p3'
 
+/** What a document is for, as Figma keeps design files and FigJam boards apart. */
+export type DocumentKind = 'design' | 'board'
+
 export interface FigmaSourcePayload {
   rawSize: Vector | null
   rawTransform: Matrix | null
@@ -86,6 +89,10 @@ export interface VectorSegment {
 export interface VectorRegion {
   windingRule: WindingRule
   loops: number[][]
+  /** The region's own paints. Without them it draws the layer's fills, as in Figma. */
+  fills?: Fill[]
+  /** The shared fill style the region's paints come from. */
+  fillStyleId?: string
 }
 
 export interface VectorNetwork {
@@ -97,10 +104,6 @@ export interface VectorNetwork {
 export interface GeometryPath {
   windingRule: WindingRule
   commandsBlob: Uint8Array
-  /** Resolved paints for geometry using a format-specific style override. */
-  fills?: Fill[]
-  /** Shared fill style attached to this geometry region, when available. */
-  fillStyleId?: string
 }
 
 export type NodeType =
@@ -139,9 +142,11 @@ export type BlendMode =
   | 'NORMAL'
   | 'DARKEN'
   | 'MULTIPLY'
+  | 'LINEAR_BURN'
   | 'COLOR_BURN'
   | 'LIGHTEN'
   | 'SCREEN'
+  | 'LINEAR_DODGE'
   | 'COLOR_DODGE'
   | 'OVERLAY'
   | 'SOFT_LIGHT'

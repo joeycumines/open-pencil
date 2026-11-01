@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { resolveEditorProfile } from '@open-pencil/core'
 import { useEditorCommands } from '@open-pencil/vue/editor/commands'
 import { useViewportKind } from '@open-pencil/vue/editor/viewport-kind'
 import { useI18n } from '@open-pencil/vue/i18n'
 import { ToolbarRoot, useToolbarState } from '@open-pencil/vue/primitives/Toolbar'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { readOnlyToolbarLayout, TOOLBAR_ACTIONS, toolbarItems } from '@/app/editor/toolbar/layout'
+import { TOOLBAR_ACTIONS, toolbarItems, toolbarLayoutFor } from '@/app/editor/toolbar/layout'
 import { toolShortcutLabels } from '@/app/editor/toolbar/shortcuts'
 import { appPreferences } from '@/app/settings/preferences/store'
 import { useActionToast } from '@/app/shell/toast/action'
@@ -29,13 +30,14 @@ const { menu } = useI18n()
 
 const toolLabels = useToolLabels()
 
-const toolShortcuts = toolShortcutLabels()
+const profile = computed(() => resolveEditorProfile(store.state))
+const toolShortcuts = computed(() => toolShortcutLabels(profile.value.toolKeys))
 const items = computed(() => {
   const layout = appPreferences.value.toolbar
   return toolbarItems(
-    store.state.readOnly ? readOnlyToolbarLayout(layout) : layout,
+    toolbarLayoutFor(layout, profile.value.tools),
     toolLabels.value,
-    toolShortcuts
+    toolShortcuts.value
   )
 })
 const tools = computed(() =>
@@ -49,7 +51,7 @@ const actionItems = computed(() =>
  * a read-only document leaves them out, as it does the buttons.
  */
 const hiddenActions = computed(() =>
-  store.state.readOnly
+  !profile.value.edits
     ? []
     : TOOLBAR_ACTIONS.filter((action) => !actionItems.value.includes(action))
 )
