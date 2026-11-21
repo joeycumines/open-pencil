@@ -18,9 +18,7 @@ import {
   copyGeometryPaths,
   scaleGeometryPaths
 } from '@open-pencil/scene-graph/copy'
-
-import { expectDefined } from './helpers/assert'
-
+import { expectDefined } from '@open-pencil/test-support/assert'
 describe('copy helpers — mutation isolation', () => {
   test('copyFill: mutating copy does not affect original', () => {
     const original: Fill = {
@@ -53,6 +51,22 @@ describe('copy helpers — mutation isolation', () => {
     expectDefined(copy.gradientTransform, 'copied gradient transform').m00 = 99
     expect(expectDefined(original.gradientStops?.[0], 'original gradient stop').color.r).toBe(1)
     expect(expectDefined(original.gradientTransform, 'original gradient transform').m00).toBe(1)
+  })
+
+  test("copyFill: an image's adjustments are independent", () => {
+    const original: Fill = {
+      type: 'IMAGE',
+      color: { r: 0, g: 0, b: 0, a: 1 },
+      opacity: 1,
+      visible: true,
+      imageHash: 'ab'.repeat(20),
+      imageScaleMode: 'FILL',
+      filters: { exposure: 0.5, saturation: -0.25 }
+    }
+    const copy = copyFill(original)
+    expect(copy.filters).toEqual({ exposure: 0.5, saturation: -0.25 })
+    expectDefined(copy.filters, 'copied filters').exposure = 0
+    expect(original.filters).toEqual({ exposure: 0.5, saturation: -0.25 })
   })
 
   /** A stroke is a paint, so its nested paint data copies as deeply as a fill's does. */

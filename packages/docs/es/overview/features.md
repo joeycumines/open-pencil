@@ -12,7 +12,7 @@ OpenPencil abre y guarda archivos `.fig` directamente. La importación y exporta
 - **Pluma:** redes vectoriales, curvas de Bézier y tiradores tangentes.
 - **Texto:** edición directa en el lienzo y soporte de IME.
 - **Texto enriquecido:** negrita, cursiva, subrayado y tachado en rangos de caracteres.
-- **Disposición automática:** Flexbox y CSS Grid mediante Yoga WASM, con dirección, separación, relleno, distribución, alineación, tamaño y pistas de cuadrícula.
+- **Disposición automática:** Flexbox y CSS Grid mediante Taffy WASM, con dirección, separación, relleno, distribución, alineación, tamaño y pistas de cuadrícula.
 - **Componentes:** creación de componentes y conjuntos, instancias, sustituciones y sincronización.
 - **Variables:** valores de diseño con colecciones, modos claro/oscuro, tipos color/número/texto/booleano y enlaces.
 - **Secciones:** contenedores de organización que incorporan automáticamente los objetos superpuestos.
@@ -36,7 +36,7 @@ Las pestañas Diseño, Código, IA y Revisar se adaptan a la selección:
 OpenPencil usa Skia mediante CanvasKit WASM, el mismo motor gráfico de Figma:
 
 - degradados lineales, radiales, angulares y diamante;
-- rellenos de imagen con varios modos de escala;
+- rellenos de imagen con varios modos de escala y ajustes (exposición, contraste, saturación, temperatura, matiz, iluminaciones, sombras);
 - caché de efectos por objeto;
 - arcos, elipses parciales y anillos;
 - exclusión de objetos fuera de la vista y reutilización de herramientas de pintura;

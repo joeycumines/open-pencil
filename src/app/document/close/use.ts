@@ -2,10 +2,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEventListener } from '@vueuse/core'
 import { onMounted, onScopeDispose } from 'vue'
 
-import { confirmAppExit, isExitApproved } from '@/app/document/close/exit'
+import { errorMessage } from '@open-pencil/std/errors'
+
+import { confirmAppExit, isExitApproved, pageAsksBeforeLeaving } from '@/app/document/close/exit'
 import { notificationMessages } from '@/app/i18n/notifications'
 import { toast } from '@/app/shell/ui'
-import { allTabs } from '@/app/tabs'
 import { IS_TAURI } from '@/constants'
 
 export function useDocumentCloseProtection() {
@@ -14,7 +15,7 @@ export function useDocumentCloseProtection() {
   const cleanup: Array<() => void> = []
 
   useEventListener(window, 'beforeunload', (event) => {
-    if (isExitApproved() || !allTabs.value.some((tab) => tab.isDirty)) return
+    if (!pageAsksBeforeLeaving()) return
     event.preventDefault()
     event.returnValue = ''
   })
@@ -28,7 +29,7 @@ export function useDocumentCloseProtection() {
     } catch (error) {
       toast.error(
         notificationMessages.get().operationFailed({
-          error: error instanceof Error ? error.message : String(error)
+          error: errorMessage(error)
         })
       )
     } finally {

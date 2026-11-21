@@ -1,9 +1,10 @@
-import type { CanvasKit, SkPicture } from 'canvaskit-wasm'
+import type { CanvasKit, SkPicture } from '@open-pencil/canvaskit'
+import type { VisualBounds } from '@open-pencil/scene-graph/geometry'
 
-import { computeDescendantVisualBounds, type VisualBounds } from '@open-pencil/scene-graph/geometry'
-
-import { SkiaRenderer } from '#core/canvas/renderer'
+import { withOffscreenRenderer } from '#core/canvas/renderer/offscreen'
 import { recordWorldPicture } from '#core/canvas/renderer/picture'
+import type { SkiaRenderer } from '#core/canvas/renderer/skia'
+import { computeContentBounds } from '#core/canvas/renderer/visual-bounds'
 
 import type { StagedJSXPreview } from './stage'
 
@@ -27,15 +28,9 @@ async function recordStaged(
   signal: AbortSignal
 ): Promise<SkPicture | null> {
   renderer.pageId = pageId
-  await renderer.loadFonts()
-  signal.throwIfAborted()
   await renderer.prepareForExport(graph, pageId, nodeIds)
   signal.throwIfAborted()
-  const bounds = computeDescendantVisualBounds(
-    nodeIds,
-    (id) => graph.getNode(id),
-    (id) => graph.getAbsolutePosition(id)
-  )
+  const bounds = computeContentBounds(graph, nodeIds)
   if (!bounds || !fitsPreview(bounds)) return null
   return recordWorldPicture(renderer, bounds, (canvas) => {
     for (const id of nodeIds) renderer.renderNode(canvas, graph, id, {})
@@ -53,12 +48,8 @@ export async function recordJSXPreview(
   signal: AbortSignal
 ): Promise<SkPicture | null> {
   signal.throwIfAborted()
-  const surface = ck.MakeSurface(1, 1)
-  if (!surface) return null
-  const renderer = new SkiaRenderer(ck, surface)
-  try {
-    return await recordStaged(renderer, staged, signal)
-  } finally {
-    renderer.destroy()
-  }
+  return withOffscreenRenderer(ck, async (renderer) => {
+    signal.throwIfAborted()
+    return recordStaged(renderer, staged, signal)
+  })
 }

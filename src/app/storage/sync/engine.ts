@@ -1,4 +1,7 @@
 import { IS_BROWSER } from '@open-pencil/core/constants'
+import { minOf } from '@open-pencil/std/arrays'
+import { errorMessage } from '@open-pencil/std/errors'
+import { BACKOFF, backoffDelay } from '@open-pencil/std/timing'
 
 import {
   describeDiagnosticError,
@@ -21,8 +24,6 @@ import { PARKED_ATTEMPT_AT, type OutboxJob } from '@/app/storage/sync/types'
 import { emitStorageWorkspaceEvent } from '@/app/storage/workspace/events'
 
 const MAX_ATTEMPTS = 8
-const BASE_BACKOFF_MS = 1500
-const MAX_BACKOFF_MS = 60_000
 
 let pumping = false
 let wakeTimer: ReturnType<typeof setTimeout> | null = null
@@ -35,17 +36,14 @@ function isOnline(): boolean {
   return online !== false
 }
 
+/** How long after its `attempts`th failure a job is tried again. */
 function backoffMs(attempts: number): number {
-  const exp = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** Math.max(0, attempts - 1))
-  const jitter = Math.floor(
-    exp * 0.2 * ((crypto.getRandomValues(new Uint8Array(1)).at(0) ?? 0) / 255)
-  )
-  return exp + jitter
+  return backoffDelay(attempts - 1, BACKOFF.retry)
 }
 
 export function nextSyncWakeDelay(jobs: OutboxJob[], now = Date.now()): number | null {
   if (jobs.length === 0) return null
-  const nextAt = Math.min(...jobs.map((job) => job.nextAttemptAt))
+  const nextAt = minOf(jobs.map((job) => job.nextAttemptAt))
   return nextAt === PARKED_ATTEMPT_AT ? null : Math.max(250, nextAt - now)
 }
 
@@ -170,7 +168,7 @@ async function pumpOnce(): Promise<void> {
       errorCode,
       retryable
     })
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     if (error instanceof StorageRevisionConflictError) {
       // Both versions stay: the local bytes on this device, the newer one on the provider.
       // The job waits for the person to choose, and other work carries on.
@@ -233,7 +231,7 @@ async function pumpOnce(): Promise<void> {
     // Wake for the next ready job across the whole queue — not this job's
     // full backoff, which starved other jobs that were ready sooner.
     const all = await outbox.list()
-    const nextAt = Math.min(...all.map((j) => j.nextAttemptAt))
+    const nextAt = minOf(all.map((j) => j.nextAttemptAt))
     scheduleWake(Math.max(250, nextAt - Date.now()))
   }
 }

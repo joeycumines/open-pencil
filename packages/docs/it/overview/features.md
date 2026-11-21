@@ -12,7 +12,7 @@ OpenPencil apre e salva direttamente i file `.fig`. Import ed export usano lo st
 - **Penna:** reti vettoriali, curve di Bézier e maniglie tangenti.
 - **Testo:** modifica diretta nel canvas e supporto IME.
 - **Testo formattato:** grassetto, corsivo, sottolineato e barrato su intervalli di caratteri.
-- **Disposizione automatica:** Flexbox e CSS Grid tramite Yoga WASM, con direzione, intervallo, rientri, allineamento, dimensionamento e tracce della griglia.
+- **Disposizione automatica:** Flexbox e CSS Grid tramite Taffy WASM, con direzione, intervallo, rientri, allineamento, dimensionamento e tracce della griglia.
 - **Componenti:** creazione di componenti e set, istanze, override e sincronizzazione automatica.
 - **Variabili:** token di design con collezioni, modalità Light/Dark, tipi Color/Float/String/Boolean e collegamenti.
 - **Sezioni:** contenitori di primo livello che integrano gli oggetti sovrapposti.
@@ -36,7 +36,7 @@ Le schede Design, Codice, AI e Verifica cambiano in base alla selezione.
 OpenPencil usa Skia tramite CanvasKit WASM, lo stesso motore grafico di Figma:
 
 - gradienti lineari, radiali, angolari e a diamante;
-- riempimenti immagine con diverse modalità di scala;
+- riempimenti immagine con diverse modalità di scala e regolazioni (esposizione, contrasto, saturazione, temperatura, tinta, luci, ombre);
 - cache degli effetti per oggetto;
 - archi, ellissi parziali e anelli;
 - esclusione degli oggetti fuori dalla vista e riuso delle vernici;

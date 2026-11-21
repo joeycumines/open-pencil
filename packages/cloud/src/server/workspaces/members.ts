@@ -9,8 +9,15 @@ import type {
 } from '#cloud/contract'
 import { cloudInvitationURL } from '#cloud/contract'
 import type { CloudActor } from '#cloud/server/auth'
-import type { CloudDatabase } from '#cloud/server/db'
+import { workspaceRoleCan, type AccessRequest } from '#cloud/server/auth/access-control'
+import { userIdText, type CloudDatabase } from '#cloud/server/db'
 import type { TransactionalEmailService } from '#cloud/server/email/types'
+import {
+  INVITATION_LIFETIME_MS,
+  INVITATION_SECRET_BYTES,
+  spendInvitationBudget
+} from '#cloud/server/invitations'
+import { lockStorageAllowance } from '#cloud/server/quota/storage'
 import {
   invitationMatchesActor,
   invitationTokenIsActive,
@@ -19,12 +26,10 @@ import {
 import { dateString } from '#cloud/server/sharing/contracts'
 import { hashCapability } from '#cloud/server/sharing/crypto'
 import { findWorkspace, type WorkspaceDatabase } from '#cloud/server/workspaces/repository'
-import type { Kysely } from 'kysely'
+import { compact, uniq } from 'es-toolkit'
+import type { Kysely, Transaction } from 'kysely'
 
-import { randomHex } from '@open-pencil/scene-graph/random'
-
-const INVITATION_SECRET_BYTES = 24
-const INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60_000
+import { randomHex } from '@open-pencil/std/random'
 
 /** The workspace does not exist, or the person is not a member of it. */
 export class WorkspaceNotFoundError extends Error {
@@ -80,6 +85,12 @@ export class WorkspaceInvitationInvalidError extends Error {
 export type WorkspaceMemberServiceOptions = {
   email?: TransactionalEmailService
   publicURL: string
+  /**
+   * Told, after a change commits, the accounts whose seats it may have changed: the owner of the
+   * workspace, and the one before when ownership passed on. Seats are the people who can edit
+   * across the workspaces an account owns, which billing may charge for.
+   */
+  onSeatsChanged?: (accountIds: readonly string[]) => void
 }
 
 function invitationContract(row: {
@@ -99,6 +110,45 @@ function invitationContract(row: {
     invitedAt: dateString(row.invitedAt) ?? '',
     expiresAt: dateString(row.expiresAt) ?? ''
   }
+}
+
+/**
+ * Passes the workspace to its longest-standing other admin when its owner leaves or stops being
+ * an admin, so its limits come from someone still running it. The last-admin guard keeps one.
+ */
+export async function handOverOwnership(
+  database: Transaction<CloudDatabase>,
+  workspaceId: string,
+  leavingUserId: string
+): Promise<void> {
+  const workspace = await database
+    .selectFrom('workspace')
+    .select('ownerId')
+    .where('id', '=', workspaceId)
+    // Changing the owner changes no key, so a reservation's foreign-key check on this row is
+    // never kept waiting behind it while the transfer waits for that reservation's lock.
+    .forNoKeyUpdate()
+    .executeTakeFirstOrThrow()
+  if (workspace.ownerId !== leavingUserId) return
+  const successor = await database
+    .selectFrom('workspaceMember')
+    .select('userId')
+    .where('workspaceId', '=', workspaceId)
+    .where('role', '=', 'admin')
+    .where('userId', '!=', leavingUserId)
+    .orderBy('createdAt')
+    .orderBy('userId')
+    .executeTakeFirst()
+  if (!successor) return
+  // Reservations count this workspace under its owner's lock: hold both owners', in one order.
+  for (const owner of [leavingUserId, successor.userId].toSorted()) {
+    await lockStorageAllowance(database, owner)
+  }
+  await database
+    .updateTable('workspace')
+    .set({ ownerId: successor.userId, updatedAt: new Date() })
+    .where('id', '=', workspaceId)
+    .execute()
 }
 
 async function adminCount(database: WorkspaceDatabase, workspaceId: string): Promise<number> {
@@ -137,15 +187,38 @@ export function createWorkspaceMemberService(
   database: Kysely<CloudDatabase>,
   options: WorkspaceMemberServiceOptions
 ) {
+  /** The workspace's owner as `database` sees it, inside the change's transaction. */
+  async function ownerIn(database: WorkspaceDatabase, workspaceId: string): Promise<string | null> {
+    const workspace = await database
+      .selectFrom('workspace')
+      .select('ownerId')
+      .where('id', '=', workspaceId)
+      .executeTakeFirst()
+    return workspace?.ownerId ?? null
+  }
+
+  /**
+   * Reports the owners whose seats a committed change touched, read inside its transaction, so
+   * nothing after the commit can fail or see a later change.
+   */
+  function seatsChanged(owners: readonly (string | null)[]): void {
+    const accountIds = uniq(compact(owners))
+    if (accountIds.length > 0) options.onSeatsChanged?.(accountIds)
+  }
+
   async function membership(userId: string, workspaceId: string): Promise<WorkspaceSummary> {
     const workspace = await findWorkspace(database, userId, workspaceId)
     if (!workspace) throw new WorkspaceNotFoundError()
     return workspace
   }
 
-  async function requireAdmin(userId: string, workspaceId: string): Promise<WorkspaceSummary> {
+  async function requireAccess(
+    userId: string,
+    workspaceId: string,
+    request: AccessRequest
+  ): Promise<WorkspaceSummary> {
     const workspace = await membership(userId, workspaceId)
-    if (workspace.role !== 'admin') throw new WorkspaceForbiddenError()
+    if (!workspaceRoleCan(workspace.role, request)) throw new WorkspaceForbiddenError()
     return workspace
   }
 
@@ -153,15 +226,7 @@ export function createWorkspaceMemberService(
   function memberUsers(workspaceId: string) {
     return database
       .selectFrom('workspaceMember')
-      .innerJoin('user', (join) =>
-        join.on((expression) =>
-          expression(
-            expression.cast(expression.ref('user.id'), 'text'),
-            '=',
-            expression.ref('workspaceMember.userId')
-          )
-        )
-      )
+      .innerJoin('user', (join) => join.onRef(userIdText, '=', 'workspaceMember.userId'))
       .where('workspaceMember.workspaceId', '=', workspaceId)
   }
 
@@ -175,7 +240,7 @@ export function createWorkspaceMemberService(
     workspaceId: string,
     input: CreateWorkspaceInvitationInput
   ): Promise<CreatedWorkspaceInvitation> {
-    const workspace = await requireAdmin(userId, workspaceId)
+    const workspace = await requireAccess(userId, workspaceId, { workspace: ['invite'] })
     const existing = await memberUsers(workspaceId)
       .select('workspaceMember.userId')
       .where((expression) =>
@@ -185,7 +250,7 @@ export function createWorkspaceMemberService(
     if (existing) throw new WorkspaceAlreadyMemberError()
     const inviter = await database
       .selectFrom('user')
-      .select('name')
+      .select(['name', 'locale'])
       .where('id', '=', userId)
       .executeTakeFirst()
     const id = crypto.randomUUID()
@@ -193,6 +258,7 @@ export function createWorkspaceMemberService(
     const expiresAt = new Date(Date.now() + INVITATION_LIFETIME_MS)
     const url = acceptanceURL(id, token)
     const row = await database.transaction().execute(async (transaction) => {
+      await spendInvitationBudget(transaction, { senderId: userId, email: input.email })
       await transaction
         .updateTable('workspaceInvitation')
         .set({ revokedAt: new Date() })
@@ -221,8 +287,10 @@ export function createWorkspaceMemberService(
           idempotencyKey: `workspace-invitation/${id}`,
           kind: 'workspace-invitation',
           recipientEmail: input.email,
+          // Someone without an account yet reads the inviter's language.
+          fallbackLocale: inviter?.locale,
           payload: {
-            inviterName: inviter?.name ?? 'An OpenPencil user',
+            inviterName: inviter?.name ?? null,
             workspaceName: workspace.name,
             role: input.role,
             expiresAt: expiresAt.toISOString(),
@@ -241,7 +309,7 @@ export function createWorkspaceMemberService(
 
   return {
     async rename(userId: string, workspaceId: string, name: string): Promise<WorkspaceSummary> {
-      await requireAdmin(userId, workspaceId)
+      await requireAccess(userId, workspaceId, { workspace: ['update'] })
       await database
         .updateTable('workspace')
         .set({ name, updatedAt: new Date() })
@@ -263,35 +331,28 @@ export function createWorkspaceMemberService(
         ])
         .orderBy('workspaceMember.createdAt')
         .execute()
-      const invitations =
-        workspace.role === 'admin'
-          ? await database
-              .selectFrom('workspaceInvitation')
-              .leftJoin('user', (join) =>
-                join.on((expression) =>
-                  expression(
-                    expression.cast(expression.ref('user.id'), 'text'),
-                    '=',
-                    expression.ref('workspaceInvitation.invitedBy')
-                  )
-                )
-              )
-              .select([
-                'workspaceInvitation.id',
-                'workspaceInvitation.emailNormalized',
-                'workspaceInvitation.role',
-                'workspaceInvitation.invitedAt',
-                'workspaceInvitation.expiresAt',
-                'workspaceInvitation.invitedBy',
-                'user.name as inviterName'
-              ])
-              .where('workspaceInvitation.workspaceId', '=', workspaceId)
-              .where('workspaceInvitation.acceptedAt', 'is', null)
-              .where('workspaceInvitation.revokedAt', 'is', null)
-              .where('workspaceInvitation.expiresAt', '>', new Date())
-              .orderBy('workspaceInvitation.invitedAt')
-              .execute()
-          : []
+      const invitations = workspaceRoleCan(workspace.role, { workspace: ['invite'] })
+        ? await database
+            .selectFrom('workspaceInvitation')
+            .leftJoin('user', (join) =>
+              join.onRef(userIdText, '=', 'workspaceInvitation.invitedBy')
+            )
+            .select([
+              'workspaceInvitation.id',
+              'workspaceInvitation.emailNormalized',
+              'workspaceInvitation.role',
+              'workspaceInvitation.invitedAt',
+              'workspaceInvitation.expiresAt',
+              'workspaceInvitation.invitedBy',
+              'user.name as inviterName'
+            ])
+            .where('workspaceInvitation.workspaceId', '=', workspaceId)
+            .where('workspaceInvitation.acceptedAt', 'is', null)
+            .where('workspaceInvitation.revokedAt', 'is', null)
+            .where('workspaceInvitation.expiresAt', '>', new Date())
+            .orderBy('workspaceInvitation.invitedAt')
+            .execute()
+        : []
       return {
         members: members.map((member) => ({
           userId: member.userId,
@@ -313,7 +374,7 @@ export function createWorkspaceMemberService(
       workspaceId: string,
       invitationId: string
     ): Promise<CreatedWorkspaceInvitation> {
-      await requireAdmin(userId, workspaceId)
+      await requireAccess(userId, workspaceId, { workspace: ['invite'] })
       const invitation = await database
         .selectFrom('workspaceInvitation')
         .select(['emailNormalized', 'role'])
@@ -334,7 +395,7 @@ export function createWorkspaceMemberService(
       workspaceId: string,
       invitationId: string
     ): Promise<void> {
-      await requireAdmin(userId, workspaceId)
+      await requireAccess(userId, workspaceId, { workspace: ['invite'] })
       const result = await database
         .updateTable('workspaceInvitation')
         .set({ revokedAt: new Date() })
@@ -352,9 +413,10 @@ export function createWorkspaceMemberService(
       memberId: string,
       role: WorkspaceRole
     ): Promise<void> {
-      await requireAdmin(userId, workspaceId)
-      await database.transaction().execute(async (transaction) => {
+      await requireAccess(userId, workspaceId, { workspace: ['manage-members'] })
+      const owners = await database.transaction().execute(async (transaction) => {
         const member = await lockedMember(transaction, workspaceId, memberId)
+        const before = await ownerIn(transaction, workspaceId)
         if (member.role === 'admin' && role !== 'admin') {
           if ((await adminCount(transaction, workspaceId)) <= 1) throw new WorkspaceLastAdminError()
         }
@@ -364,17 +426,20 @@ export function createWorkspaceMemberService(
           .where('workspaceId', '=', workspaceId)
           .where('userId', '=', memberId)
           .execute()
+        if (role !== 'admin') await handOverOwnership(transaction, workspaceId, memberId)
+        return [before, await ownerIn(transaction, workspaceId)]
       })
+      seatsChanged(owners)
     },
 
     /** Deletes an empty workspace, with its members and invitations. */
     async delete(userId: string, workspaceId: string): Promise<void> {
-      await requireAdmin(userId, workspaceId)
-      await database.transaction().execute(async (transaction) => {
+      await requireAccess(userId, workspaceId, { workspace: ['delete'] })
+      const owner = await database.transaction().execute(async (transaction) => {
         // Locked first, so a document created meanwhile waits and then finds no workspace.
-        await transaction
+        const workspace = await transaction
           .selectFrom('workspace')
-          .select('id')
+          .select('ownerId')
           .where('id', '=', workspaceId)
           .forUpdate()
           .executeTakeFirstOrThrow()
@@ -388,15 +453,21 @@ export function createWorkspaceMemberService(
         }
         if (documents.length > 0) throw new WorkspaceNotEmptyError('pending-cleanup')
         await transaction.deleteFrom('workspace').where('id', '=', workspaceId).execute()
+        return workspace.ownerId
       })
+      seatsChanged([owner])
     },
 
-    /** Removes a member, or lets someone leave; the last administrator cannot go. */
+    /**
+     * Removes a member, or lets someone leave; the last administrator cannot go, and an owner who
+     * goes leaves the workspace to the longest-standing other admin.
+     */
     async remove(userId: string, workspaceId: string, memberId: string): Promise<void> {
       if (memberId === userId) await membership(userId, workspaceId)
-      else await requireAdmin(userId, workspaceId)
-      await database.transaction().execute(async (transaction) => {
+      else await requireAccess(userId, workspaceId, { workspace: ['manage-members'] })
+      const owners = await database.transaction().execute(async (transaction) => {
         const member = await lockedMember(transaction, workspaceId, memberId)
+        const before = await ownerIn(transaction, workspaceId)
         if (member.role === 'admin' && (await adminCount(transaction, workspaceId)) <= 1) {
           throw new WorkspaceLastAdminError()
         }
@@ -405,7 +476,10 @@ export function createWorkspaceMemberService(
           .where('workspaceId', '=', workspaceId)
           .where('userId', '=', memberId)
           .execute()
+        await handOverOwnership(transaction, workspaceId, memberId)
+        return [before, await ownerIn(transaction, workspaceId)]
       })
+      seatsChanged(owners)
     },
 
     /** What a workspace invitation link offers, or null when the id is not one. */
@@ -471,7 +545,7 @@ export function createWorkspaceMemberService(
       ) {
         throw new WorkspaceInvitationInvalidError()
       }
-      return database.transaction().execute(async (transaction) => {
+      const joined = await database.transaction().execute(async (transaction) => {
         await transaction
           .insertInto('workspaceMember')
           .values({
@@ -493,8 +567,11 @@ export function createWorkspaceMemberService(
           .where('workspaceId', '=', invitation.workspaceId)
           .where('userId', '=', actor.userId)
           .executeTakeFirstOrThrow()
-        return { workspaceId: invitation.workspaceId, role: member.role }
+        const owner = await ownerIn(transaction, invitation.workspaceId)
+        return { joined: { workspaceId: invitation.workspaceId, role: member.role }, owner }
       })
+      seatsChanged([joined.owner])
+      return joined.joined
     }
   }
 }

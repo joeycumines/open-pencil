@@ -1,6 +1,7 @@
 import { generateText } from 'ai'
 
 import { AI_PROVIDERS } from '@open-pencil/core/constants'
+import { DEADLINE_MS } from '@open-pencil/std/timing'
 
 import { isInsufficientCreditError, providerErrorStatus } from '@/app/ai/chat/failure'
 import {
@@ -130,10 +131,11 @@ export async function testProviderConnection(
 
   try {
     await generateText({
-      model: createLanguageModel(config, runtime),
+      model: await createLanguageModel(config, runtime),
       prompt: 'Reply with OK.',
       maxOutputTokens: 1,
-      abortSignal: AbortSignal.timeout(15_000)
+      // A one-token reply, which a provider answers like any model request.
+      abortSignal: AbortSignal.timeout(DEADLINE_MS.slowRequest)
     })
     return { ok: true }
   } catch (error) {

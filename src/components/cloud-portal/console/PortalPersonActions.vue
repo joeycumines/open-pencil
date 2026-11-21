@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { compact } from 'es-toolkit'
-import { computed, ref } from 'vue'
+import { computed, onDeactivated, ref } from 'vue'
 
 import { useCloudPortalMessages } from '@open-pencil/vue/i18n'
 
-import { portalForm } from '@/components/cloud-portal/ui'
 import AppConfirmationDialog from '@/components/ui/dialog/AppConfirmationDialog.vue'
+import AppFormField from '@/components/ui/input/AppFormField.vue'
 import AppTextarea from '@/components/ui/input/AppTextarea.vue'
 import { useHeldContent } from '@/components/ui/overlay/held'
 
@@ -29,11 +29,14 @@ const {
 const emit = defineEmits<{ act: [action: PortalPersonAction, reason?: string] }>()
 
 const messages = useCloudPortalMessages()
-const form = portalForm()
 const confirming = ref<PortalPersonAction | null>(null)
 const reason = ref('')
 
 const confirmingShown = useHeldContent(confirming)
+// The console keeps a page it leaves; a confirmation must not outlive the visit that opened it.
+onDeactivated(() => {
+  confirming.value = null
+})
 const confirmation = computed(() => {
   const action = confirmingShown.value
   if (!action) return null
@@ -84,6 +87,12 @@ const confirmation = computed(() => {
       description: words.restoreDescription,
       confirm: words.restoreAccount,
       tone: 'primary'
+    },
+    delete: {
+      heading: words.deletePersonAccountHeading({ name }),
+      description: words.deletePersonAccountDescription,
+      confirm: words.deletePersonAccount,
+      tone: 'danger'
     }
   }
   return copy[action]
@@ -100,7 +109,13 @@ const items = computed(() => {
     person.image && { action: 'remove-picture' as const, label: words.removePersonPicture },
     person.suspended
       ? { action: 'restore' as const, label: words.restoreAccount, separated: true }
-      : { action: 'suspend' as const, label: words.suspendAccount, separated: true }
+      : { action: 'suspend' as const, label: words.suspendAccount, separated: true },
+    // Only an account that never got in; one that did leaves by its owner's own deletion.
+    !person.admin &&
+      (person.access === 'waiting' || person.access === 'declined') && {
+        action: 'delete' as const,
+        label: words.deletePersonAccount
+      }
   ])
 })
 
@@ -131,14 +146,14 @@ function confirm() {
     :tone="confirmation?.tone"
     :heading="confirmation?.heading ?? ''"
     :description="confirmation?.description"
-    :cancel-label="messages.cancel"
     :confirm-label="confirmation?.confirm ?? ''"
     @update:open="(open) => !open && (confirming = null)"
     @confirm="confirm"
   >
-    <div v-if="confirmingShown === 'suspend'" :class="[form.field(), 'mt-3']">
-      <label for="portal-suspend-reason" :class="form.label()">{{ messages.suspendReason }}</label>
-      <AppTextarea id="portal-suspend-reason" v-model="reason" :rows="2" maxlength="500" />
-    </div>
+    <AppFormField v-if="confirmingShown === 'suspend'" :label="messages.suspendReason">
+      <template #default="{ id }">
+        <AppTextarea :id="id" v-model="reason" :rows="2" maxlength="500" />
+      </template>
+    </AppFormField>
   </AppConfirmationDialog>
 </template>

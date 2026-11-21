@@ -3,6 +3,7 @@ import { boundEndpoint, layoutConnector } from '@open-pencil/scene-graph/connect
 import { getParentWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import Matrix from '@open-pencil/scene-graph/matrix'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
+import { maxOf, minOf } from '@open-pencil/std/arrays'
 
 import type { ArrangeInput, ArrangedRoute, Arrangement } from './boxes'
 import { runConnectorAlong } from './routes'
@@ -19,13 +20,13 @@ export interface ArrangedLayers {
 export type ArrangePlacement = { topLeft: Vector } | { center: Vector }
 
 function bounds(boxes: Rect[]): Rect {
-  const x = Math.min(...boxes.map((box) => box.x))
-  const y = Math.min(...boxes.map((box) => box.y))
+  const x = minOf(boxes.map((box) => box.x))
+  const y = minOf(boxes.map((box) => box.y))
   return {
     x,
     y,
-    width: Math.max(...boxes.map((box) => box.x + box.width)) - x,
-    height: Math.max(...boxes.map((box) => box.y + box.height)) - y
+    width: maxOf(boxes.map((box) => box.x + box.width)) - x,
+    height: maxOf(boxes.map((box) => box.y + box.height)) - y
   }
 }
 

@@ -1,3 +1,5 @@
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { stat, open, SeekMode } from '@tauri-apps/plugin-fs'
 import { isEqual } from 'es-toolkit'
 import * as v from 'valibot'
@@ -37,10 +39,7 @@ async function fileFingerprint(path: string): Promise<CoverFingerprint | null> {
 }
 
 async function coverEntry(path: string): Promise<{ image: string; fingerprint: string }> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(path))
-  const hash = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
+  const hash = bytesToHex(sha256(utf8ToBytes(path)))
   const base = `${RECENT_FILE_THUMBNAIL_CACHE_DIR}/${hash}`
   return { image: `${base}.png`, fingerprint: `${base}.json` }
 }
@@ -78,6 +77,17 @@ export async function cacheRecentFileThumbnail(path: string, bytes: Uint8Array):
  */
 const RECENT_FILE_COVER = { width: 800, height: 450 }
 
+/** Draws `graph`'s cover page as a Home card shows it; null when there is no page to draw. */
+export function drawHomeCardCover(
+  graph: SceneGraph,
+  renderer: NonNullable<Editor['renderer']>
+): Uint8Array | null {
+  const pageId = figThumbnailPageId(graph.getPages())
+  if (!pageId) return null
+  const { width, height } = RECENT_FILE_COVER
+  return renderThumbnail(renderer.ck, renderer, graph, pageId, width, height, 'letterbox')
+}
+
 /** Cover writes still running, by file, so each file's covers are cached in the order drawn. */
 const coverWrites = new Map<string, Promise<void>>()
 
@@ -93,10 +103,7 @@ export async function cacheRecentFileCover(
   renderer: NonNullable<Editor['renderer']>
 ): Promise<boolean> {
   if (!isTauri()) return false
-  const pageId = figThumbnailPageId(graph.getPages())
-  if (!pageId) return false
-  const { width, height } = RECENT_FILE_COVER
-  const bytes = renderThumbnail(renderer.ck, renderer, graph, pageId, width, height, 'letterbox')
+  const bytes = drawHomeCardCover(graph, renderer)
   if (!bytes) return false
   // Read now, for the file this cover was drawn from, but queued at once, so covers keep the
   // order they were drawn in however their reads finish.

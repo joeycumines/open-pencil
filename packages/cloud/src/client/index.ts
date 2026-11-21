@@ -1,12 +1,15 @@
 export {
-  CloudAIError,
-  cloudAIFetch,
-  createCloudAIClient,
-  type CloudAIClient,
-  type CloudAIClientOptions,
-  type CloudAITokenSource
-} from './ai'
+  CloudServiceError,
+  CloudServiceInsecureEndpointError,
+  cloudServicesFetch,
+  createCloudServicesClient,
+  type CloudServicesClient,
+  type CloudServicesClientOptions,
+  type CloudServicesTokenSource
+} from './services'
 export { cloudEditorReturnURL, cloudRedirectPath, cloudSignInURL } from './auth/navigation'
+export * from './files'
+export { fetchCommunityTour, type CommunityTour } from './tour'
 export {
   CloudAPIError,
   createCloudAPIClient,
@@ -51,3 +54,4 @@ export {
   type CloudPortalClient,
   type CloudPortalClientOptions
 } from './portal/client'
+export type { CloudCommentRequests } from './comments'

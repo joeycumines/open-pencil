@@ -1,4 +1,5 @@
 import type { IconOptions } from '@open-pencil/scene-graph/icons'
+import { maxOf } from '@open-pencil/std/arrays'
 
 import { parseIconName, type IconProvider } from '#core/icons/provider'
 import type { IconCollection, IconData, IconSearchResult } from '#core/icons/types'
@@ -49,8 +50,9 @@ export function createIconSetsProvider({
     names: readonly string[],
     ask: (provider: IconProvider, names: string[]) => Promise<Map<string, T>>
   ): Promise<Map<string, T>> {
+    // Each ask runs inside an async call, so one that throws at once fails like one that rejects.
     const parts = await Promise.allSettled(
-      [...byProvider(names)].map(([provider, part]) => ask(provider, part))
+      [...byProvider(names)].map(async ([provider, part]) => ask(provider, part))
     )
     const failed = parts.find((part) => part.status === 'rejected')
     if (failed && parts.every((part) => part.status === 'rejected')) throw failed.reason
@@ -73,7 +75,7 @@ export function createIconSetsProvider({
       if (found.length === 0 && results[0]?.status === 'rejected') throw results[0].reason
       // The sources take turns, so one with many matches cannot crowd the others past the limit.
       const lists = found.map((result) => result.icons.filter(shown))
-      const longest = Math.max(0, ...lists.map((list) => list.length))
+      const longest = maxOf([0, ...lists.map((list) => list.length)])
       const icons = Array.from({ length: longest }, (_, index) =>
         lists.flatMap((list) => (index < list.length ? [list[index]] : []))
       )
@@ -105,7 +107,9 @@ export function createIconSetsProvider({
         )
       )
       const listed = lists.flatMap((list) => (list.status === 'fulfilled' ? list.value : []))
-      if (listed.length === 0 && lists[0]?.status === 'rejected') throw lists[0].reason
+      // Sets listed only as unavailable draw nothing, so they do not stand in for a failed fallback.
+      if (listed.every((info) => info.unavailable) && lists[0]?.status === 'rejected')
+        throw lists[0].reason
       return listed.filter((info) => !replaced.includes(info.prefix))
     },
 

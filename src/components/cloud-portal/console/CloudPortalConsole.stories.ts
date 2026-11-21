@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { expect, waitFor, within } from 'storybook/test'
+
+import { svgDataURL } from '@open-pencil/scene-graph/images'
 
 import PortalAccountSecurity from '../account/PortalAccountSecurity.vue'
+import PortalPlan from '../account/PortalPlan.vue'
 import PortalProfile from '../account/PortalProfile.vue'
 import PortalSessions from '../account/PortalSessions.vue'
 import PortalConsoleLayout from '../layout/PortalConsoleLayout.vue'
@@ -10,13 +14,16 @@ import type {
   PortalActivityEntry,
   PortalEmail,
   PortalPerson,
+  PortalDocumentRow,
   PortalPersonDetail,
+  PortalPlan as PortalPlanType,
   PortalSection,
   PortalSession,
   PortalSignIn
 } from '../types'
 import PortalAccessRequests from './PortalAccessRequests.vue'
 import PortalActivity from './PortalActivity.vue'
+import PortalDocuments from './PortalDocuments.vue'
 import PortalEmailDelivery from './PortalEmailDelivery.vue'
 import PortalPeople from './PortalPeople.vue'
 import PortalPersonPage from './PortalPerson.vue'
@@ -25,6 +32,7 @@ import PortalStatus from './PortalStatus.vue'
 const account = { id: 'user-ana', name: 'Ana Duarte', email: 'ana@studio.example' }
 const sections: PortalSection[] = [
   { id: 'profile', icon: PORTAL_SECTION_ICONS.profile, label: 'Profile', group: 'Your account' },
+  { id: 'plan', icon: PORTAL_SECTION_ICONS.plan, label: 'Plan', group: 'Your account' },
   {
     id: 'security',
     icon: PORTAL_SECTION_ICONS.security,
@@ -39,6 +47,12 @@ const sections: PortalSection[] = [
     label: 'Access requests',
     group: 'Server',
     count: 3
+  },
+  {
+    id: 'documents',
+    icon: PORTAL_SECTION_ICONS.documents,
+    label: 'Documents',
+    group: 'Server'
   },
   { id: 'people', icon: PORTAL_SECTION_ICONS.people, label: 'People', group: 'Server' },
   { id: 'email', icon: PORTAL_SECTION_ICONS.email, label: 'Email delivery', group: 'Server' },
@@ -81,6 +95,7 @@ const people: PortalPerson[] = [
     joinedOn: 'Mar 3, 2026',
     lastActive: 'now',
     workspaceCount: 3,
+    methods: ['credential', 'google'],
     you: true
   },
   {
@@ -92,7 +107,8 @@ const people: PortalPerson[] = [
     twoStep: true,
     joinedOn: 'Mar 3, 2026',
     lastActive: '2 hr. ago',
-    workspaceCount: 2
+    workspaceCount: 2,
+    methods: ['google']
   },
   {
     id: 'user-mia',
@@ -103,7 +119,8 @@ const people: PortalPerson[] = [
     twoStep: false,
     joinedOn: 'Jun 12, 2026',
     lastActive: 'yesterday',
-    workspaceCount: 1
+    workspaceCount: 1,
+    methods: ['credential', 'github']
   },
   {
     id: 'user-tom',
@@ -115,7 +132,21 @@ const people: PortalPerson[] = [
     twoStep: false,
     joinedOn: 'Oct 2, 2026',
     lastActive: null,
-    workspaceCount: 0
+    workspaceCount: 0,
+    methods: ['credential']
+  },
+  {
+    id: 'user-joon',
+    name: 'Joon Park',
+    email: 'joon@agency.example',
+    admin: false,
+    suspended: false,
+    twoStep: false,
+    joinedOn: 'Nov 16, 2026',
+    lastActive: '1 hr. ago',
+    workspaceCount: 0,
+    methods: ['apple'],
+    access: 'waiting'
   }
 ]
 /** A console list's server for a story: every page holds `rows`, and each filter `counts`. */
@@ -136,6 +167,79 @@ const loadNoRequests = serve<AccessRequest['status'], AccessRequest>([], {
   rejected: 2,
   revoked: 1
 })
+/** A design's thumbnail as the editor saves one: a frame with a heading and a button. */
+function thumbnail(accent: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#f3f4f6"/><rect x="40" y="30" width="240" height="140" rx="10" fill="#fff"/><rect x="64" y="58" width="150" height="14" rx="4" fill="#1f2328"/><rect x="64" y="84" width="190" height="8" rx="4" fill="#9ca3af"/><rect x="64" y="122" width="80" height="26" rx="6" fill="${accent}"/></svg>`
+  return svgDataURL(svg)
+}
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString()
+const documentRows: PortalDocumentRow[] = [
+  {
+    id: 'd1',
+    name: 'Spring campaign',
+    kind: 'design',
+    saved: true,
+    workspace: 'Community',
+    owner: account,
+    updatedAt: hoursAgo(0.2),
+    thumbnail: thumbnail('#2563eb'),
+    exposure: { community: true, links: 0, editLinks: 0 },
+    takenDown: false,
+    takenDownReason: null,
+    openReports: 0,
+    deletedForever: false,
+    destroyed: null
+  },
+  {
+    id: 'd2',
+    name: 'Sprint retro',
+    kind: 'board',
+    saved: true,
+    workspace: 'Studio',
+    owner: { id: 'user-ben', name: 'Ben Ortiz', email: 'ben@studio.example' },
+    updatedAt: hoursAgo(5),
+    thumbnail: thumbnail('#db2777'),
+    exposure: { community: false, links: 2, editLinks: 1 },
+    takenDown: false,
+    takenDownReason: null,
+    openReports: 1,
+    deletedForever: false,
+    destroyed: null
+  },
+  {
+    id: 'd3',
+    name: 'Untitled',
+    kind: 'design',
+    saved: false,
+    workspace: 'Chloe’s workspace',
+    owner: { id: 'user-chloe', name: 'Chloe Martin', email: 'chloe@agency.example' },
+    updatedAt: hoursAgo(30),
+    thumbnail: null,
+    exposure: { community: false, links: 0, editLinks: 0 },
+    takenDown: false,
+    takenDownReason: null,
+    openReports: 0,
+    deletedForever: false,
+    destroyed: null
+  },
+  {
+    id: 'd4',
+    name: 'Giveaway',
+    kind: 'design',
+    saved: true,
+    workspace: 'Promo',
+    owner: null,
+    updatedAt: hoursAgo(24 * 12),
+    thumbnail: thumbnail('#ca8a04'),
+    exposure: { community: false, links: 1, editLinks: 0 },
+    takenDown: true,
+    takenDownReason: 'Phishing page',
+    openReports: 0,
+    deletedForever: false,
+    destroyed: null
+  }
+]
+const loadDocuments = serve(documentRows, { all: 4, reported: 1, disabled: 1, purged: 0 })
 const emails: PortalEmail[] = [
   {
     id: 'e1',
@@ -264,8 +368,8 @@ const person: PortalPersonDetail = {
   person: people[2] ?? people[0],
   emailVerified: true,
   methods: [
-    { provider: 'credential', linkedOn: 'Jun 12, 2026' },
-    { provider: 'google', linkedOn: 'Jul 1, 2026' }
+    { id: 'method-password', provider: 'credential', linkedOn: 'Jun 12, 2026', canRemove: true },
+    { id: 'method-google', provider: 'google', linkedOn: 'Jul 1, 2026', canRemove: true }
   ],
   authenticator: false,
   passkeyCount: 0,
@@ -276,21 +380,34 @@ const person: PortalPersonDetail = {
   sessions: sessions.slice(2),
   signIns: signIns.slice(2)
 }
+const MB = 1024 * 1024
+const freePlan: PortalPlanType = {
+  storage: { usedBytes: 212 * MB, totalBytes: 300 * MB },
+  services: false,
+  monthlyCredits: null
+}
+const paidPlan: PortalPlanType = {
+  storage: { usedBytes: 3482 * MB, totalBytes: 10240 * MB },
+  services: true,
+  monthlyCredits: 3000
+}
 const components = {
   PortalConsoleLayout,
   PortalAccountSecurity,
   PortalProfile,
+  PortalPlan,
   PortalSessions,
   PortalPerson: PortalPersonPage,
   PortalAccessRequests,
   PortalActivity,
+  PortalDocuments,
   PortalEmailDelivery,
   PortalPeople,
   PortalStatus
 }
 
 const meta = {
-  title: 'App/Cloud Portal/Console',
+  title: 'App/Cloud/Portal/Console',
   tags: ['autodocs'],
   parameters: { layout: 'fullscreen' }
 } satisfies Meta
@@ -318,10 +435,13 @@ const story = (
       loadNoRequests,
       loadEmails,
       loadActivity,
+      loadDocuments,
+      freePlan,
+      paidPlan,
       ...extra
     }),
     template: `
-      <div class="h-[720px]">
+      <div class="h-180">
         <PortalConsoleLayout host="cloud.studio.example" :account="account" :sections="sections" active="${active}" heading="${heading}" description="${description}">
           ${body}
         </PortalConsoleLayout>
@@ -335,6 +455,18 @@ export const Profile = story(
   'How you appear to people on cloud.studio.example.',
   `<PortalProfile :profile="{ id: 'user-ana', name: 'Ana Duarte', email: 'ana@studio.example', image: null, memberSince: 'Mar 3, 2026' }" />`
 )
+export const PlanFree = story(
+  'plan',
+  'Plan',
+  'What your account includes, and what you pay for.',
+  `<PortalPlan :plan="freePlan" sells />`
+)
+export const PlanPaid = story(
+  'plan',
+  'Plan',
+  'What your account includes, and what you pay for.',
+  `<PortalPlan :plan="paidPlan" sells />`
+)
 export const Sessions = story(
   'sessions',
   'Sessions',
@@ -347,7 +479,7 @@ export const SignInAndSecurity = story(
   'How you sign in to cloud.studio.example.',
   `<PortalAccountSecurity
     :methods="[{ id: 'm1', provider: 'google', linkedOn: 'in March', canUnlink: true }, { id: 'm2', provider: 'credential', linkedOn: 'in March', canUnlink: true }]"
-    :linkable="['apple']"
+    :linkable="['apple', 'github']"
     :authenticator="{ available: true, on: true }"
     :passkeys="[{ id: 'p1', name: 'MacBook Pro', addedOn: 'in July' }]"
   />`
@@ -376,6 +508,18 @@ export const AccessRequests = story(
   'People asking to join. Approving lets them sign in; each gets an email either way.',
   `<PortalAccessRequests :load="loadRequests" />`
 )
+export const AccessRequestsInvitation = story(
+  'requests',
+  'Access requests',
+  'People asking to join. Approving lets them sign in; each gets an email either way.',
+  `<PortalAccessRequests :load="loadRequests" invitation="offered" />`
+)
+export const AccessRequestsInvited = story(
+  'requests',
+  'Access requests',
+  'People asking to join. Approving lets them sign in; each gets an email either way.',
+  `<PortalAccessRequests :load="loadRequests" invitation="sent" />`
+)
 export const NoAccessRequests = story(
   'requests',
   'Access requests',
@@ -401,3 +545,26 @@ export const Activity = story(
   'What administrators did on this server.',
   `<PortalActivity :load="loadActivity" />`
 )
+export const Documents: Story = {
+  ...story(
+    'documents',
+    'Documents',
+    'Every document on this server, latest change first.',
+    `<PortalDocuments :load="loadDocuments" />`
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    // Each document says who beyond its workspace can open it, private ones included.
+    await expect(await canvas.findByText('In community')).toBeVisible()
+    await expect(canvas.getByText('Editable by link')).toBeVisible()
+    await expect(canvas.getByText('Private')).toBeVisible()
+    const miniature = canvasElement.querySelector('[data-test-id="document-miniature"]')
+    if (!(miniature instanceof HTMLElement)) throw new Error('No document shows a miniature')
+    // The preview opens in a portal, outside the story's canvas.
+    const preview = () =>
+      canvasElement.ownerDocument.querySelector('[data-test-id="document-preview"] img')
+    // Focusing the miniature opens it, so the keyboard reaches it as hovering does.
+    miniature.focus()
+    await waitFor(() => expect(preview()).toHaveAttribute('alt', 'Preview of Spring campaign'))
+  }
+}

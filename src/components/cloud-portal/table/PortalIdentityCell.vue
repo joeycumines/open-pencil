@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusStyles } from '@open-pencil/theme'
 import { useCloudPortalMessages } from '@open-pencil/vue/i18n'
 
 import AccountAvatar from '@/components/presence/AccountAvatar.vue'
@@ -38,7 +39,7 @@ const messages = useCloudPortalMessages()
     <component
       :is="link ? 'button' : 'div'"
       :type="link ? 'button' : undefined"
-      class="min-w-0 rounded text-left focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+      :class="['min-w-0 rounded text-start', focusStyles.ring]"
       @click="link && emit('open')"
     >
       <span :class="ui.title()">

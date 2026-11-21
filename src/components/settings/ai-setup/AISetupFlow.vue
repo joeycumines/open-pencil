@@ -2,12 +2,15 @@
 import { tv } from 'tailwind-variants'
 import { computed, ref, useTemplateRef } from 'vue'
 
-import { IS_TAURI } from '@open-pencil/core/constants'
 import { useI18n } from '@open-pencil/vue/i18n'
 
+import { designModelConnection } from '@/app/ai/models'
 import type { AISetupEntry } from '@/app/ai/models/settings/onboarding/dialog'
 import type { OnboardingAccess } from '@/app/ai/models/settings/onboarding/plan'
 import { AI_SETUP_STEPS, useAIOnboarding } from '@/app/ai/models/settings/onboarding/use'
+import { OPENPENCIL_AI_PROVIDER } from '@/app/ai/providers/openpencil/provider'
+import { canRunHostProcesses } from '@/app/tauri/capabilities'
+import { isTauri } from '@/app/tauri/env'
 import SettingsSaveFeedback from '@/components/settings/layout/SettingsSaveFeedback.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { AppDialogBody, AppDialogFooter, AppDialogHeader } from '@/components/ui/dialog'
@@ -20,21 +23,30 @@ import AISetupConnection from './AISetupConnection.vue'
 import AISetupReview from './AISetupReview.vue'
 import AISetupRoles from './AISetupRoles.vue'
 import AISetupSkills from './AISetupSkills.vue'
+import AISetupWelcome from './AISetupWelcome.vue'
 
 const {
   entry,
   offersTour = true,
-  agentsAvailable = IS_TAURI
+  tourOpening = false,
+  tourFailed = false,
+  agentsAvailable = canRunHostProcesses(),
+  subscriptionsAvailable = isTauri()
 } = defineProps<{
   entry: AISetupEntry
   offersTour?: boolean
+  /** The tour is loading after the person chose it. */
+  tourOpening?: boolean
+  /** The tour could not be opened; the person can try again. */
+  tourFailed?: boolean
   agentsAvailable?: boolean
+  subscriptionsAvailable?: boolean
 }>()
 const emit = defineEmits<{ close: []; advanced: []; tour: [] }>()
 const { ai, common } = useI18n()
 const styles = tv(theme)()
 
-const onboarding = useAIOnboarding({ agentsAvailable })
+const onboarding = useAIOnboarding({ agentsAvailable, subscriptionsAvailable })
 const {
   answers,
   step,
@@ -50,6 +62,10 @@ const {
 } = onboarding
 const { isRecommended } = roles
 const phase = ref<'welcome' | 'wizard' | 'saved'>(entry === 'welcome' ? 'welcome' : 'wizard')
+// The welcome opens before sign-in, and signing in to Cloud sets AI up while it shows.
+const cloudReady = computed(
+  () => designModelConnection.value?.providerID === OPENPENCIL_AI_PROVIDER
+)
 
 const goals = computed(() => [
   {
@@ -109,13 +125,9 @@ async function finish(): Promise<void> {
 </script>
 
 <template>
-  <AppDialogHeader
-    :heading="header.heading"
-    :description="header.description"
-    :close-label="common.close"
-  >
+  <AppDialogHeader :heading="header.heading" :description="header.description">
     <template #actions>
-      <AppButton v-if="phase === 'wizard'" size="xs" class="mr-1 ml-auto" @click="emit('advanced')">
+      <AppButton v-if="phase === 'wizard'" size="xs" class="me-1 ms-auto" @click="emit('advanced')">
         {{ ai.aiSetupAdvanced }}
       </AppButton>
     </template>
@@ -123,21 +135,14 @@ async function finish(): Promise<void> {
 
   <AppDialogBody>
     <div :class="styles.body()" :data-ai-setup-step="phase === 'wizard' ? step : phase">
-      <template v-if="phase === 'welcome'">
-        <section :class="styles.intro()">
-          <h3 :class="styles.introHeading()">{{ ai.aiSetupWelcomeAITitle }}</h3>
-          <p :class="styles.introText()">{{ ai.aiSetupWelcomeAIDescription }}</p>
-        </section>
-        <section v-if="offersTour" :class="styles.tour()" data-test-id="ai-setup-tour">
-          <div>
-            <h3 :class="styles.introHeading()">{{ ai.aiSetupWelcomeTourTitle }}</h3>
-            <p :class="styles.introText()">{{ ai.aiSetupWelcomeTourDescription }}</p>
-          </div>
-          <AppButton variant="outline" :class="styles.tourAction()" @click="emit('tour')">
-            {{ ai.aiSetupTakeTour }}
-          </AppButton>
-        </section>
-      </template>
+      <AISetupWelcome
+        v-if="phase === 'welcome'"
+        :offers-tour="offersTour"
+        :tour-opening="tourOpening"
+        :tour-failed="tourFailed"
+        :cloud-ready="cloudReady"
+        @tour="emit('tour')"
+      />
 
       <template v-else-if="phase === 'saved'">
         <AISetupReview :plan="plan" />
@@ -159,6 +164,7 @@ async function finish(): Promise<void> {
         <AISetupAccess
           v-model="answers.access"
           :agents-available="agentsAvailable"
+          :subscriptions-available="subscriptionsAvailable"
           :detections="detections"
         />
       </template>
@@ -239,15 +245,20 @@ async function finish(): Promise<void> {
     </div>
   </AppDialogBody>
 
-  <AppDialogFooter :ui="{ footer: 'justify-between' }">
+  <AppDialogFooter>
     <template v-if="phase === 'welcome'">
-      <AppButton variant="outline" @click="emit('close')">{{ ai.aiSetupSkip }}</AppButton>
-      <AppButton color="primary" variant="solid" @click="phase = 'wizard'">
-        {{ ai.aiSetupStart }}
+      <AppButton v-if="cloudReady" color="primary" variant="solid" @click="emit('close')">
+        {{ ai.aiSetupSkip }}
       </AppButton>
+      <template v-else>
+        <AppButton variant="outline" @click="emit('close')">{{ ai.aiSetupSkip }}</AppButton>
+        <AppButton color="primary" variant="solid" @click="phase = 'wizard'">
+          {{ ai.aiSetupStart }}
+        </AppButton>
+      </template>
     </template>
     <template v-else-if="phase === 'saved'">
-      <AppButton class="ml-auto" color="primary" variant="solid" @click="emit('close')">
+      <AppButton color="primary" variant="solid" @click="emit('close')">
         {{ common.done }}
       </AppButton>
     </template>

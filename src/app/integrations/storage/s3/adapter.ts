@@ -2,6 +2,8 @@ import { sumBy } from 'es-toolkit'
 import * as v from 'valibot'
 
 import { extractFigThumbnailFromReader } from '@open-pencil/fig'
+import { appendAll } from '@open-pencil/std/arrays'
+import { errorMessage } from '@open-pencil/std/errors'
 
 import { isTauri } from '@/app/tauri/env'
 
@@ -97,7 +99,7 @@ function parseMetadata(
 
 function connectionErrorMessage(error: unknown, isCORS: boolean): string {
   if (isCORS) return formatBrowserCORSHelpMessage()
-  return error instanceof Error ? error.message : String(error)
+  return errorMessage(error)
 }
 
 async function ensureNamespace(config: S3CompatibleConfig): Promise<void> {
@@ -158,8 +160,9 @@ export function createS3StorageAdapter(runtime: StorageProviderRuntime): S3Stora
       // Bound sidecar reads so large buckets do not open hundreds of requests at once.
       for (let offset = 0; offset < entries.length; offset += 12) {
         const batch = entries.slice(offset, offset + 12)
-        documents.push(
-          ...(await Promise.all(
+        appendAll(
+          documents,
+          await Promise.all(
             batch.map(async ({ id, lastModified }) => {
               const fallback = {
                 name: id,
@@ -178,7 +181,7 @@ export function createS3StorageAdapter(runtime: StorageProviderRuntime): S3Stora
                 metadataAuthoritative: authoritative
               } satisfies StorageDocument
             })
-          ))
+          )
         )
       }
       return documents.sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))

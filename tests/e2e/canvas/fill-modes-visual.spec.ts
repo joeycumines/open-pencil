@@ -3,8 +3,11 @@ import { readFile } from 'node:fs/promises'
 import type * as FigNodeChange from '@open-pencil/fig/node-change'
 import type { Fill } from '@open-pencil/scene-graph'
 import { shaderPresetKey } from '@open-pencil/scene-graph/shaders'
+import { repoPath } from '@open-pencil/test-support/paths'
 
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
+import type * as ImageAdjustmentScenes from '#tests/helpers/canvas/image-adjustments/scene'
+import { pageScene, showView } from '#tests/helpers/canvas/page-scene'
 import { readScenePixels } from '#tests/helpers/canvas/pixels'
 
 const editor = useEditorSetupWithClear('/?test&no-chrome&no-rulers')
@@ -16,7 +19,7 @@ async function expectCanvas(name: string) {
 }
 
 test('FIT avatar preserves the full clipboard fixture image', async () => {
-  const bytes = await readFile('tests/fixtures/vectorize/pilot_avatar.png')
+  const bytes = await readFile(repoPath('tests/fixtures/vectorize/pilot_avatar.png'))
   await editor.page.evaluate(
     (data) => {
       const store = window.openPencil?.getStore?.()
@@ -381,4 +384,14 @@ test('a shader paint draws its saved frame, and its live frame while one plays',
   })
   await editor.canvas.waitForRender()
   await expectCanvas('shader-saved-frame')
+})
+
+test('image adjustments', async () => {
+  const bytes = await readFile(repoPath('tests/fixtures/vectorize/pilot_avatar.png'))
+  await showView(editor.page, { zoom: 1, panX: 0, panY: 0 })
+  await pageScene<typeof ImageAdjustmentScenes>(
+    () => editor.page,
+    '/tests/helpers/canvas/image-adjustments/scene.ts'
+  ).build('createImageAdjustmentsScene', [...bytes])
+  await expectCanvas('image-adjustments')
 })

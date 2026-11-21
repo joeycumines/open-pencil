@@ -1,17 +1,18 @@
+import type { JSONValue, ToolResultPart, ToolSet, tool as createTool } from 'ai'
 /**
  * Adapter: tool definitions → Vercel AI SDK `tool()` objects.
  *
  * Consumes native tool input schemas and wraps execution with FigmaAPI instantiation.
  */
-
-// eslint-disable-next-line open-pencil/no-mixed-case-acronym-identifiers -- Upstream export spelling.
-import { toStandardJsonSchema as toStandardJSONSchema } from '@valibot/to-json-schema'
-import type { JSONValue, ToolResultPart, ToolSet, tool as createTool } from 'ai'
 import { isEmptyObject } from 'es-toolkit'
 
-import type { FigmaAPI } from '#core/figma-api'
+import { appendAll } from '@open-pencil/std/arrays'
+import { errorMessage } from '@open-pencil/std/errors'
 
-import { isToolExposed, type ToolDef } from './schema'
+import type { FigmaAPI } from '#core/figma-api'
+import { graphOf } from '#core/figma-api/graph'
+
+import { isToolExposed, toolInputFor, toolStandardJSONSchema, type ToolDef } from './schema'
 
 export interface ToolLogEntry {
   tool: string
@@ -102,9 +103,9 @@ function extractNodeIds(result: unknown): string[] {
   const ids: string[] = []
   if ('id' in result && typeof result.id === 'string') ids.push(result.id)
   if ('selection' in result && Array.isArray(result.selection))
-    ids.push(...extractIdsFromArray(result.selection))
+    appendAll(ids, extractIdsFromArray(result.selection))
   if ('results' in result && Array.isArray(result.results))
-    ids.push(...extractIdsFromArray(result.results))
+    appendAll(ids, extractIdsFromArray(result.results))
   return ids
 }
 
@@ -114,7 +115,7 @@ function captureNodeSnapshot(
 ): Record<string, unknown> | undefined {
   const targetId = args.id as string | undefined
   if (!targetId) return undefined
-  const raw = figma.graph.getNode(targetId)
+  const raw = graphOf(figma).getNode(targetId)
   if (!raw) return undefined
   return Object.fromEntries(Object.entries(structuredClone(raw)))
 }
@@ -205,7 +206,7 @@ export function toolsToAI(
     if (!isToolExposed(def, 'ai')) continue
     const toolOpts: Record<string, unknown> = {
       description: def.description,
-      inputSchema: toStandardJSONSchema(def.input),
+      inputSchema: toolStandardJSONSchema(toolInputFor(def, 'ai')),
       execute: async (args: Record<string, unknown>, { toolCallId }: { toolCallId: string }) => {
         const startTime = Date.now()
         const figma = options.getFigma()
@@ -237,7 +238,7 @@ export function toolsToAI(
           }
           return execResult
         } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err)
+          const errorMsg = errorMessage(err)
           emitToolLog(options, def, args, startTime, figma, nodeBefore, null, {
             error: errorMsg,
             cause: err

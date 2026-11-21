@@ -1,19 +1,21 @@
 <script setup lang="ts">
+import { useHead } from '@unhead/vue'
 import { uniq } from 'es-toolkit'
 import { tv } from 'tailwind-variants'
 import { useTemplateRef, watch } from 'vue'
 
+import { portalLayoutTheme } from '@open-pencil/theme'
 import { useCloudPortalMessages } from '@open-pencil/vue/i18n'
 
 import BrandMark from '@/components/brand/BrandMark.vue'
 import AccountAvatar from '@/components/presence/AccountAvatar.vue'
+import { provideSettingsSectionHeading } from '@/components/settings/layout/heading'
 import { useAppButtonUI } from '@/components/ui/button/button'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import AppSkeleton from '@/components/ui/feedback/AppSkeleton.vue'
 import { skeleton } from '@/components/ui/feedback/skeleton'
 import { sideList } from '@/components/ui/list/side-list'
 import { useScrollOverflow } from '@/components/ui/list/useScrollOverflow'
-import portalLayoutTheme from '@/theme/cloud-portal/layout'
 
 import type { PortalSection } from '../types'
 
@@ -32,10 +34,15 @@ const { host, account, sections, active, heading, description } = defineProps<{
   /** Null while it is still being counted, which keeps its line with a placeholder. */
   description?: string | null
 }>()
+
+// The page's heading names its tab, under the site's name (`CloudPortalApp`).
+useHead({ title: () => heading })
 const emit = defineEmits<{ select: [id: string]; signOut: [] }>()
 
 const ui = portalLayout()
 const messages = useCloudPortalMessages()
+// The page's title is its h1, so the sections under it are h2.
+provideSettingsSectionHeading('h2')
 const side = sideList()
 const groups = () => uniq(sections.map((section) => section.group))
 const editorLink = useAppButtonUI({ variant: 'outline', size: 'sm' })
@@ -113,8 +120,8 @@ watch(
           :data-start="!overflowEnd || undefined"
           @click="scrollTowardHidden"
         >
-          <icon-lucide-chevron-right v-if="overflowEnd" class="size-3.5" />
-          <icon-lucide-chevron-left v-else class="size-3.5" />
+          <icon-lucide-chevron-right data-direction="reading" v-if="overflowEnd" class="size-3.5" />
+          <icon-lucide-chevron-left data-direction="reading" v-else class="size-3.5" />
         </button>
       </div>
       <main :class="ui.main()">

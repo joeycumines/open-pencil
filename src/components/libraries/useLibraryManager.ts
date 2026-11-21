@@ -1,5 +1,8 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
 
+import { maxOf } from '@open-pencil/std/arrays'
+import { errorMessage } from '@open-pencil/std/errors'
+
 import type { EditorStore } from '@/app/editor/session'
 import { notificationMessages } from '@/app/i18n/notifications'
 import { createActiveStorageAdapter, storagePreferencesComplete } from '@/app/integrations/storage'
@@ -10,13 +13,9 @@ import {
   StorageLibraryCatalog,
   type LibraryService
 } from '@/app/libraries'
-import type { LibraryAssetUpdateGroup } from '@/app/libraries/update-groups'
-import { scopeLibraryUpdateGroups } from '@/app/libraries/update-groups'
+import type { LibraryAssetUpdateGroup } from '@/app/libraries/updates/groups'
+import { scopeLibraryUpdateGroups } from '@/app/libraries/updates/groups'
 import { toast } from '@/app/shell/ui'
-
-function errorDetail(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
 
 export function useLibraryManager(
   open: Ref<boolean>,
@@ -59,7 +58,7 @@ export function useLibraryManager(
       read = true
     } catch (cause) {
       if (request === requestId) {
-        toast.error(notificationMessages.get().operationFailed({ error: errorDetail(cause) }))
+        toast.error(notificationMessages.get().operationFailed({ error: errorMessage(cause) }))
       }
     } finally {
       if (request === requestId) {
@@ -75,7 +74,7 @@ export function useLibraryManager(
     try {
       await operation()
     } catch (cause) {
-      toast.error(notificationMessages.get().operationFailed({ error: errorDetail(cause) }))
+      toast.error(notificationMessages.get().operationFailed({ error: errorMessage(cause) }))
     }
   }
 
@@ -108,10 +107,10 @@ export function useLibraryManager(
   }
 
   function preferLibrary(libraryId: string) {
-    const priority = Math.max(
+    const priority = maxOf([
       0,
       ...service.summaries.value.map((item) => readLibraryPriority(item.libraryId))
-    )
+    ])
     service.setPriority(libraryId, priority + 1)
   }
 

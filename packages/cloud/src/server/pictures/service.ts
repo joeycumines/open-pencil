@@ -1,10 +1,13 @@
 import { CLOUD_PICTURE_MAX_BYTES } from '#cloud/contract'
 import type { CloudDatabase, UserPictureFormat } from '#cloud/server/db'
+import { logCloud, loggedError } from '#cloud/server/logging'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import { imageSize } from 'image-size'
 import type { Kysely } from 'kysely'
 import * as v from 'valibot'
+
+import { DEADLINE_MS } from '@open-pencil/std/timing'
 
 /** Where pictures are served; a picture's address ends in its checksum, so a new one is new. */
 export const PICTURE_PATH = '/api/pictures'
@@ -13,7 +16,7 @@ const PICTURE_MAX_SIDE = 1024
 /** How many hex digits of the checksum name a picture in its address. */
 const PICTURE_VERSION_LENGTH = 16
 /** How long a linked account's picture may take to fetch before sign-in goes on without it. */
-const PROVIDER_PICTURE_TIMEOUT_MS = 5000
+const PROVIDER_PICTURE_TIMEOUT_MS = DEADLINE_MS.request
 /** The hosts linked accounts serve pictures from; Google is the only provider that sends one. */
 const PROVIDER_PICTURE_HOSTS = ['googleusercontent.com']
 const PICTURE_FORMATS: Readonly<Record<string, UserPictureFormat>> = { png: 'png', jpg: 'jpeg' }
@@ -220,7 +223,7 @@ export function createUserPictures(database: Kysely<CloudDatabase>, options: Use
         if (!bytes) throw new PictureInvalidError()
         await save(userId, bytes, { from: 'provider', seen: current })
       } catch (error) {
-        console.warn('Keeping a linked account picture failed', error)
+        logCloud('warn', 'Keeping a linked account picture failed', { error: loggedError(error) })
         await database
           .updateTable('user')
           .set({ image: null, updatedAt: new Date() })

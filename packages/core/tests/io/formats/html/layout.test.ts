@@ -1,0 +1,367 @@
+import { describe, expect, test } from 'bun:test'
+import { join } from 'node:path'
+
+import { sceneGraphFromStyledHTML } from '@open-pencil/core/io/formats/html/layers'
+import type {
+  DesignElement,
+  DesignLayout,
+  DesignNode,
+  DesignStyleDeclaration
+} from '@open-pencil/dom-css'
+import { svgDataURL } from '@open-pencil/scene-graph/images'
+import { layoutSizing } from '@open-pencil/scene-graph/layout'
+import { FIXTURES } from '@open-pencil/test-support/paths'
+
+import { fontManager } from '#core/text/font/manager'
+
+function element(
+  computedStyle: DesignStyleDeclaration,
+  layout: DesignLayout,
+  children: DesignNode[] = []
+): DesignElement {
+  return { type: 'element', tagName: 'div', attrs: {}, children, computedStyle, layout }
+}
+
+const rect = (x: number, y: number, width: number, height: number) => ({ x, y, width, height })
+const box = (width: number, height: number) => ({ width: `${width}px`, height: `${height}px` })
+
+describe('laying out HTML from its captured layout', () => {
+  test('places a layout auto layout cannot express where the page had it', async () => {
+    // A two-column grid: the importer stacks its children, the page puts them side by side.
+    const grid = element({ display: 'grid', ...box(400, 100) }, { box: rect(0, 0, 400, 100) }, [
+      element(box(180, 100), { box: rect(0, 0, 180, 100) }),
+      element(box(200, 100), { box: rect(200, 0, 200, 100) })
+    ])
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [grid] })
+    const gridLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const [first, second] = graph.getChildren(gridLayer.id)
+
+    expect(gridLayer).toMatchObject({ layoutMode: 'NONE', width: 400, height: 100 })
+    expect(first).toMatchObject({ x: 0, y: 0, width: 180, height: 100 })
+    expect(second).toMatchObject({ x: 200, y: 0, width: 200, height: 100 })
+  })
+
+  test('keeps auto layout where it lands the children where the page did', async () => {
+    const row = element(
+      {
+        display: 'flex',
+        'column-gap': '20px',
+        gap: '20px',
+        'padding-left': '10px',
+        ...box(300, 50)
+      },
+      { box: rect(0, 0, 310, 50) },
+      [
+        element(box(40, 50), { box: rect(10, 0, 40, 50) }),
+        element(box(60, 50), { box: rect(70, 0, 60, 50) })
+      ]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [row] })
+    const rowLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const [first, second] = graph.getChildren(rowLayer.id)
+
+    expect(rowLayer.layoutMode).toBe('HORIZONTAL')
+    expect(rowLayer.itemSpacing).toBe(20)
+    expect(first).toMatchObject({ x: 10, width: 40 })
+    expect(second).toMatchObject({ x: 70, width: 60 })
+  })
+
+  test('fixes the size of a child auto layout sizes otherwise, keeping its parent auto layout', async () => {
+    // Boxes left to layout that it hugs to nothing, though the page gave them a size: fixing
+    // their sizes lands them where the page did, so the column keeps stacking them.
+    const auto = { width: 'auto', height: 'auto' }
+    const column = element(
+      { display: 'block', width: '200px', height: 'auto' },
+      { box: rect(0, 0, 200, 100) },
+      [
+        element({ display: 'block', ...auto }, { box: rect(0, 0, 200, 40) }),
+        element({ display: 'block', ...auto }, { box: rect(0, 40, 200, 60) })
+      ]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [column] })
+    const columnLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const [first, second] = graph.getChildren(columnLayer.id)
+
+    expect(columnLayer.layoutMode).toBe('VERTICAL')
+    expect(first).toMatchObject({ y: 0, height: 40 })
+    expect(second).toMatchObject({ y: 40, height: 60 })
+  })
+
+  test('lays out again after correcting a fixed size, so its siblings follow and auto layout stays', async () => {
+    // The page sized the first box 30px though its style says 20px, as a min-height would.
+    const column = element(
+      { display: 'block', width: '200px', height: '70px' },
+      { box: rect(0, 0, 200, 70) },
+      [
+        element({ display: 'block', width: '200px', height: '20px' }, { box: rect(0, 0, 200, 30) }),
+        element({ display: 'block', width: '200px', height: '40px' }, { box: rect(0, 30, 200, 40) })
+      ]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [column] })
+    const columnLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const [first, second] = graph.getChildren(columnLayer.id)
+
+    expect(columnLayer.layoutMode).toBe('VERTICAL')
+    expect(first).toMatchObject({ y: 0, height: 30 })
+    expect(second).toMatchObject({ y: 30, height: 40 })
+  })
+
+  test('sets the text of an inline element on its line, sized to its words', async () => {
+    // A flex item of inline text: its words are on its one fragment.
+    const span: DesignElement = {
+      type: 'element',
+      tagName: 'span',
+      attrs: {},
+      children: [{ type: 'text', text: 'Vue.js' }],
+      computedStyle: { display: 'inline', width: 'auto', height: 'auto', 'font-size': '16px' },
+      layout: { box: rect(10, 8, 47, 24), fragments: [rect(10, 8, 47, 24)] }
+    }
+    const nav = element(
+      { display: 'flex', width: '300px', height: '40px' },
+      { box: rect(0, 0, 300, 40) },
+      [span]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [nav] })
+    const navLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const [text] = graph.getChildren(navLayer.id)
+
+    expect(text).toMatchObject({ type: 'TEXT', textAutoResize: 'WIDTH_AND_HEIGHT', y: 8 })
+    expect(text.width).toBeGreaterThan(0)
+  })
+
+  test('a single line hugs its words in a column that stretches its children', async () => {
+    const label: DesignElement = {
+      type: 'element',
+      tagName: 'span',
+      attrs: {},
+      children: [{ type: 'text', text: 'Docs' }],
+      computedStyle: { display: 'inline', width: 'auto', height: 'auto', 'font-size': '16px' },
+      layout: { box: rect(0, 0, 36, 24), fragments: [rect(0, 0, 36, 24)] }
+    }
+    // A flex column without align-items stretches its children across.
+    const column = element(
+      { display: 'flex', 'flex-direction': 'column', width: '300px', height: 'auto' },
+      { box: rect(0, 0, 300, 24) },
+      [label]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [column] })
+    const columnLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const [text] = graph.getChildren(columnLayer.id)
+
+    expect(text.type).toBe('TEXT')
+    expect(layoutSizing(graph, text, 'HORIZONTAL')).toBe('HUG')
+    expect(text.width).toBeLessThan(300)
+  })
+
+  test('puts top-level elements where the page stacked them', async () => {
+    const graph = await sceneGraphFromStyledHTML({
+      type: 'document',
+      children: [
+        element(box(1440, 64), { box: rect(0, 0, 1440, 64) }),
+        element(box(1440, 300), { box: rect(0, 96, 1440, 300) })
+      ]
+    })
+    const [header, main] = graph.getChildren(graph.getPages()[0].id)
+
+    expect(header).toMatchObject({ x: 0, y: 0, width: 1440, height: 64 })
+    expect(main).toMatchObject({ x: 0, y: 96, width: 1440, height: 300 })
+  })
+
+  test('keeps text the page set on one line on one line', async () => {
+    const label = element(
+      { 'padding-left': '12px', ...box(60, 20) },
+      { box: rect(0, 0, 72, 20), lines: [rect(12, 2, 40, 16)] },
+      [{ type: 'text', text: 'Docs' }]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [label] })
+    const labelLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const text = graph.getChildren(labelLayer.id)[0]
+
+    // It sizes to its words, so a fallback font wider than the page's does not wrap it.
+    expect(text).toMatchObject({ type: 'TEXT', textAutoResize: 'WIDTH_AND_HEIGHT' })
+  })
+
+  test('centers a line its block centers, keeping auto layout', async () => {
+    const label = element(
+      { 'text-align': 'center', ...box(300, 20) },
+      { box: rect(0, 0, 300, 20), lines: [rect(130, 0, 40, 20)] },
+      [{ type: 'text', text: 'Docs' }]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [label] })
+    const labelLayer = graph.getChildren(graph.getPages()[0].id)[0]
+    const text = graph.getChildren(labelLayer.id)[0]
+
+    expect(labelLayer).toMatchObject({ layoutMode: 'VERTICAL', counterAxisAlign: 'CENTER' })
+    expect(text.x + text.width / 2).toBeCloseTo(150)
+  })
+
+  test('keeps auto layout for a line that starts where its words did', async () => {
+    const label = element(box(300, 20), { box: rect(0, 0, 300, 20), lines: [rect(0, 0, 40, 20)] }, [
+      { type: 'text', text: 'Docs' }
+    ])
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [label] })
+    const labelLayer = graph.getChildren(graph.getPages()[0].id)[0]
+
+    expect(labelLayer.layoutMode).toBe('VERTICAL')
+  })
+})
+
+describe('fonts of HTML styled in a browser', () => {
+  test('sets text in the first family of its list there is a font for', async () => {
+    const family = 'OpenPencil Stack Test'
+    const font = await Bun.file(join(FIXTURES, 'fonts', 'InterVariable-Latin.ttf')).arrayBuffer()
+    await fontManager.markLoaded(family, 'Regular', font)
+    // A browser on a system with neither of the first two falls through to the third.
+    const paragraph = element(
+      { 'font-family': `"Helvetica Neue", "No Such Family", "${family}", sans-serif` },
+      { box: rect(0, 0, 200, 20) },
+      [{ type: 'text', text: 'Hosted directly from your repository' }]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [paragraph] })
+    const text = graph
+      .flattenTree(graph.getPages()[0].id)
+      .find(({ node }) => node.type === 'TEXT')?.node
+
+    expect(text?.fontFamily).toBe(family)
+  })
+})
+
+describe('CSS mask icons', () => {
+  test('draws the SVG an element is masked with, its shapes in the element’s background', async () => {
+    const icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M0 0h24v24H0z'/><path fill='none' stroke='black' d='M2 2h20'/></svg>"
+    const masked = element(
+      {
+        ...box(16, 16),
+        'background-color': 'rgb(255, 0, 0)',
+        'mask-image': `url("${svgDataURL(icon)}")`
+      },
+      { box: rect(0, 0, 16, 16) }
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [masked] })
+    const frame = graph.getChildren(graph.getPages()[0].id)[0]
+    const shapes = graph
+      .flattenTree(frame.id)
+      .flatMap(({ node }) => (node.id === frame.id ? [] : [node]))
+    const paints = shapes.flatMap((shape) => [...shape.fills, ...shape.strokes])
+
+    // The background shows through the shapes, not across the box.
+    expect(frame).toMatchObject({ width: 16, height: 16, fills: [] })
+    expect(paints.length).toBeGreaterThan(0)
+    expect(paints.every((paint) => paint.color?.r === 1 && paint.color.g === 0)).toBe(true)
+  })
+
+  test('keeps a stroked mask icon a line, its root filling nothing', async () => {
+    const icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><path stroke='black' d='M2 2h20v20H2z'/></svg>"
+    const masked = element(
+      {
+        ...box(16, 16),
+        'background-color': 'rgb(255, 0, 0)',
+        'mask-image': `url("${svgDataURL(icon)}")`
+      },
+      { box: rect(0, 0, 16, 16) }
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [masked] })
+    const frame = graph.getChildren(graph.getPages()[0].id)[0]
+    const shapes = graph
+      .flattenTree(frame.id)
+      .flatMap(({ node }) => (node.id === frame.id ? [] : [node]))
+
+    expect(shapes.some((shape) => shape.strokes.length > 0)).toBe(true)
+    expect(shapes.flatMap((shape) => shape.fills)).toEqual([])
+  })
+
+  test('paints a mask’s root stroke and inline paints in the element’s background', async () => {
+    const icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black'><path d='M2 2h20'/><rect x='4' y='4' width='8' height='8' style='fill: black'/></svg>"
+    const masked = element(
+      {
+        ...box(16, 16),
+        'background-color': 'rgb(255, 0, 0)',
+        'mask-image': `url("${svgDataURL(icon)}")`
+      },
+      { box: rect(0, 0, 16, 16) }
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [masked] })
+    const frame = graph.getChildren(graph.getPages()[0].id)[0]
+    const paints = graph
+      .flattenTree(frame.id)
+      .flatMap(({ node }) => (node.id === frame.id ? [] : [...node.fills, ...node.strokes]))
+
+    expect(paints.length).toBeGreaterThan(0)
+    expect(paints.every((paint) => paint.color?.r === 1 && paint.color.g === 0)).toBe(true)
+  })
+
+  test('keeps a shape the mask hides hidden, and a half-covered one half covered', async () => {
+    const icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='transparent'/><rect width='8' height='8' style='fill: rgba(0, 0, 0, 0.5)'/></svg>"
+    const masked = element(
+      {
+        ...box(16, 16),
+        'background-color': 'rgb(255, 0, 0)',
+        'mask-image': `url("${svgDataURL(icon)}")`
+      },
+      { box: rect(0, 0, 16, 16) }
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [masked] })
+    const frame = graph.getChildren(graph.getPages()[0].id)[0]
+    const fills = graph
+      .flattenTree(frame.id)
+      .flatMap(({ node }) => (node.id === frame.id ? [] : node.fills))
+      .filter((fill) => fill.visible && (fill.color?.a ?? 1) * fill.opacity > 0)
+
+    // Only the half-covered square shows, in the background color at half strength.
+    expect(fills).toHaveLength(1)
+    expect(fills[0]?.color).toMatchObject({ r: 1, g: 0, b: 0 })
+    expect((fills[0]?.color?.a ?? 1) * (fills[0]?.opacity ?? 1)).toBeCloseTo(0.5)
+  })
+
+  test('keeps the content of an element masked over it', async () => {
+    const icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'><rect width='4' height='4'/></svg>"
+    const masked = element(
+      { ...box(80, 20), 'mask-image': `url("${svgDataURL(icon)}")` },
+      { box: rect(0, 0, 80, 20) },
+      [{ type: 'text', text: 'Masked label' }]
+    )
+    const graph = await sceneGraphFromStyledHTML({ type: 'document', children: [masked] })
+    const texts = graph
+      .flattenTree(graph.getPages()[0].id)
+      .flatMap(({ node }) => (node.type === 'TEXT' ? [node.text] : []))
+
+    expect(texts).toEqual(['Masked label'])
+  })
+
+  test('draws a mask icon its matcher names at its box size, in the element’s background', async () => {
+    const icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='none' stroke='black' stroke-width='2' d='M2 2h20v20H2z'/></svg>"
+    const masked = element(
+      {
+        ...box(16, 16),
+        'background-color': 'rgb(255, 0, 0)',
+        color: 'rgb(0, 0, 255)',
+        'mask-image': `url("${svgDataURL(icon)}")`
+      },
+      { box: rect(0, 0, 16, 16) }
+    )
+    const graph = await sceneGraphFromStyledHTML(
+      { type: 'document', children: [masked] },
+      { matchIcon: async (svgs) => svgs.map(() => 'lucide:square') }
+    )
+    const frame = graph.getChildren(graph.getPages()[0].id)[0]
+    const vectors = graph
+      .flattenTree(frame.id)
+      .flatMap(({ node }) => (node.type === 'VECTOR' ? [node] : []))
+    const bounds = vectors.map((vector) => {
+      const at = graph.getAbsolutePosition(vector.id)
+      return { left: at.x, right: at.x + vector.width }
+    })
+    const paints = vectors.flatMap((vector) => [...vector.fills, ...vector.strokes])
+
+    // The 24-unit icon scales into the 16px box, in red, the background, not the blue text.
+    expect(vectors.length).toBeGreaterThan(0)
+    expect(bounds.every(({ left, right }) => left >= -1 && right <= 17)).toBe(true)
+    expect(paints.every((paint) => paint.color?.r === 1 && paint.color.b === 0)).toBe(true)
+  })
+})

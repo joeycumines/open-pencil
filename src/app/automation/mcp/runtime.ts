@@ -1,16 +1,17 @@
 import { reactive } from 'vue'
 
+import { toError } from '@open-pencil/std/errors'
+
 import { connectAutomation } from '@/app/automation/bridge/server'
 import type { EditorStore } from '@/app/editor/active-store'
 import { isTauri } from '@/app/tauri/env'
 
 import { mcpFailure, type MCPFailure } from './failure'
+import { getAutomationHealthFailure, type AutomationHealth } from './health'
 import { setMCPToolDescriptors } from './preferences'
 import {
-  type AutomationHealth,
   type AutomationServerHandle,
   readAutomationHealth,
-  getAutomationHealthFailure,
   getAutomationStartupFailure,
   getMCPServerURL,
   spawnMCPIfNeeded
@@ -65,10 +66,6 @@ function describeStartupFailure(
 /** Technical summary for logs; the UI renders translated copy from the code. */
 function failureDetail(failure: MCPFailure): string {
   return failure.detail ? `${failure.code}: ${failure.detail}` : failure.code
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
 }
 
 export function createMCPRuntimeService(dependencies: MCPRuntimeDependencies) {

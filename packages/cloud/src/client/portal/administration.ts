@@ -3,14 +3,21 @@ import {
   adminEmailResponseSchema,
   adminMutationResponseSchema,
   adminOperationsResponseSchema,
+  cloudAdminDocumentsResponseSchema,
+  cloudAdminReportsResponseSchema,
   cloudAdminSessionResponseSchema,
   cloudAdminUserDetailSchema,
   cloudAdminUsersResponseSchema,
+  documentDownloadSchema,
+  enrollmentInviteResponseSchema,
   enrollmentReviewResponseSchema,
   enrollmentsResponseSchema,
   type CloudAdminAuditFilter,
+  type CloudAdminDocumentFilter,
+  type CloudAdminReportFilter,
   type CloudAdminEmailFilter,
   type CloudAdminUserFilter,
+  type CloudAdminUserMethod,
   type EnrollmentStatus
 } from '#cloud/contract'
 
@@ -24,14 +31,19 @@ export type AdminListRequest<Filter extends string> = {
   offset?: number
 }
 
+/** A count as a query string carries it. */
+function countParameter(count: number | undefined): string | undefined {
+  return count === undefined ? undefined : String(count)
+}
+
 /** The query string for `request`; an empty search asks for everything. */
 function listQuery<Filter extends string>(request: AdminListRequest<Filter>) {
   return {
     query: {
       search: request.search || undefined,
       filter: request.filter,
-      limit: request.limit,
-      offset: request.offset
+      limit: countParameter(request.limit),
+      offset: countParameter(request.offset)
     }
   }
 }
@@ -65,9 +77,22 @@ export function createAdministrationAPI(call: CloudCall, { admin, api }: PortalR
         signal
       )
     },
-    users(request: AdminListRequest<CloudAdminUserFilter>, signal?: AbortSignal) {
+    /** Approves every waiting request and sends each the invitation letter (official only). */
+    inviteEnrollments(signal?: AbortSignal) {
       return call(
-        (options) => admin.users.$get(listQuery(request), options),
+        (options) => admin.enrollments.invite.$post(undefined, options),
+        enrollmentInviteResponseSchema,
+        signal
+      )
+    },
+    /** A page of people; `method` narrows any filter to those who sign in that way. */
+    users(
+      request: AdminListRequest<CloudAdminUserFilter> & { method?: CloudAdminUserMethod },
+      signal?: AbortSignal
+    ) {
+      const { query } = listQuery(request)
+      return call(
+        (options) => admin.users.$get({ query: { ...query, method: request.method } }, options),
         cloudAdminUsersResponseSchema,
         signal
       )
@@ -80,13 +105,22 @@ export function createAdministrationAPI(call: CloudCall, { admin, api }: PortalR
       )
     },
     userAction(
-      action: 'ban' | 'unban' | 'revoke-sessions' | 'reset-two-step' | 'remove-picture',
+      action: 'ban' | 'unban' | 'revoke-sessions' | 'reset-two-step' | 'remove-picture' | 'delete',
       userId: string,
       reason?: string,
       signal?: AbortSignal
     ) {
       return call(
         (options) => admin.users[action].$post({ json: { userId, reason } }, options),
+        adminMutationResponseSchema,
+        signal
+      )
+    },
+    /** Removes one of an account's sign-in methods; the server keeps its last. */
+    removeSignInMethod(userId: string, methodId: string, signal?: AbortSignal) {
+      return call(
+        (options) =>
+          admin.users['remove-sign-in-method'].$post({ json: { userId, methodId } }, options),
         adminMutationResponseSchema,
         signal
       )
@@ -116,6 +150,75 @@ export function createAdministrationAPI(call: CloudCall, { admin, api }: PortalR
       return call(
         (options) => admin.audit.$get(listQuery(request), options),
         adminAuditResponseSchema,
+        signal
+      )
+    },
+    reports(request: AdminListRequest<CloudAdminReportFilter>, signal?: AbortSignal) {
+      return call(
+        (options) => admin.reports.$get(listQuery(request), options),
+        cloudAdminReportsResponseSchema,
+        signal
+      )
+    },
+    /** Closes a report: dismissed, or acted on outside a takedown. */
+    resolveReport(id: string, action: 'dismiss' | 'action', signal?: AbortSignal) {
+      return call(
+        (options) => admin.reports[':id'][action].$post({ param: { id } }, options),
+        adminMutationResponseSchema,
+        signal
+      )
+    },
+    documents(request: AdminListRequest<CloudAdminDocumentFilter>, signal?: AbortSignal) {
+      return call(
+        (options) => admin.documents.$get(listQuery(request), options),
+        cloudAdminDocumentsResponseSchema,
+        signal
+      )
+    },
+    /**
+     * Where a document's thumbnail at `revisionId` is: an image the console shows on the server's
+     * own address, so the administrator's session goes with it.
+     */
+    documentThumbnailURL(documentId: string, revisionId: string): string {
+      return admin.documents[':documentId'].thumbnails[':revisionId']
+        .$url({ param: { documentId, revisionId } })
+        .toString()
+    },
+    /** Links to a document's file and images as it is now; the server records the download. */
+    downloadDocument(id: string, signal?: AbortSignal) {
+      return call(
+        (options) => admin.documents[':id'].download.$post({ param: { id } }, options),
+        documentDownloadSchema,
+        signal
+      )
+    },
+    /** Takes a document down, or puts it back. */
+    documentAction(
+      id: string,
+      action: 'disable' | 'enable' | 'undelete',
+      reason?: string,
+      signal?: AbortSignal
+    ) {
+      return call(
+        (options) => {
+          if (action === 'disable') {
+            return admin.documents[':id'].disable.$post(
+              { param: { id }, json: { reason } },
+              options
+            )
+          }
+          return action === 'enable'
+            ? admin.documents[':id'].enable.$post({ param: { id } }, options)
+            : admin.documents[':id'].undelete.$post({ param: { id } }, options)
+        },
+        adminMutationResponseSchema,
+        signal
+      )
+    },
+    revokeShare(id: string, signal?: AbortSignal) {
+      return call(
+        (options) => admin.shares[':id'].revoke.$post({ param: { id } }, options),
+        adminMutationResponseSchema,
         signal
       )
     },

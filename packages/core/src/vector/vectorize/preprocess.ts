@@ -1,5 +1,4 @@
-import type { CanvasKit } from 'canvaskit-wasm'
-
+import type { CanvasKit } from '@open-pencil/canvaskit'
 import type { Size } from '@open-pencil/scene-graph/primitives'
 
 const MIN_DIMENSION = 256
@@ -90,7 +89,7 @@ function resizeImage(
   const snapshot = surface.makeImageSnapshot()
   const encoded = encodePNG(ck, snapshot)
   snapshot.delete()
-  surface.delete()
+  surface.dispose()
   ck.Free(pixels)
   return encoded
 }

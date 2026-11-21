@@ -6,6 +6,7 @@ import { useEventListener, whenever } from '@vueuse/core'
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { errorMessage } from '@open-pencil/std/errors'
 import { useI18n } from '@open-pencil/vue/i18n'
 
 import {
@@ -16,6 +17,7 @@ import { exposeAutomationTestRequests } from '@/app/automation/bridge/test-hooks
 import { startMCPRuntime, stopMCPRuntime } from '@/app/automation/mcp/runtime'
 import { startWebMCP } from '@/app/automation/webmcp/runtime'
 import { exposeCollaborationActions } from '@/app/browser-bridge'
+import { offerCampaignPrompt, startCampaignClock } from '@/app/campaigns'
 import { openingCloudLink, shownEditorStore, versionPreviewKey } from '@/app/cloud/integration'
 import { useJoinRoom } from '@/app/collab/join'
 import { bindDesktopRoomLinks } from '@/app/collab/room/links'
@@ -45,9 +47,15 @@ import {
 } from '@/app/tabs'
 import { syncTabAddress } from '@/app/tabs/address'
 import { isTauri } from '@/app/tauri/env'
-import { offerUsageStatsPrompt, startSharing } from '@/app/telemetry'
+import { offerUsageStatsPrompt, startSharing, usageStatsPrompt } from '@/app/telemetry'
 import ColorSpaceBanner from '@/components/canvas/ColorSpaceBanner.vue'
-import { CloudVersionDialog } from '@/components/cloud/integration'
+import {
+  CloudBetaBanner,
+  CloudCreditsBanner,
+  CloudCommunityBanner,
+  CloudEditorUpdateBanner,
+  CloudVersionDialog
+} from '@/components/cloud/integration'
 import CommandPalette from '@/components/commands/CommandPalette.vue'
 import EditorWorkspace from '@/components/editor/EditorWorkspace.vue'
 import FileApiBanner from '@/components/FileApiBanner.vue'
@@ -126,7 +134,7 @@ function openFirstTab(): Tab {
       toast.error(
         notificationMessages.get().openFileFailed({
           name: 'Demo',
-          error: error instanceof Error ? error.message : String(error)
+          error: errorMessage(error)
         })
       )
     })
@@ -139,8 +147,13 @@ const welcomeShown =
     ? offerAISetupOnFirstRun({ inTour: route.meta.demo === true })
     : false
 const sharingStarted = startSharing()
-// One question per surface: a first run is asked about usage stats once the welcome closes.
+// Release builds show campaigns, such as the donation ask; development and test runs would only
+// be interrupted.
+const showsCampaigns = import.meta.env.PROD && !appRuntimeConfig.test
+// One question per launch: a first run is asked about usage stats once the welcome closes, and
+// a later launch about usage stats if still unanswered, otherwise shows a campaign that is due.
 if (welcomeShown) {
+  startCampaignClock()
   whenever(
     () => !aiSetupDialogOpen.value,
     async () => {
@@ -156,6 +169,7 @@ if (welcomeShown) {
     async () => {
       await sharingStarted
       offerUsageStatsPrompt('prompt')
+      if (showsCampaigns && !usageStatsPrompt.value) void offerCampaignPrompt()
     },
     { once: true, immediate: true }
   )
@@ -194,7 +208,7 @@ function reportOpenFailure(error: unknown): void {
   console.error('[Open With]', error)
   toast.error(
     notificationMessages.get().openQueuedFilesFailed({
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMessage(error)
     })
   )
 }
@@ -298,6 +312,10 @@ onUnmounted(() => {
     <FileApiBanner />
     <ColorSpaceBanner />
     <FontStatusBanner />
+    <CloudBetaBanner />
+    <CloudCreditsBanner />
+    <CloudEditorUpdateBanner />
+    <CloudCommunityBanner />
     <RenameSelectionDialog />
     <CommandPalette />
     <TabBar />

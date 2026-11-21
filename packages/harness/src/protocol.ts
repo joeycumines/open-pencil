@@ -1,3 +1,4 @@
+import { isRecord } from '@open-pencil/std/records'
 export type JSONPrimitive = null | boolean | number | string
 export type JSONValue = JSONPrimitive | JSONValue[] | { [key: string]: JSONValue }
 
@@ -51,6 +52,7 @@ export type HarnessRequest =
     }
   | { id: string; method: 'session.turn'; params: HarnessTurnInput }
   | { id: string; method: 'session.cancel'; params: { sessionId: string } }
+  | { id: string; method: 'session.compact'; params: { sessionId: string; instructions?: string } }
   | { id: string; method: 'session.stop'; params: { sessionId: string } }
   | { id: string; method: 'session.destroy'; params: { sessionId: string } }
   | { id: string; method: 'service.shutdown'; params?: Record<string, never> }
@@ -69,7 +71,16 @@ export type HarnessTurnEvent =
   | { type: 'tool-call'; toolCallId: string; toolName: string; input: JSONValue }
   | { type: 'tool-result'; toolCallId: string; toolName: string; output: JSONValue }
   | { type: 'finish'; finishReason: string; usage?: HarnessTurnUsage }
+  | HarnessCompactionEvent
   | { type: 'error'; message: string }
+
+/** The agent compacted its context, by request or because it filled; its summary stands for it. */
+export interface HarnessCompactionEvent {
+  type: 'compaction'
+  trigger: 'manual' | 'auto'
+  summary: string
+  tokensBefore: number | null
+}
 
 export type HarnessSidecarMessage =
   | { type: 'response'; id: string; result?: JSONValue; error?: string }
@@ -77,10 +88,6 @@ export type HarnessSidecarMessage =
 
 export const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024
 export const MAX_PROMPT_LENGTH = 256 * 1024
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function requireString(record: Record<string, unknown>, key: string): string {
   const value = record[key]
@@ -189,6 +196,15 @@ export function parseHarnessRequest(line: string): HarnessRequest {
   }
   if (method === 'session.cancel' || method === 'session.stop' || method === 'session.destroy') {
     return { id, method, params: parseSessionParams(parsed.params) }
+  }
+  if (method === 'session.compact') {
+    const params = parseSessionParams(parsed.params)
+    const instructions = isRecord(parsed.params) ? parsed.params.instructions : undefined
+    if (instructions !== undefined && typeof instructions !== 'string')
+      throw new Error('Expected instructions to be a string')
+    if (instructions && instructions.length > MAX_PROMPT_LENGTH)
+      throw new Error('Harness instructions exceed the size limit')
+    return { id, method, params: instructions ? { ...params, instructions } : params }
   }
   if (method === 'session.turn') {
     if (!isRecord(parsed.params)) throw new Error('Expected request params')

@@ -6,8 +6,11 @@ import Icons from 'unplugin-icons/vite'
 import Components from 'unplugin-vue-components/vite'
 import type { Alias, Plugin, PluginOption } from 'vite'
 
+import { openPencil } from '@open-pencil/core/node/vite'
+
 import rootManifest from '../package.json' with { type: 'json' }
 import { createOpenPencilAliases } from './aliases.ts'
+import { donationDefine } from './funding.ts'
 import { inlineScriptPlugin } from './inline-script.ts'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -57,16 +60,10 @@ export interface AppSourceConfig {
  */
 export function appSourceConfig(): AppSourceConfig {
   return {
-    alias: [
-      // Files the app serves from its root, such as the prebuilt demo document.
-      {
-        find: /^#app-public\//,
-        replacement: `${fileURLToPath(new URL('../public/', import.meta.url))}`
-      },
-      ...createOpenPencilAliases(REPO_ROOT)
-    ],
+    alias: [...createOpenPencilAliases(REPO_ROOT)],
     define: {
       __OPENPENCIL_APP_VERSION__: JSON.stringify(rootManifest.version),
+      ...donationDefine(REPO_ROOT),
       __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__: JSON.stringify(''),
       __OPENPENCIL_LOCAL_AUTOMATION_URL__: JSON.stringify(''),
       __OPENPENCIL_LOCAL_AUTOMATION_HTTP_URL__: JSON.stringify('')
@@ -74,6 +71,8 @@ export function appSourceConfig(): AppSourceConfig {
     plugins: [
       appRawText(),
       inlineScriptPlugin(),
+      // The app's canvas module imports the module that points Core at the engine's files.
+      openPencil({ inject: false }),
       Icons({ compiler: 'vue3' }),
       Components({ dirs: [], dts: false, resolvers: [IconsResolver({ prefix: 'icon' })] })
     ]

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, type Ref } from 'vue'
 
 import type { Editor } from '@open-pencil/core'
 import { isSVGFile } from '@open-pencil/scene-graph/images'
+import { errorMessage } from '@open-pencil/std/errors'
 
 import {
   createImagePreviewURL,
@@ -13,6 +14,7 @@ import {
 } from '@/app/ai/attachment/image/prepare'
 import { MAX_IMAGE_ATTACHMENTS, type ImageAttachmentDraft } from '@/app/ai/attachment/image/types'
 import { resolveReferencedNodes } from '@/app/ai/chat/context'
+import { commandsAsText } from '@/app/ai/chat/references/command'
 import { referenceLink } from '@/app/ai/chat/references/link'
 import { mentionedNodes } from '@/app/ai/chat/references/nodes'
 import type { ChatSubmission } from '@/app/ai/chat/submission/types'
@@ -67,7 +69,7 @@ export function useAttachmentDrafts(options: AttachmentDraftOptions) {
         }
         images.value.push({ file: image, previewURL: createImagePreviewURL(image) })
       } catch (error) {
-        options.reportError(error instanceof Error ? error.message : String(error))
+        options.reportError(errorMessage(error))
       }
     }
     resetImageDialog()
@@ -104,7 +106,7 @@ export function useAttachmentDrafts(options: AttachmentDraftOptions) {
     images.value = []
     resetImageDialog()
     return {
-      modelText: text,
+      modelText: commandsAsText(text),
       displayText: text,
       images: submittedImages,
       nodes: mentionedNodes(options.editor.graph, text)

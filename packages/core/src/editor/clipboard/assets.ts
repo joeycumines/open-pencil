@@ -2,16 +2,15 @@ import { sumBy } from 'es-toolkit'
 import { filename } from 'pathe/utils'
 
 import type { Fill } from '@open-pencil/scene-graph'
-import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import {
   computeImageHash,
   IMPORTABLE_RASTER_TYPES,
   isSVGFile
 } from '@open-pencil/scene-graph/images'
-import Matrix from '@open-pencil/scene-graph/matrix'
+import { maxOf } from '@open-pencil/std/arrays'
 
 import { TRANSPARENT } from '#core/constants'
-import { resolvePasteTarget } from '#core/editor/clipboard/paste/target'
+import { parentLocalPoint, resolvePasteTarget } from '#core/editor/clipboard/paste/target'
 import type { EditorContext } from '#core/editor/types'
 import {
   createSVGNodesFromImport,
@@ -95,13 +94,6 @@ export function createClipboardAssetActions(
     return dimensions ? { kind: 'raster', bytes, name: file.name, ...dimensions } : null
   }
 
-  function parentLocalPoint(parentId: string, x: number, y: number) {
-    const parent = ctx.graph.getNode(parentId)
-    if (!parent) return { x, y }
-    const inverse = Matrix.invert(getWorldMatrix(parent, ctx.graph))
-    return inverse ? Matrix.mapPoint(inverse, { x, y }) : { x, y }
-  }
-
   function createRasterNode(
     asset: PreparedRasterAsset,
     parentId: string,
@@ -132,9 +124,9 @@ export function createClipboardAssetActions(
 
     const previousSelection = new Set(ctx.state.selectedIds)
     const parentId = resolvePasteTarget(ctx)
-    const center = parentLocalPoint(parentId, cx, cy)
+    const center = parentLocalPoint(ctx, parentId, cx, cy)
     const totalWidth = sumBy(prepared, (asset) => asset.width) + ASSET_GAP * (prepared.length - 1)
-    const maxHeight = Math.max(...prepared.map((asset) => asset.height))
+    const maxHeight = maxOf(prepared.map((asset) => asset.height))
     let x = center.x - totalWidth / 2
     const y = center.y - maxHeight / 2
     const created: string[] = []
@@ -175,12 +167,13 @@ export function createClipboardAssetActions(
     )
   }
 
-  async function placeFiles(files: File[], cx: number, cy: number) {
+  /** Places pictures and SVG files around a point; false when none of them could be read. */
+  async function placeFiles(files: File[], cx: number, cy: number): Promise<boolean> {
     const prepared = (await Promise.all(files.map(prepareAsset))).filter(
       (asset): asset is PreparedAsset => asset !== null
     )
     await loadSVGFonts(prepared)
-    placeAssets(prepared, cx, cy, 'Place files')
+    return placeAssets(prepared, cx, cy, 'Place files')
   }
 
   /** Paste SVG markup as layers, as Figma does; false when the text is not SVG. */
@@ -204,7 +197,7 @@ export function createClipboardAssetActions(
     const previousSelection = new Set(ctx.state.selectedIds)
     const parentId = resolvePasteTarget(ctx)
     const { ids: created } = await addFlowchart(ctx.graph, parentId, chart, {
-      center: parentLocalPoint(parentId, cx, cy)
+      center: parentLocalPoint(ctx, parentId, cx, cy)
     })
     if (created.length === 0) return false
     ctx.setSelectedIds(new Set(created))

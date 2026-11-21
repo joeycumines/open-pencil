@@ -6,8 +6,9 @@ import { $ } from 'bun'
 import { toUint8Array } from 'js-base64'
 import * as v from 'valibot'
 
-import { SkiaRenderer } from '@open-pencil/core/canvas'
-import { initCanvasKit, renderNodesToImage } from '@open-pencil/core/io/formats/raster'
+import { createOffscreenRenderer } from '@open-pencil/core/canvas'
+import { getCanvasKit } from '@open-pencil/core/canvaskit'
+import { renderNodesToImage } from '@open-pencil/core/io/formats/raster'
 import { prepareGraphFonts } from '@open-pencil/core/text'
 import { parseFigBuffer } from '@open-pencil/fig'
 import {
@@ -63,12 +64,10 @@ prepare(occurrence)
 const result = materializeInstance(graph, page.id, occurrence, components, { blobs })
 const bounds = () => [...result.nodes.values()].map((n) => [n.id, n.x, n.y, n.width, n.height])
 const before = JSON.stringify(bounds())
-const ck = await initCanvasKit()
-const surface = ck.MakeSurface(1, 1)
-if (!surface) throw new Error('No Skia surface')
-const renderer = new SkiaRenderer(ck, surface)
+const ck = await getCanvasKit()
+const renderer = await createOffscreenRenderer(ck)
+if (!renderer) throw new Error('No Skia surface')
 try {
-  await renderer.loadFonts()
   const fonts = await prepareGraphFonts(graph, [result.root.id])
   if (!fonts.faithful) throw new Error(`Missing fonts: ${JSON.stringify(fonts)}`)
   const png = renderNodesToImage(ck, renderer, graph, page.id, [result.root.id], {
